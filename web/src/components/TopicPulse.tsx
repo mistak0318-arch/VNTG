@@ -45,26 +45,26 @@ export function TopicPulseBlock({
     };
   }, [win]);
 
-  if (err) return <div className="pulse-line quiet">화제를 못 불러왔습니다 — {err}</div>;
-  if (!p) return <div className="pulse-line quiet">화제를 살피는 중…</div>;
+  if (err) return <div className="tp-line quiet">화제를 못 불러왔습니다 — {err}</div>;
+  if (!p) return <div className="tp-line quiet">화제를 살피는 중…</div>;
 
   if (variant === "line") {
     return (
-      <div className={`pulse-line${p.hot ? " hot" : " quiet"}`} title={p.detail}>
-        {p.hot && <b className="pulse-dot" aria-hidden="true" />}
+      <div className={`tp-line${p.hot ? " hot" : " quiet"}`} title={p.detail}>
+        {p.hot && <b className="tp-dot" aria-hidden="true" />}
         {p.headline}
       </div>
     );
   }
 
   return (
-    <div className={`pulse${p.hot ? " hot" : ""}`}>
-      <div className="pulse-head">{p.headline}</div>
-      <div className="pulse-detail">{renderDetail(p.detail)}</div>
+    <div className={`tp-pulse${p.hot ? " hot" : ""}`}>
+      <div className="tp-head">{p.headline}</div>
+      <div className="tp-detail">{renderDetail(p.detail)}</div>
 
       {p.items.length > 0 && (
         <>
-          <div className="pulse-terms">
+          <div className="tp-terms">
             {p.items.slice(0, variant === "full" ? 8 : 5).map((i) => (
               <TermChip
                 key={i.term}
@@ -93,7 +93,7 @@ export function TopicPulseBlock({
       {variant === "full" && <FullEvidence pulse={p} />}
 
       {!p.hot && p.health.baselineDays >= 2 && (
-        <div className="pulse-foot">
+        <div className="tp-foot">
           채널 {p.health.channelTotal}건 · 기사 {p.health.newsArticles}건을 살폈습니다.
         </div>
       )}
@@ -127,7 +127,7 @@ function TermChip({
   active: boolean;
   onToggle: () => void;
 }) {
-  const cls = `pulse-term ${item.where}${active ? " open" : ""}`;
+  const cls = `tp-term ${item.where}${active ? " open" : ""}`;
   const label =
     item.where === "both" ? "채널+뉴스" : item.where === "channel" ? "채널" : "뉴스";
   const body = (
@@ -193,8 +193,8 @@ function TermEvidence({
   }, [item.term]);
 
   return (
-    <div className="pulse-ev-box">
-      <div className="pulse-ev-head">
+    <div className="tp-ev-box">
+      <div className="tp-ev-head">
         <b>{item.term}</b>
         <span className="pt-n">
           채널 {item.buzzCount}건 · 뉴스 {item.newsCount}건
@@ -204,13 +204,13 @@ function TermEvidence({
       </div>
 
       {item.quote && (
-        <div className="pulse-ev-q">
+        <div className="tp-ev-q">
           「{item.quote}」{item.quoteFrom && <i> ({item.quoteFrom})</i>}
         </div>
       )}
 
       {item.codes.length > 0 && onSelectStock && (
-        <div className="pulse-ev-codes">
+        <div className="tp-ev-codes">
           {/*
             **이름으로 보여 준다** (2026-09-09 — 벤티지 "종목코드가 보이네. 종목명이
             보여야지. 코드로는 무슨 종목인지 모르잖어"). 이름을 못 받았으면 그때만 코드다.
@@ -242,7 +242,7 @@ function TermEvidence({
         </div>
       )}
       {news !== null && news.length > 0 && (
-        <ul className="pulse-ev-news">
+        <ul className="tp-ev-news">
           {news.map((n) => (
             <li key={n.link}>
               <a href={n.link} target="_blank" rel="noreferrer">
@@ -262,11 +262,11 @@ function FullEvidence({ pulse }: { pulse: TopicPulse }) {
   const withQuote = pulse.items.filter((i) => i.quote).slice(0, 4);
   if (withQuote.length === 0) return null;
   return (
-    <ul className="pulse-ev">
+    <ul className="tp-ev">
       {withQuote.map((i) => (
         <li key={i.term}>
           <b>{i.term}</b>
-          <span className="pulse-ev-q">
+          <span className="tp-ev-q">
             「{i.quote}」{i.quoteFrom && <i> ({i.quoteFrom})</i>}
           </span>
         </li>

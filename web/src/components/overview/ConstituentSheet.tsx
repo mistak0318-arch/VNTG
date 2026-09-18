@@ -49,6 +49,15 @@ export function ConstituentSheet({
    * 몇 분 묵은 시세였다 — 아모센스가 VI 로 +10% 인데 여기는 +2.95% 였다. 시세분석·관심종목과 같은 길로
    * 실시간(0B) 값을 덮는다. 국내 여섯 자리 코드만, 위 40종목까지(임시 구독 정원). 실시간이 안 오는 종목은 그대로.
    */
+  /*
+   * `krxOverlayLive()` 는 시각 함수인데 useMemo 가 [items] 만 보니 **연 시각에 얼어** 있었다 — 07:59 에 열어 두면
+   * 08:00 이 지나도 실시간이 안 붙고, 20:10 뒤에도 구독을 안 놓았다. 30초마다 다시 셈한다 (2026-09-18 전수검증 D9).
+   */
+  const [liveTick, setLiveTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setLiveTick((v) => v + 1), 30_000);
+    return () => clearInterval(t);
+  }, []);
   const liveKeys = useMemo(
     () =>
       krxOverlayLive()
@@ -58,8 +67,16 @@ export function ConstituentSheet({
             .slice(0, 40)
             .map((c) => `0B:${c}`)
         : [],
-    [items],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [items, liveTick],
   );
+  /*
+   * 등락률·전일대비를 **모르는** 종목 (2026-09-18 전수검증 D4·D5). 네이버 테마 구성종목은 미국 테마면 현재가·대비가
+   * null 이고 등락률도 null 일 수 있는데, StockRow 는 number 라 0 으로 채워 넣었다 — 그러면 표에 「0.00%」「0」이
+   * 찍혀 값이 0 인 것처럼 보인다. 어느 칸이 모르는 값인지 따로 적어 두고 「-」로 그린다.
+   */
+  const [naRate, setNaRate] = useState<Set<string>>(() => new Set());
+  const [naChange, setNaChange] = useState<Set<string>>(() => new Set());
   const rt = useRealtime(liveKeys, 1500);
   const { liveItems, liveCodes } = useMemo(() => {
     const codes = new Set<string>();
@@ -83,11 +100,32 @@ export function ConstituentSheet({
     return { liveItems: rows, liveCodes: codes };
   }, [items, rt]);
   const sort = useSortableTable(liveItems);
+  /*
+   * 바닥글의 정렬 설명 (2026-09-18 전수검증 D21). 「시가총액 큰 순」이 박혀 있어서 헤더를 눌러 등락률순으로
+   * 바꿔도 그대로였고, 시총이 없는 묶음(해외·네이버 테마)은 처음부터 그 순서가 아니었다. 기본 순서는
+   * 받을 때 적어 두고, 헤더 정렬이 켜져 있으면 그것을 적는다.
+   */
+  const [defaultOrder, setDefaultOrder] = useState("시가총액 큰 순");
+  const SORT_LABEL: Record<string, string> = {
+    name: "종목명",
+    price: "현재가",
+    change: "전일대비",
+    changeRate: "등락률",
+    marketCap: "시가총액",
+  };
+  const orderLabel =
+    sort.sortKey && sort.sortDir
+      ? sort.sortKey === "name"
+        ? `종목명 ${sort.sortDir === "asc" ? "가나다순" : "가나다 역순"}`
+        : `${SORT_LABEL[sort.sortKey] ?? sort.sortKey} ${sort.sortDir === "desc" ? "큰 순" : "작은 순"}`
+      : defaultOrder;
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setNaRate(new Set());
+    setNaChange(new Set());
 
     // 내 테마는 이미 받아온 구성종목을 그대로 쓴다 (조회 0회)
     if (target.stocks) {
@@ -97,6 +135,7 @@ export function ConstituentSheet({
        * 「왜 이 순서지」가 된다. 시총이 없으면 **등락률순**으로 세운다.
        */
       const hasCap = target.stocks.some((s) => (s.marketCap ?? 0) > 0);
+      setDefaultOrder(hasCap ? "시가총액 큰 순" : "등락률 큰 순");
       setItems(
         [...target.stocks].sort((a, b) =>
           hasCap ? (b.marketCap ?? 0) - (a.marketCap ?? 0) : b.changeRate - a.changeRate,
@@ -125,8 +164,13 @@ export function ConstituentSheet({
         .then((r) => {
           if (cancelled) return;
           const t = r.themes.find((x) => x.key === target.code);
+          const stocks = t?.stocks ?? [];
+          setDefaultOrder("테마 DB 순서");
+          /* 모르는 값은 0 으로 채우되 어느 칸인지 적어 둔다 — 표가 「-」로 그린다 (D4·D5) */
+          setNaRate(new Set(stocks.filter((s) => s.changeRate == null).map((s) => normalizeStockCode(s.code))));
+          setNaChange(new Set(stocks.filter((s) => s.change == null).map((s) => normalizeStockCode(s.code))));
           setItems(
-            (t?.stocks ?? []).map((s) => ({
+            stocks.map((s) => ({
               code: s.code,
               name: s.name,
               price: s.price ?? 0,
@@ -148,7 +192,9 @@ export function ConstituentSheet({
     req
       .then((res) => {
         // 시총이 큰 종목일수록 테마·업종을 실제로 끌고 가는 힘이 크므로 기본 정렬을 시총순으로
-        if (!cancelled) setItems([...res.items].sort((a, b) => (b.marketCap ?? 0) - (a.marketCap ?? 0)));
+        if (cancelled) return;
+        setDefaultOrder("시가총액 큰 순");
+        setItems([...res.items].sort((a, b) => (b.marketCap ?? 0) - (a.marketCap ?? 0)));
       })
       .catch((err: Error) => {
         if (!cancelled) setError(err.message);
@@ -235,11 +281,22 @@ export function ConstituentSheet({
                         {liveCodes.has(code) && <span className="live-mark" title="실시간 체결값">●</span>}
                         {s.price ? fmtNum(s.price) : "-"}
                       </td>
-                      <td className={signClass(s.change)}>{s.price ? fmtNum(s.change) : "-"}</td>
-                      <td className={signClass(s.changeRate)}>
-                        {s.changeRate > 0 ? "+" : ""}
-                        {s.changeRate.toFixed(2)}%
-                      </td>
+                      {/* 실시간이 덮은 종목은 값을 아는 것 — 그 밖에 모르는 칸은 「-」 (2026-09-18 전수검증 D4·D5) */}
+                      {(() => {
+                        const live = liveCodes.has(code);
+                        const rateNa = !live && naRate.has(code);
+                        const changeNa = !live && naChange.has(code);
+                        return (
+                          <>
+                            <td className={changeNa ? "" : signClass(s.change)}>
+                              {s.price && !changeNa ? fmtNum(s.change) : "-"}
+                            </td>
+                            <td className={rateNa ? "" : signClass(s.changeRate)}>
+                              {rateNa ? "-" : `${s.changeRate > 0 ? "+" : ""}${s.changeRate.toFixed(2)}%`}
+                            </td>
+                          </>
+                        );
+                      })()}
                       <td>{s.marketCap ? fmtNum(s.marketCap) : "-"}</td>
                     </tr>
                   );
@@ -247,7 +304,7 @@ export function ConstituentSheet({
               </tbody>
             </table>
             <div className="table-note">
-              {items.length}개 종목 · 시가총액 큰 순 · 시가총액 = 상장주식수 × 현재가 (억원) · 종목을 누르면 상세로
+              {items.length}개 종목 · {orderLabel} · 시가총액 = 상장주식수 × 현재가 (억원) · 종목을 누르면 상세로
               이동합니다
               {liveCodes.size > 0
                 ? ` · ● ${liveCodes.size}종목은 실시간 체결값, 나머지는 받아 둔 시세`

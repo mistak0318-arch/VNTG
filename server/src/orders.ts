@@ -520,8 +520,17 @@ export async function getGuard(): Promise<OrderGuard> {
    * 옛 기본값 40 이 파일에 굳어 있으면 0 으로 읽는다. 벤티지가 직접 적은 값이 아니라
    * 처음 파일을 만들 때 기본값이 박힌 것이라, 그걸 존중할 이유가 없다.
    * 40 이 아닌 다른 값이면 사람이 적은 것이니 그대로 둔다.
+   *
+   * **한 번만** (2026-09-18 전수검증 B6). 예전엔 읽을 때마다 40→0 이라, 화면에서 일부러 40 을
+   * 적어 저장해도 다음 읽기에 0 으로 되돌아갔다. 첫 읽기에 옮기고 파일에 표식을 남긴다 —
+   * 표식이 있으면 40 은 사람이 적은 값이다.
    */
-  if (g.maxPositionPct === 40) g.maxPositionPct = 0;
+  const rec = g as unknown as Record<string, unknown>;
+  if (rec.maxPositionPctMigrated !== true) {
+    if (g.maxPositionPct === 40) g.maxPositionPct = 0;
+    rec.maxPositionPctMigrated = true;
+    await writeJson(GUARD_FILE, g).catch(() => undefined);
+  }
   /* 천장 — 파일에 더 큰 값이 있어도 여기서 눌린다 */
   const cap = hardCeiling();
   if (cap.maxOrderKrw !== null && g.maxOrderKrw > cap.maxOrderKrw) g.maxOrderKrw = cap.maxOrderKrw;
@@ -639,8 +648,12 @@ export async function readLog(limit = 200): Promise<OrderLogRow[]> {
 /** 오늘(KST) 나간 주문의 합과 건수 — 한도는 **기록**에서 센다. 메모리는 재시작에 지워지니까 */
 async function todayUsage(): Promise<{ krw: number; count: number }> {
   const { date } = kstParts();
-  /* 8000 — raw·watch·fill 이 섞여 2000 은 바쁜 날 하루가 안 됐다(한도가 헐거워진다) */
-  const rows = await readLog(8000);
+  /*
+   * 꼬리 8000줄이 아니라 **파일 전체**를 본다 (2026-09-18 전수검증 B5). raw·watch·fill 이 섞이면
+   * 바쁜 날 아침 주문이 꼬리 밖으로 밀려 한도가 헐거워졌다. readLog 는 어차피 파일을 다 읽고
+   * 자르므로 비용은 같다.
+   */
+  const rows = await readLog(Number.MAX_SAFE_INTEGER);
   let krw = 0;
   let count = 0;
   for (const r of rows) {
@@ -1264,7 +1277,7 @@ export async function prepareOrder(
     if (tt.cond) reject("자동감시엔 스톱지정가를 쓰지 않는다 — 감시가 곧 스톱이다", input, ip);
     if (wi.exec === "market" && tt.code !== "3") reject("시장가로 내는 감시는 매매구분이 시장가여야 한다", input, ip);
     if (wi.exec !== "market" && tt.code !== "0") reject("지정가로 내는 감시는 매매구분이 보통이어야 한다", input, ip);
-    const q = await quoteOf(main, input.code);
+    const q = await quoteOf(main, input.code, true); // KRX 단독 — 판정과 같은 값 (2026-09-18 전수검증 B4)
     if (!q || q.price <= 0) reject("현재가를 못 읽어 감시 조건을 잴 수 없다", input, ip);
     let basisPrice: number | null = null;
     let trigger = 0;
@@ -1308,6 +1321,8 @@ export async function prepareOrder(
       const bad = checkLegs(wi.then, "체결 뒤 매도 단계");
       if (bad) reject(bad, input, ip);
       then = wi.then.map((l) => ({ pct: l.pct, qtyPct: l.qtyPct, exec: l.exec }));
+      /* 단계 매도(legs)와 같은 검사 — 체결 뒤 0주 단계는 조용히 빠졌다 (2026-09-18 전수검증 B11) */
+      if (splitQty(input.qty, then).some((n) => n <= 0)) reject("수량이 적어 체결 뒤 매도 단계 중 하나가 0주가 된다 — 단계를 줄이거나 수량을 늘려야 한다", input, ip);
     }
     let legs: WatchSpec["legs"] = null;
     if (wi.legs && wi.legs.length > 0) {
@@ -1413,6 +1428,8 @@ export async function prepareOrder(
     const bad = checkLegs(input.exit, "출구 계획");
     if (bad) reject(bad, input, ip);
     exit = input.exit.map((l) => ({ pct: l.pct, qtyPct: l.qtyPct, exec: l.exec }));
+    /* 단계 매도(legs)와 같은 검사 — 체결 뒤 0주 단계는 조용히 빠졌다 (2026-09-18 전수검증 B11) */
+    if (splitQty(input.qty, exit).some((n) => n <= 0)) reject("수량이 적어 출구 계획 중 한 단계가 0주가 된다 — 단계를 줄이거나 수량을 늘려야 한다", input, ip);
   }
   if (input.side === "buy") {
     /* 계좌 단위 위험 한도 (개편 ⑤) — 손절 뒤 쿨다운 · 오늘 실현손실 잠금 */
@@ -1427,6 +1444,12 @@ export async function prepareOrder(
     ref = 0;
   }
   if (input.price === null && ref <= 0 && !watchSpec) reject("현재가를 못 읽어 주문 금액을 잴 수 없다 — 값을 적는 구분으로", input, ip);
+  /*
+   * **매수는 현재가 없이 자를 못 댄다** (2026-09-18 전수검증 B23). 예전엔 ref=0 이면 아래 가격 자
+   * (priceCollarPct·stopCollarPct)를 통째로 건너뛰어, 조회가 죽은 순간 0 하나 더 친 지정가가 그대로
+   * 나갔다. 매도는 둔다 — 「조회 실패가 매도를 막으면 안 된다」(아래 보유 검사와 같은 원칙).
+   */
+  if (input.side === "buy" && input.price !== null && ref <= 0 && !watchSpec) reject("현재가를 못 읽어 가격 자를 못 댄다 — 잠시 뒤 다시", input, ip);
 
   if (watchSpec) {
     /* 감시는 발동가가 멀리 있는 게 정상이다 — 가격 자는 **발동하는 순간** 그때 값으로 잰다 */
@@ -2506,10 +2529,14 @@ function toTick(p: number): number {
   return Math.floor(p / t) * t;
 }
 
-/** 지금 값과 전일 종가 — ka10095 한 번 */
-async function quoteOf(main: KiwoomClient, code: string): Promise<{ price: number; prevClose: number } | null> {
+/**
+ * 지금 값과 전일 종가 — ka10095 한 번.
+ * `krxOnly` (2026-09-18 전수검증 B4) — 감시는 발동 판정을 KRX 체결로 하는데(livePrices·krxPriceMap)
+ * 발동가를 정하는 기준값만 통합(_AL)이라 NXT 한 틱이 섞였다. 감시 쪽은 KRX 단독으로 잰다.
+ */
+async function quoteOf(main: KiwoomClient, code: string, krxOnly = false): Promise<{ price: number; prevClose: number } | null> {
   try {
-    const { data } = await main.request<Record<string, unknown>>("/api/dostk/stkinfo", "ka10095", { stk_cd: `${code}_AL` });
+    const { data } = await main.request<Record<string, unknown>>("/api/dostk/stkinfo", "ka10095", { stk_cd: krxOnly ? code : `${code}_AL` }, { noAl: krxOnly });
     const rows = Array.isArray(data.atn_stk_infr) ? (data.atn_stk_infr as Record<string, unknown>[]) : [];
     const q = rows.find((r) => String(r.stk_cd ?? "").replace(/_(AL|NX)$/i, "") === code) ?? rows[0];
     if (!q) return null;
@@ -3262,8 +3289,12 @@ async function onAutoWatchFill(id: string, ev: { filled: number; price: number; 
       const groupId = randomBytes(4).toString("hex");
       const made: string[] = [];
       for (let i = 0; i < legs.length; i++) {
-        if (qs[i] <= 0) continue;
         const l = legs[i];
+        if (qs[i] <= 0) {
+          /* 일부 체결로 0주가 된 단계 — 조용히 빼지 않고 기록에 남긴다 (2026-09-18 전수검증 B11) */
+          await appendLog({ kind: "watch", ip: r.ip, side: "sell", code: r.ticket.code, name: r.ticket.name, qty: 0, msg: `체결 뒤 매도 단계 건너뜀 (부모 ${r.id}) — ${ev.filled}주 체결이라 ${l.pct > 0 ? "+" : ""}${l.pct}% ${l.qtyPct}% 단계가 0주` });
+          continue;
+        }
         const trigger = toTick(fillPx * (1 + l.pct / 100));
         const childSpec: WatchSpec = {
           dir: l.pct < 0 ? "le" : "ge",
@@ -3320,7 +3351,7 @@ export async function watchQuote(main: KiwoomClient, code: string): Promise<{
   ableQty: number;
   deposit: number;
 }> {
-  const [q, acct] = await Promise.all([quoteOf(main, code), orderAccount().catch(() => null)]);
+  const [q, acct] = await Promise.all([quoteOf(main, code, true), orderAccount().catch(() => null)]); // 폼도 KRX — 서버가 정할 발동가와 같은 값 (2026-09-18 전수검증 B4)
   if (!q) throw new Error("현재가를 못 읽었다");
   const h = acct?.holdings.find((x) => x.code === code && !x.creditType) ?? null;
   return {
@@ -3344,12 +3375,32 @@ async function placeDualStops(rows: AutoWatch[], date: string): Promise<boolean>
   const g = await getGuard();
   if (!g.dualStop) return false;
   let changed = false;
+  /*
+   * 보유수량 천장 (2026-09-18 전수검증 B7). 사람이 손으로 일부 팔면 감시 수량이 보유보다 커지는데,
+   * 그 수량으로 스톱을 걸면 키움이 거절하고 dualDate 가 찍혀 **그날은 다시 안 건다** — 이중 손절이
+   * 하루 통째로 비었다. 지금 보유(현금 줄)까지만 건다. 계좌를 못 읽으면 예전처럼 감시 수량대로.
+   */
+  const acctForCap = rows.some((r) => r.status === "waiting" && r.ticket.side === "sell" && r.spec.dir === "le" && r.spec.dual !== false && r.dualDate !== date && !r.ticket.credit)
+    ? await orderAccount().catch(() => null)
+    : null;
   for (const r of rows) {
     if (r.status !== "waiting" || r.ticket.side !== "sell" || r.spec.dir !== "le" || r.spec.dual === false) continue;
     if (r.dualDate === date) continue; // 오늘 이미 걸었거나 시도했다 — 실패는 내일 다시(3초마다 두드리지 않는다)
     if (r.ticket.credit) continue;
     /* (2026-09-10 전수 점검) 어제 스톱이 일부 팔았으면(dualFilled) 남은 만큼만 — 전량으로 걸면 보유보다 많이 팔려 하거나 거절된다 */
-    const stopQty = r.ticket.qty - (r.dualFilled ?? 0);
+    let stopQty = r.ticket.qty - (r.dualFilled ?? 0);
+    const heldNow = acctForCap && !lastTrError.has("kt00018") ? acctForCap.holdings.filter((x) => x.code === r.ticket.code && !x.creditType).reduce((a, x) => a + x.qty, 0) : null;
+    if (heldNow !== null && stopQty > heldNow) {
+      stopQty = heldNow; // (2026-09-18 전수검증 B7)
+      if (heldNow <= 0) {
+        /* 보유 0 — 오늘은 걸 것이 없다고 적어 둔다(3초마다 계좌를 두드리지 않게). 감시 자체는 1분 뒤 보유 청소가 접는다 */
+        r.dualDate = date;
+        r.dualOrdNo = undefined;
+        r.dualMsg = "키움 스톱 안 걸음 — 보유가 없다";
+        changed = true;
+        continue;
+      }
+    }
     if (stopQty <= 0) continue;
     const trigger = r.spec.trigger;
     const limit = toTick(trigger * 0.985);

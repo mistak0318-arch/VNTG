@@ -218,7 +218,11 @@ async function buildStockMarksOnce(client: KiwoomClient): Promise<{ day: string;
     progress.total = files.length;
 
     const marks: Record<string, StockMark> = {};
-    let day = "";
+    /*
+     * (2026-09-18 전수검증 A20) 파일의 `day` 는 여태 「제일 최신 봉 날짜」였다 — 한 종목만 오늘 봉이 있어도 오늘
+     * 것이 돼서 `condAuto` 의 신선도 검사를 낡은 마크가 통과했다. **중앙값**으로 — 절반 넘게 오늘 봉이 있어야 오늘.
+     */
+    const lastDays: string[] = [];
 
     for (const f of files) {
       progress.done += 1;
@@ -234,7 +238,7 @@ async function buildStockMarksOnce(client: KiwoomClient): Promise<{ day: string;
       const flow = led.flow ?? [];
       const bs = bars[code] ?? [];
       if (flow.length === 0 && bs.length === 0) continue;
-      if (bs.length > 0 && bs[bs.length - 1].d > day) day = bs[bs.length - 1].d;
+      if (bs.length > 0) lastDays.push(bs[bs.length - 1].d);
 
       /* ── 수급 ── */
       const win = (n: number) => flow.slice(-n);
@@ -341,6 +345,8 @@ async function buildStockMarksOnce(client: KiwoomClient): Promise<{ day: string;
       progress.marked += 1;
     }
 
+    lastDays.sort();
+    const day = lastDays.length > 0 ? lastDays[Math.floor((lastDays.length - 1) / 2)] : "";
     const out: MarksFile = {
       day: day || new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10).replace(/-/g, ""),
       builtAt: new Date().toISOString(),

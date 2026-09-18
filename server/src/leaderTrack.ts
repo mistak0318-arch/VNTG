@@ -139,7 +139,31 @@ async function dailyCloses(
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
+/*
+ * (2026-09-18 전수검증 E4) 편입 종목이 20일치 269개까지 불어 **한 번에 TR 269건 × 260ms ≈ 100초** — 화면의 60초를
+ * 넘겨 페이지가 늘 실패했다. 결과를 30분 들고 있고, 도는 중이면 같은 약속을 나눠 준다(두 탭이 두 번 돌지 않게).
+ * 편입은 하루 한 번 바뀌니 30분이면 충분하다.
+ */
+let trackCache: { at: number; result: LeaderTrackResult } | null = null;
+let trackJob: Promise<LeaderTrackResult> | null = null;
+const TRACK_TTL = 30 * 60_000;
+
 export async function leaderTrack(client: KiwoomClient): Promise<LeaderTrackResult> {
+  if (trackCache && Date.now() - trackCache.at < TRACK_TTL) return trackCache.result;
+  if (!trackJob) {
+    trackJob = leaderTrackCompute(client)
+      .then((r) => {
+        trackCache = { at: Date.now(), result: r };
+        return r;
+      })
+      .finally(() => {
+        trackJob = null;
+      });
+  }
+  return trackJob;
+}
+
+async function leaderTrackCompute(client: KiwoomClient): Promise<LeaderTrackResult> {
   let days: DayRecord[] = [];
   try {
     const raw = JSON.parse(await readFile(FILE, "utf-8")) as { days?: DayRecord[] };

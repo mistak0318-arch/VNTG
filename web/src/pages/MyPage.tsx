@@ -271,7 +271,11 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
       clearInterval(t);
     };
   }, []);
-  const liveOf = (code: string): { price: number; rate: number | null } | null => {
+  /*
+   * `rt` 는 어디서 온 값인가 — 실시간 소켓(0B)이면 true, 5초 REST 폴백(ka10095)이면 false.
+   * ● 표시가 폴백 값에도 켜져 「실시간」이라고 거짓말하던 것 (2026-09-18 전수검증 D7).
+   */
+  const liveOf = (code: string): { price: number; rate: number | null; rt: boolean } | null => {
     // KRX 정규장 밖엔 0B 오버레이를 안 믿는다 — 프리장 KRX 0% 가 통합 값을 덮었다
     if (krxOverlayLive() && rtWatch.healthy) {
       const v = rtWatch.values[`0B:${code}`];
@@ -279,11 +283,11 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
        * 스트림이 죽는 것은 `rt.healthy` 가 서버 `beat`(10초)로 35초 안에 잡는다 — 그게 진짜 안전장치다 */
       if (v && Date.now() - v.at <= 90_000) {
         const p = fid(v, "10");
-        if (p !== null && p !== 0) return { price: Math.abs(p), rate: fid(v, "12") };
+        if (p !== null && p !== 0) return { price: Math.abs(p), rate: fid(v, "12"), rt: true };
       }
     }
     const a = alq[code];
-    if (a) return { price: a.price, rate: a.changeRate };
+    if (a) return { price: a.price, rate: a.changeRate, rt: false };
     return null;
   };
   const groupDrag = useDragOrder(
@@ -1140,7 +1144,8 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
                     return (
                       <>
                         <td>
-                          {lv && <span className="uw-live-dot" title="키움 실시간 (1.5초)" />}
+                          {/* 소켓 값일 때만 ● — REST 폴백은 「실시간」이 아니다 (2026-09-18 전수검증 D7) */}
+                          {lv?.rt && <span className="uw-live-dot" title="키움 실시간 (1.5초)" />}
                           {fmtNum(price)}
                         </td>
                         <td className={signClass(rate)}>{fmtPct(rate)}</td>

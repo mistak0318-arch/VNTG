@@ -35,14 +35,20 @@ export interface FutFlowDay {
  * 선물 투자자별 수급 (네이버, 계약 단위) — 선물 타일의 「받을 데가 없다」 자리.
  * 서버가 10분 캐시라 5분마다 물으면 충분하다. 마지막 날(장중이면 오늘 누적)만 쓴다.
  */
-export function useFutFlow(): FutFlowDay | null {
+export function useFutFlow(): { futFlow: FutFlowDay | null; futEmpty: boolean } {
   const [futFlow, setFutFlow] = useState<FutFlowDay | null>(null);
+  /* 응답은 왔는데 빈 것 — 「불러오는 중」이 아니라 「없음」이다 (2026-09-18 네이버가 주소를 닫음, HTTP 410) */
+  const [futEmpty, setFutEmpty] = useState(false);
   useEffect(() => {
     let alive = true;
     const load = () =>
       api
         .futuresFlow(1)
-        .then((r) => alive && r.days.length > 0 && setFutFlow(r.days[r.days.length - 1]))
+        .then((r) => {
+          if (!alive) return;
+          if (r.days.length > 0) setFutFlow(r.days[r.days.length - 1]);
+          else setFutEmpty(true);
+        })
         .catch(() => undefined);
     void load();
     const t = setInterval(load, 5 * 60_000);
@@ -51,19 +57,21 @@ export function useFutFlow(): FutFlowDay | null {
       clearInterval(t);
     };
   }, []);
-  return futFlow;
+  return { futFlow, futEmpty };
 }
 
 export function DomesticIndexGrid({
   idx,
   flow,
   futFlow,
+  futEmpty = false,
   onOpenIndex,
   onOpenFutures,
 }: {
   idx: IndexCard[];
   flow: MarketFlow | null | undefined;
   futFlow: FutFlowDay | null;
+  futEmpty?: boolean;
   /** 코스피(001)·코스닥(101) 타일을 눌렀을 때 — 일·주·월봉 시트 */
   onOpenIndex: (code: string) => void;
   /** 선물 타일을 눌렀을 때 — 선물 상세 시트 */
@@ -171,7 +179,9 @@ export function DomesticIndexGrid({
               >
                 {futFlow
                   ? `${futFlow.date.slice(5).replace("-", "/")} 순매수 · 네이버 ±10분`
-                  : "선물 수급 불러오는 중…"}
+                  : futEmpty
+                    ? "선물 수급 없음 — 네이버가 이 표를 닫았다(9/18). 대체 출처 검토 중"
+                    : "선물 수급 불러오는 중…"}
               </div>
             )}
             {f && (

@@ -140,7 +140,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
   const indices = useSection<IndexCard[]>("indices", 5_000);
   const flow = useSection<MarketFlow>("flow", 20_000);
   /* 선물 투자자별 수급 — 지수 타일 공용 훅(DomesticIndexGrid)으로 이사했다 */
-  const futFlow = useFutFlow();
+  const { futFlow, futEmpty } = useFutFlow();
   const movers = useSection<{ rising: StockRow[]; falling: StockRow[] }>("movers", 20_000);
   const themes = useSection<{ top: ThemeRow[]; bottom: ThemeRow[] }>("themes", 60_000);
   const highLow = useSection<{ high: StockRow[]; low: StockRow[] }>("highLow", 120_000);
@@ -413,6 +413,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
               idx={idx}
               flow={flow.data}
               futFlow={futFlow}
+              futEmpty={futEmpty}
               onOpenIndex={setIndexDetail}
               onOpenFutures={setFutDetail}
             />
@@ -583,12 +584,13 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                         {g.price === null ? "-" : g.isRate ? `${g.price.toFixed(3)}%` : fmtNum(Number(g.price.toFixed(2)))}
                       </span>
                       {/* 금리는 변화폭(%p)만 — 등락률로 보면 감이 안 온다 (4.71→4.72 는 0.2% 지만 0.01%p 가 뜻) */}
-                      <span className={`ov-g-pct num ${signCls(g.isRate ? (g.change ?? 0) : (g.changeRate ?? 0))}`}>
+                      {/* 등락률을 모르면 「(+0.00%)」 대신 괄호를 뺀다 — 색도 대비 부호로 (2026-09-18 전수검증 D6) */}
+                      <span className={`ov-g-pct num ${signCls(g.isRate ? (g.change ?? 0) : (g.changeRate ?? g.change ?? 0))}`}>
                         {g.change === null
                           ? "-"
                           : g.isRate
                             ? `${g.change > 0 ? "+" : ""}${g.change.toFixed(3)}%p`
-                            : `${g.change > 0 ? "+" : ""}${g.change.toFixed(2)} (${fmtPct(g.changeRate ?? 0)})`}
+                            : `${g.change > 0 ? "+" : ""}${g.change.toFixed(2)}${g.changeRate == null ? "" : ` (${fmtPct(g.changeRate)})`}`}
                       </span>
                     </>
                   )}

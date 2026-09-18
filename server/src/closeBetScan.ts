@@ -67,6 +67,9 @@ export interface CloseBetScan {
   lists: number;
   universe: number;
   green: CloseBetScanRow[];
+  /** (2026-09-18 전수검증 A8) 못 받은 목록 수 · 못 잰 종목 수 — 「후보 없음」과 「반쯤 실패」를 가른다 */
+  failedLists?: number;
+  failedStocks?: number;
 }
 
 interface Job {
@@ -135,6 +138,7 @@ export async function runCloseBetScan(client: KiwoomClient): Promise<CloseBetSca
     job.total = lists.length;
     /* 목록은 신호등 분석과 같은 것·같은 길이(500) — 원장과 같은 세계에서 고른다 */
     const union = new Map<string, { name: string; price: number; lists: number }>();
+    let failedLists = 0;
     for (const u of lists) {
       try {
         const rows = await fetchUniverse(client, u.key, "000", 500, u.span);
@@ -144,26 +148,34 @@ export async function runCloseBetScan(client: KiwoomClient): Promise<CloseBetSca
           else union.set(r.code, { name: r.name, price: r.price, lists: 1 });
         }
       } catch {
-        /* 한 목록이 실패해도 나머지로 간다 */
+        failedLists += 1; /* 한 목록이 실패해도 나머지로 간다 */
       }
       job.done += 1;
       await new Promise((r) => setTimeout(r, 400));
     }
+    /*
+     * (2026-09-18 전수검증 A8) **통째로 실패한 스캔은 오늘 것으로 남기지 않는다.** 목록을 하나도 못 받았는데
+     * 빈 결과를 저장하면 `closeBetScanDate()===date` 라 그날 다시 안 돌고, 종배 저녁은 「후보 없음」으로 읽는다.
+     * 던지면 스케줄러의 실패 시계(5분 뒤, 세 번까지)가 받는다.
+     */
+    if (lists.length > 0 && failedLists === lists.length) throw new Error(`목록 ${lists.length}개 전부 못 받음`);
 
     job.done = 0;
     job.total = union.size;
     const green: CloseBetScanRow[] = [];
+    let failedStocks = 0;
     for (const [code, u] of union) {
       try {
         const sig = await evaluateSignal(client, code);
         if (sig.level === "green") green.push({ code, name: u.name, price: u.price, score: sig.score, lists: u.lists });
       } catch {
-        /* 이 종목만 건너뛴다 */
+        failedStocks += 1; /* 이 종목만 건너뛴다 */
       }
       job.done += 1;
       /* 초당 5회 제한 — 신호등 평가는 종목당 여러 조회다 (`runListTrack` 과 같은 간격) */
       await new Promise((r) => setTimeout(r, 220));
     }
+    if (union.size > 0 && failedStocks === union.size) throw new Error(`${union.size}종목 전부 못 잼`);
     green.sort((a, b) => b.score - a.score);
 
     const out: CloseBetScan = {
@@ -173,6 +185,8 @@ export async function runCloseBetScan(client: KiwoomClient): Promise<CloseBetSca
       lists: lists.length,
       universe: union.size,
       green,
+      ...(failedLists > 0 ? { failedLists } : {}),
+      ...(failedStocks > 0 ? { failedStocks } : {}),
     };
     await mkdir(dirname(FILE), { recursive: true });
     await writeFile(FILE, JSON.stringify(out), "utf-8");

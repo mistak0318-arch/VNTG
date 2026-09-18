@@ -1015,8 +1015,8 @@
 :root[data-theme="excel"] .msig-yellow { border-left-color: #9a9a9a; }
 :root[data-theme="excel"] .msig-red { border-left-color: #d0d0d0; }
 :root[data-theme="excel"] .nb-bell.has { color: var(--text) !important; border-color: var(--xl-line) !important; background: var(--panel-2) !important; }
-:root[data-theme="excel"] .pulse-term,
-:root[data-theme="excel"] .pulse-term.news,
+:root[data-theme="excel"] .tp-term, /* (2026-09-18 전수검증 C1) pulse-term → tp-term */
+:root[data-theme="excel"] .tp-term.news,
 :root[data-theme="excel"] .bf-badge,
 :root[data-theme="excel"] .bf-badge-strength,
 :root[data-theme="excel"] .bf-badge-signal,
@@ -1027,6 +1027,17 @@
   background: #f3f3f3 !important;
   color: var(--text) !important;
   border-color: #c8c8c8 !important;
+}
+/* 흰 글자 + var(--red) 바탕 알약 — 이 테마의 --red 가 #1f1f1f 라 검은 알약에 흰 글자로 튀었다 (2026-09-18 전수검증 C22)
+   AI 시황 NEW · 손절 없음 · 감시 매수/매도 칩 · CIS 도장 bad. 위 칩 규칙과 같은 회색으로 */
+:root[data-theme="excel"] .nvbb-new,
+:root[data-theme="excel"] .ord-noexit,
+:root[data-theme="excel"] .ord-wchip.buy,
+:root[data-theme="excel"] .ord-wchip.sell,
+:root[data-theme="excel"] .cis-stamp.bad {
+  background: #f3f3f3;
+  color: var(--text);
+  border-color: #c8c8c8;
 }
 :root[data-theme="excel"] .sc-row.on td { background: #ececec !important; }
 :root[data-theme="excel"] .sc-today-col { background: #f5f5f5 !important; }

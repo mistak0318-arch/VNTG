@@ -28,6 +28,12 @@ export interface FuturesFlowDay {
 
 let cache: { at: number; days: FuturesFlowDay[] } = { at: 0, days: [] };
 const TTL = 10 * 60_000;
+/*
+ * (2026-09-18 전수검증 E1) 2026-09-18 부터 네이버가 이 주소를 **닫았다**(HTTP 410 Gone — 날짜와 무관). 매 폴링마다
+ * 500 + 스택(10분에 40줄)이 쌓이던 것. 410 을 만나면 6시간 동안 빈 배열을 돌려주고 다시 안 두드린다.
+ * 화면은 「없음」으로 비고, 대체 출처(한투 선물옵션 투자자 등)는 따로 정할 일이다.
+ */
+let goneUntil = 0;
 
 function num(s: string): number {
   const n = Number(s.replace(/[,+\s]/g, ""));
@@ -67,6 +73,7 @@ async function fetchPage(page: number): Promise<FuturesFlowDay[]> {
 /** 최근 N일 (기본 30) — 과거 → 최근 순으로 돌려준다 */
 export async function futuresFlow(days = 30): Promise<FuturesFlowDay[]> {
   if (Date.now() - cache.at < TTL && cache.days.length >= days) return cache.days.slice(-days);
+  if (Date.now() < goneUntil) return cache.days.slice(-days);
   try {
     const all: FuturesFlowDay[] = [];
     const seen = new Set<string>();
@@ -87,6 +94,11 @@ export async function futuresFlow(days = 30): Promise<FuturesFlowDay[]> {
     return all.slice(-days);
   } catch (e) {
     void recordApiCall("naver", "futuresFlow", "failed");
+    if (e instanceof Error && /HTTP 410/.test(e.message)) {
+      if (goneUntil === 0) console.warn("[naverFuturesFlow] 네이버가 주소를 닫았다(410) — 6시간 쉬고 다시 본다");
+      goneUntil = Date.now() + 6 * 3600_000;
+      return cache.days.slice(-days);
+    }
     if (cache.days.length > 0) return cache.days.slice(-days);
     throw e;
   }

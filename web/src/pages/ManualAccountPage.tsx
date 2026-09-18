@@ -69,13 +69,19 @@ function isTodayKst(iso: string | undefined): boolean {
 
 function todayPnl(
   holdings: { qty: number; price: number; changeRate: number | null; avgPrice?: number; pricedAt?: string; boughtAt?: string }[],
-): { profit: number; rate: number | null; fromAvg: number; noDate: number } {
+): { profit: number; rate: number | null; fromAvg: number; noDate: number; noQuote: number } {
   let profit = 0;
   let base = 0;
   let fromAvg = 0;
   let noDate = 0;
+  let noQuote = 0;
   const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
   for (const h of holdings) {
+    /* 현재가를 못 받은 종목(0)은 조용히 빠지지 않고 **센다** — 화면이 「못 받음」을 적는다 (2026-09-18 전수검증 B18) */
+    if (!(h.price > 0)) {
+      noQuote += 1;
+      continue;
+    }
     if (!h.boughtAt) noDate += 1;
     /* 산 날이 적혀 있으면 그것이 먼저다 — 없으면 평단을 적은 시각으로 갈음한다 */
     const boughtToday = h.boughtAt ? h.boughtAt === today : isTodayKst(h.pricedAt);
@@ -92,7 +98,7 @@ function todayPnl(
     profit += h.qty * (h.price - prev);
     base += h.qty * prev;
   }
-  return { profit, rate: base > 0 ? (profit / base) * 100 : null, fromAvg, noDate };
+  return { profit, rate: base > 0 ? (profit / base) * 100 : null, fromAvg, noDate, noQuote };
 }
 
 /** 종목 검색 + 평단/수량 입력 폼 */
@@ -709,10 +715,16 @@ export function ManualAccountPage({
               <div className={`value ${signClass(today.rate)}`}>{pct(today.rate)}</div>
             </div>
             {/* 어느 기준으로 쟀는지 적는다 — 같은 칸이 종목마다 다른 기준일 수 있다 */}
-            {(today.fromAvg > 0 || today.noDate > 0) && (
+            {(today.fromAvg > 0 || today.noDate > 0 || today.noQuote > 0) && (
               <div className="summary-item ma-today-note">
                 <div className="label">당일 기준</div>
                 <div className="value">
+                  {today.noQuote > 0 && (
+                    <>
+                      <b>{today.noQuote}종목은 현재가를 못 받아</b> 당일 손익에서 뺐습니다(평가는 원가로)
+                      {today.fromAvg > 0 || today.noDate > 0 ? " · " : ""}
+                    </>
+                  )}
                   {today.fromAvg > 0 && (
                     <>
                       {today.fromAvg}종목은 <b>오늘 산 것</b>이라 내가 적은 평단부터

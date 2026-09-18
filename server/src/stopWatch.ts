@@ -72,7 +72,9 @@ function priceOf(code: string, snap: Map<string, number> | null): { price: numbe
   const tick = store?.getLatestKrx("0B", code);
   // FID 10 = 현재가. 키움은 하락이면 음수로 준다
   const raw = tick?.values?.["10"];
-  if (raw) {
+  /* 20초 넘은 체결은 「지금 값」이 아니다 — orders.livePrices 와 같은 자 (2026-09-18 전수검증 B8). 낡으면 스냅샷으로 */
+  const fresh = tick && Date.now() - tick.at < 20_000;
+  if (raw && fresh) {
     const n = Math.abs(Number(String(raw).replace(/[+,\s]/g, "")));
     if (Number.isFinite(n) && n > 0) return { price: n, from: "실시간" };
   }
@@ -198,8 +200,8 @@ export async function runStopWatch(
       source: "stopWatch",
       kind: "stock",
       level: "urgent",
-      title: `${b.name} 손절선 이탈 ${won(b.price)} (${b.lossPct.toFixed(1)}%)`,
-      body: `손절선 ${won(b.stop)} 아래로 — 진입 ${won(b.entry)} · ${b.qty}주 · 지금 ${won(b.price)} (${b.lossPct.toFixed(1)}%) · 값 출처 ${b.from}\n${tail()}`,
+      title: `${b.name} 손절선 이탈 ${won(b.price)} (진입 대비 ${pctKo(b.lossPct)})`,
+      body: `손절선 ${won(b.stop)} 아래로 — 진입 ${won(b.entry)} · ${b.qty}주 · 지금 ${won(b.price)} (진입 대비 ${pctKo(b.lossPct)}) · 값 출처 ${b.from}\n${tail()}`,
       code: b.code,
       name: b.name,
       /*
@@ -219,6 +221,8 @@ export async function runStopWatch(
 }
 
 const won = (n: number) => Math.round(n).toLocaleString("ko-KR");
+/* 부호를 붙인다 — 손절선을 올려 둔 자리는 진입보다 위에서 깨지므로 「+2.1%」가 맞다 (2026-09-18 전수검증 B21) */
+const pctKo = (n: number) => `${n > 0 ? "+" : ""}${n.toFixed(1)}%`;
 
 /**
  * 알림 끝줄 — 주문 기능을 켠 뒤로는 말이 달라져야 한다 (2026-09-04).
@@ -243,7 +247,7 @@ export function formatStopBreaks(breaks: StopBreak[]): string {
   const lines = breaks.map(
     (b) =>
       `• ${stockNameHtml(b.code, b.name)} ${won(b.price)}원 — 손절선 ${won(b.stop)} 아래\n` +
-      `  진입 ${won(b.entry)} · ${b.qty}주 · ${b.lossPct.toFixed(1)}% (${b.from})`,
+      `  진입 ${won(b.entry)} · ${b.qty}주 · 진입 대비 ${pctKo(b.lossPct)} (${b.from})`,
   );
   return (
     `🛑 손절선이 깨졌습니다 (${breaks.length}건)\n\n${lines.join("\n\n")}\n\n` +

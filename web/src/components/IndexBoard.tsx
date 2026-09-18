@@ -29,7 +29,7 @@ import { TurnoverPanel } from "./overview/TurnoverPanel";
 export function IndexBoard() {
   const indices = useSection<IndexCard[]>("indices", 5_000);
   const flow = useSection<MarketFlow>("flow", 20_000);
-  const futFlow = useFutFlow();
+  const { futFlow, futEmpty } = useFutFlow();
   const [indexDetail, setIndexDetail] = useState<string | null>(null);
   const [futDetail, setFutDetail] = useState<FuturesDetailTarget | null>(null);
 
@@ -49,6 +49,7 @@ export function IndexBoard() {
             idx={idx}
             flow={flow.data}
             futFlow={futFlow}
+            futEmpty={futEmpty}
             onOpenIndex={setIndexDetail}
             onOpenFutures={setFutDetail}
           />

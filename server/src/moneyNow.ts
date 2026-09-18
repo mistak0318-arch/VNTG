@@ -92,7 +92,7 @@ export interface BuyerRow {
 
 /**
  * 사는 손 세 갈래 (2026-09-17 저녁 — "이미 튄 종목이 1위면 추격 금지 목록이지 매수 목록이 아니다").
- *   quiet    — 🧲 조용히 담는 중: 등락 −1~+3% 인데 배수 1.3↑·체결강도 105↑ — 단타·스윙이 볼 자리
+ *   quiet    — 🧲 조용히 담는 중: 등락 −1~+3% 인데 배수 1.3↑·체결강도 105↑(모르면 통과 — 순위판 종목은 강도가 없다, 09-18 A13) — 단타·스윙이 볼 자리
  *   breakout — 🚪 돌파 임박: 60일 고가 −3% 안, 아직 +5% 전
  *   hot      — 🔥 이미 튐: +5% 이상이거나 VI — 추격 금지
  */
@@ -260,6 +260,7 @@ interface VerdictLine {
 }
 let verdictLines: VerdictLine[] | null = null;
 let lastRecordedMin = -1;
+let lastRecordedDay = ""; // (2026-09-18 전수검증 A5) 날짜 없이 분만 견주면 다음 날 545−930<10 으로 영영 안 적힌다
 
 async function loadVerdictLines(): Promise<VerdictLine[]> {
   if (verdictLines) return verdictLines;
@@ -284,13 +285,14 @@ async function loadVerdictLines(): Promise<VerdictLine[]> {
 /** 장중 10분에 한 점 — 하루 40점쯤. 판정이 「아까보다 좋아지나」를 그리는 재료 */
 async function recordVerdict(day: string, minute: number, hhmm: string, v: Verdict): Promise<void> {
   if (minute < 9 * 60 || minute > 15 * 60 + 30 || v.kind === "unknown") return;
-  if (lastRecordedMin >= 0 && minute - lastRecordedMin < 10) return;
+  if (lastRecordedDay === day && lastRecordedMin >= 0 && minute - lastRecordedMin < 10) return;
   const lines = await loadVerdictLines();
   const last = lines[lines.length - 1];
   if (last && last.day === day && minute - (Number(last.hhmm.slice(0, 2)) * 60 + Number(last.hhmm.slice(3, 5))) < 10) return;
   const line: VerdictLine = { day, hhmm, kind: v.kind, score: lastScore };
   lines.push(line);
   lastRecordedMin = minute;
+  lastRecordedDay = day;
   try {
     await mkdir(DATA_DIR, { recursive: true });
     await appendFile(VERDICT_FILE, JSON.stringify(line) + "\n", "utf-8");
@@ -356,6 +358,11 @@ async function buildRecord(client: KiwoomClient, day: string): Promise<{ trend: 
 async function buildVerdict(client: KiwoomClient, minute: number, errors: string[]): Promise<Verdict> {
   const parts: VerdictPart[] = [];
   const inSession = minute >= 9 * 60 && minute <= 15 * 60 + 30;
+  /*
+   * (2026-09-18 전수검증 #2) 09:00 전엔 수급·프로그램이 **프리마켓 몇백억**이다 — 정규장 수조 원과 같은 저울에
+   * 올리면 08:05 에 「들어옴 +1」이 찍힌다. 장 전엔 값은 보여 주되 판정(sign)엔 안 넣는다. 15:30 뒤는 그날 확정치라 그대로.
+   */
+  const preOpen = minute < 9 * 60;
 
   /* 외인·기관 오늘 (섹션 캐시 — 억원) */
   try {
@@ -364,7 +371,7 @@ async function buildVerdict(client: KiwoomClient, minute: number, errors: string
       const f = flow.kospi.foreign + flow.kosdaq.foreign;
       const i = flow.kospi.institution + flow.kosdaq.institution;
       const sign: 1 | -1 | 0 = f > 0 && i > 0 ? 1 : f < 0 && i < 0 ? -1 : 0;
-      parts.push({ key: "flow", label: "외인·기관 오늘", sign, text: `외인 ${signed(f)} · 기관 ${signed(i)} (코스피+코스닥)` });
+      parts.push({ key: "flow", label: "외인·기관 오늘", sign: preOpen ? null : sign, text: `외인 ${signed(f)} · 기관 ${signed(i)} (코스피+코스닥)${preOpen ? " · 장 전 값이라 판정엔 안 넣음" : ""}` });
     } else parts.push({ key: "flow", label: "외인·기관 오늘", sign: null, text: "아직 없음" });
   } catch (e) {
     errors.push("수급");
@@ -384,7 +391,7 @@ async function buildVerdict(client: KiwoomClient, minute: number, errors: string
       const d30 = base ? netOf(last) - netOf(base) : null;
       const toEok = (v: number) => v / 100; // 백만원 → 억
       if (d30 !== null) {
-        parts.push({ key: "program", label: "프로그램 30분", sign: d30 > 50 * 100 ? 1 : d30 < -50 * 100 ? -1 : 0, text: `${signed(toEok(d30))} (${base!.time.slice(0, 2)}:${base!.time.slice(2, 4)}~${last.time.slice(0, 2)}:${last.time.slice(2, 4)}) · 오늘 ${signed(toEok(netOf(last)))}` });
+        parts.push({ key: "program", label: "프로그램 30분", sign: preOpen ? null : d30 > 50 * 100 ? 1 : d30 < -50 * 100 ? -1 : 0, text: `${signed(toEok(d30))} (${base!.time.slice(0, 2)}:${base!.time.slice(2, 4)}~${last.time.slice(0, 2)}:${last.time.slice(2, 4)}) · 오늘 ${signed(toEok(netOf(last)))}` });
       } else parts.push({ key: "program", label: "프로그램 30분", sign: null, text: `오늘 ${signed(toEok(netOf(last)))} · 30분 전 값 없음` });
     } else parts.push({ key: "program", label: "프로그램 30분", sign: null, text: inSession ? "아직 없음" : "장 밖" });
   } catch {
@@ -654,6 +661,13 @@ function num(v: unknown): number {
   const n = Number(String(v ?? "").replace(/[+,\s]/g, ""));
   return Number.isFinite(n) ? n : 0;
 }
+/** (2026-09-18 전수검증 A22) 「모른다」는 null — 빈 칸·비숫자를 0 으로 읽으면 수익률 0.00% 가 사실처럼 보인다 */
+function numOrNull(v: unknown): number | null {
+  const s = String(v ?? "").replace(/[+,\s]/g, "");
+  if (s === "") return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
 
 async function buildAccount(
   client: KiwoomClient,
@@ -685,8 +699,9 @@ async function buildAccount(
         qty,
         price: Math.abs(num(r.cur_prc)),
         rate: null,
-        pnlRate: num(r.prft_rt),
-        valueMan: Math.round(num(r.evlt_amt) / 10000) || null,
+        pnlRate: numOrNull(r.prft_rt),
+        /* (A22) 5천 원 미만은 0만원이지 「모름」이 아니다 — 값이 있으면 0 도 그대로 */
+        valueMan: numOrNull(r.evlt_amt) === null ? null : Math.round(num(r.evlt_amt) / 10000),
         rotation: null,
         theme: null,
         est: null,
@@ -717,7 +732,7 @@ async function buildAccount(
           price: h.price,
           rate: h.changeRate,
           pnlRate: h.returnRate,
-          valueMan: Math.round(h.value / 10000) || null,
+          valueMan: Number.isFinite(h.value) ? Math.round(h.value / 10000) : null, // (A22) 5천 원 미만도 0만원, 모름 아님
           rotation: null,
           theme: null,
           est: null,
@@ -843,10 +858,11 @@ async function flipAlerts(rows: AccountRow[]): Promise<void> {
     if (r.isEtf && (r.boost ?? 0) < 1.5) continue;
     const n = st.count[r.code] ?? 0;
     if (n >= 2) continue;
-    st.count[r.code] = n + 1;
     const label = r.verdict === "in" ? "돈 들어옴" : "돈 빠짐";
     const title = `💧 ${r.name} ${label} (${r.account})`;
     const body = `${hhmm} · ${r.rate === null ? "" : `${r.rate > 0 ? "+" : ""}${r.rate.toFixed(2)}% · `}${r.why || (prev === "quiet" ? "조용하다가 바뀜" : "반대로 뒤집힘")}`;
+    /* (2026-09-18 전수검증 A21) 카운트는 **알림종에 실제로 들어간 뒤** 올린다 — 실패한 회차가 하루 2번을 갉아먹지 않게 */
+    let sent = false;
     await pushNotice({
       source: "moneyFlow",
       kind: "stock",
@@ -858,8 +874,13 @@ async function flipAlerts(rows: AccountRow[]): Promise<void> {
       link: stockLink(r.code, r.name),
       dedupeKey: `moneyFlow:${r.code}:${r.verdict}:${date}`,
       dedupeHours: 3,
-    }).catch(() => undefined);
+    })
+      .then(() => {
+        sent = true;
+      })
+      .catch(() => undefined);
     await sendTelegram(`<b>${title}</b>\n${body.replace(/&/g, "&amp;").replace(/</g, "&lt;")}`, "signal").catch(() => undefined);
+    if (sent) st.count[r.code] = n + 1;
   }
   try {
     await mkdir(DATA_DIR, { recursive: true });
@@ -941,6 +962,7 @@ async function buildPlan(
 let cache: MoneyNow | null = null;
 let job: Promise<MoneyNow> | null = null;
 const TTL = 60_000;
+const MAX_AGE = 30 * 60_000;
 
 async function compute(client: KiwoomClient): Promise<MoneyNow> {
   const { date, minute, day, hhmm } = kst();
@@ -972,9 +994,17 @@ export async function moneyNow(client: KiwoomClient, opts: { fresh?: boolean } =
         job = null;
       });
   }
-  if (cache && !wantFresh) {
+  /*
+   * (2026-09-18 전수검증 A15) 옛 값을 바로 주는 건 30분까지만. 그보다 늙으면 계산을 **기다리고**, 그래도 실패하면
+   * 옛 값에 「몇 분 전 값 · 계산 실패」를 달아 준다 — 어제 15시 판정이 stale 표시만 달고 하루 종일 돌던 것.
+   */
+  if (cache && !wantFresh && age < MAX_AGE) {
     void job.catch(() => undefined);
     return { ...cache, stale: true };
+  }
+  if (cache) {
+    const old = cache;
+    return job.catch(() => ({ ...old, stale: true, errors: [...old.errors, `계산 실패 — ${Math.round((Date.now() - old.at) / 60_000)}분 전 값`] }));
   }
   return job;
 }

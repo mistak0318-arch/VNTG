@@ -374,10 +374,17 @@ export function startCollectDaily(
           else continue;
 
           /*
+           * (2026-09-18 전수검증 A3) HTTP 200 인데 줄이 **하나도 없다** — 키움이 빈 봉투를 준 것이다(return_code≠0 은
+           * 클라이언트가 던진다). 성공으로 치면 도장이 찍혀 그날 다시 안 받는다 → 실패로 센다.
+           */
+          if (got.length === 0) throw new Error(`빈 응답 (${kind})`);
+
+          /*
            * 마감 전이면 **오늘 줄을 버린다.** 미집계 0 을 값으로 굳히지 않는다.
            * 이어 붙이는 구조라 마감 뒤 바퀴에서 확정값으로 들어온다.
            */
-          if (!closedForToday(kind)) got = got.filter((r) => r.d !== todayYmd());
+          const closed = closedForToday(kind);
+          if (!closed) got = got.filter((r) => r.d !== todayYmd());
 
           if (got.length > 0) {
             const before = (led[kind] as { d: string }[] | undefined)?.length ?? 0;
@@ -386,7 +393,11 @@ export function startCollectDaily(
             const after = (led[kind] as { d: string }[]).length;
             progress.added[kind] = (progress.added[kind] ?? 0) + Math.max(0, after - before);
           }
-          led.fetchedAt[kind] = new Date().toISOString();
+          /*
+           * (2026-09-18 전수검증 A2) 도장은 **오늘 줄을 담았을 때만**. 장중 재수집은 오늘 줄을 버리는데 도장까지
+           * 찍으면 15:55 회차의 `alreadyGotToday` 가 그 종목을 건너뛰어 그날 수급·지분율이 영영 빈다.
+           */
+          if (closed) led.fetchedAt[kind] = new Date().toISOString();
         } catch {
           progress.fails += 1;
         }

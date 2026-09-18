@@ -6,6 +6,7 @@ import { pruneLiveAlerts, runLiveAlerts } from "./liveAlerts.js";
 import { runNaverAlerts } from "./naverAlerts.js";
 import { runMoneyNowBriefing } from "./moneyNowBriefing.js";
 import { moneyNow } from "./moneyNow.js";
+import { sampleIntradayFlow } from "./naverIntradayFlow.js";
 import { pruneStopWatch, runStopWatch } from "./stopWatch.js";
 import { getActiveSuper } from "./superSignal.js";
 import { hasDedicatedChannel, sendTelegram } from "./telegram.js";
@@ -181,6 +182,10 @@ async function tick(client: KiwoomClient): Promise<void> {
    */
   if (new Date(Date.now() + 9 * 3600_000).getUTCMinutes() % 5 === 0) {
     void moneyNow(client).catch((e) => console.warn("[alert] 돈의 흐름 감시 실패 —", e instanceof Error ? e.message : e));
+  }
+  /* 장중 누적 수급 표본 — 2분마다 한 점 (2026-09-18, 네이버 Time 표 폐쇄 대체). flow 섹션 캐시를 읽을 뿐 조회가 안 는다 */
+  if (new Date(Date.now() + 9 * 3600_000).getUTCMinutes() % 2 === 0) {
+    void sampleIntradayFlow(client).catch((e) => console.warn("[alert] 장중 수급 표본 실패 —", e instanceof Error ? e.message : e));
   }
 
   /*

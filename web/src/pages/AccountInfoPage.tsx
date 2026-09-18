@@ -182,6 +182,13 @@ export function AccountInfoPage({ onSelectStock }: { onSelectStock: (code: strin
   );
 
   const cash = num(pick(deposit ?? undefined, DEPOSIT_KEYS));
+  /*
+   * D+2 예수금 (2026-09-18 — 벤티지 09:44 캡처 "예수금이랑 잔액이 안 맞아"). 오늘 판 돈은 이틀 뒤에 들어오니 `entr` 는
+   * 그대로고 추정예탁자산만 늘어 총자산≠예수금으로 보였다. 다르면 D+2 를 옆에 적는다.
+   */
+  const cashD2 = num(pick(deposit ?? undefined, ["d2_entra"]));
+  /* 서버가 NXT 시간대에 통합 현재가로 다시 잰 잔고 — 키움 앱과 같은 기준 (2026-09-18) */
+  const priceBasis = holdings && typeof holdings._priceBasis === "string" ? String(holdings._priceBasis) : null;
   const evalTotal = num(pick(holdings ?? undefined, TOTAL_EVAL_KEYS));
   const purTotal = num(pick(holdings ?? undefined, TOTAL_PUR_KEYS));
   const pnlTotal = num(pick(holdings ?? undefined, TOTAL_PNL_KEYS));
@@ -240,6 +247,7 @@ export function AccountInfoPage({ onSelectStock }: { onSelectStock: (code: strin
           <div className="acct2-cell">
             <span>예수금</span>
             <b>{fmt(cash)}</b>
+            {cashD2 > 0 && Math.round(cashD2) !== Math.round(cash) && <small title="오늘·어제 매매 대금이 정산된 뒤의 예수금 (D+2)">D+2 {fmt(cashD2)}</small>}
           </div>
           <div className="acct2-cell">
             <span>매입금액</span>
@@ -248,6 +256,7 @@ export function AccountInfoPage({ onSelectStock }: { onSelectStock: (code: strin
           <div className="acct2-cell">
             <span>평가금액</span>
             <b>{fmt(evalTotal)}</b>
+            {priceBasis === "NXT" && <small title="정규장 밖이라 NXT(통합) 현재가로 잰 값 — 키움 앱과 같은 기준">NXT 현재가 기준</small>}
           </div>
           <div className={`acct2-cell ${signOf(pnlTotal)}`}>
             <span>평가손익</span>

@@ -296,6 +296,16 @@ export function mergeBars(
         continue;
       }
     }
+    /*
+     * (2026-09-18 전수검증 A7) **어제 이전의 애프터 시대 줄**은 `c`(정규장)·`ca`(애프터)를 지킨다. 위 예외는 「오늘」
+     * 하루뿐이라, 다음 날 응답이 어제 줄을 통째로 덮으면 `c` 가 애프터 포함 종가로 바뀌고 `ca` 는 사라졌다 —
+     * 표본·검증표가 쌓인 `c` 의 뜻이 하루 지나면 조용히 바뀌던 것. 시·고·저·거래량은 새 값(수정주가)을 쓴다.
+     */
+    /* 새 종가가 옛 애프터 종가와 딴판이면(수정주가·액면 변경) 옛 c 를 지키면 안 된다 — 0.5% 안일 때만 지킨다 */
+    if (b.d !== opts?.afterEraDay && prev && prev.ca !== undefined && prev.ca > 0 && prev.c > 0 && Math.abs(b.c / prev.ca - 1) < 0.005) {
+      by.set(b.d, { ...b, c: prev.c, ca: prev.ca });
+      continue;
+    }
     by.set(b.d, b); // 새 값이 이긴다
   }
   return [...by.values()].sort((a, b) => (a.d < b.d ? -1 : a.d > b.d ? 1 : 0)).slice(-keep);
@@ -440,7 +450,11 @@ export async function loadRegularCloses(date: string): Promise<Map<string, numbe
  *   `ca`(애프터 종가)도 한 번도 안 채워지는데 「✅ 2,8xx종목」으로 성공처럼 남았다. 마무리 회차는 force 다.
  */
 export async function buildCloses(client: KiwoomClient, opts: { force?: boolean } = {}): Promise<Store> {
-  if (running) return running;
+  /* (2026-09-18 전수검증 A19) force 는 도는 중이면 조용히 그 결과에 얹혀 끝났다 — 끝나길 기다렸다가 제 몫을 돈다 */
+  while (running) {
+    if (!opts.force) return running;
+    await running.catch(() => undefined);
+  }
   running = (async () => {
     const themes = await loadThemes();
     /*
@@ -512,6 +526,13 @@ export async function buildCloses(client: KiwoomClient, opts: { force?: boolean 
       ? { afterEraDay: todayKey.replace(/-/g, "") }
       : undefined;
 
+    /*
+     * (2026-09-18 전수검증 A4) **한 종목도 못 받았으면** `builtAt` 을 오늘로 찍지 않는다 — 키움이 통째로 죽은 날,
+     * 어제 봉 그대로인 파일이 「✅ 일봉 2,845종목」으로 남고 `doneToday` 가드가 재시도까지 막았다.
+     * 실패를 성공으로 굳히지 않는다. 끝에서 던져 단계가 ❌ 로 적히게 한다.
+     */
+    let okCount = 0;
+    let tried = 0;
     const flush = async () => {
       /*
        * `closes` 는 봉에서 파생한다 — 두 벌로 저장하면 파일이 두 배가 되고,
@@ -519,7 +540,7 @@ export async function buildCloses(client: KiwoomClient, opts: { force?: boolean 
        */
       const derived: Record<string, number[]> = { ...closes };
       for (const [k, v] of Object.entries(bars)) derived[k] = v.map((b) => b.c);
-      const s: Store = { builtAt: new Date().toISOString(), closes: {}, bars };
+      const s: Store = { builtAt: okCount > 0 ? new Date().toISOString() : prev.builtAt, closes: {}, bars };
       await mkdir(DIR, { recursive: true });
       await writeFile(FILE, JSON.stringify(s), "utf-8");
       cache = { ...s, closes: derived };
@@ -534,12 +555,14 @@ export async function buildCloses(client: KiwoomClient, opts: { force?: boolean 
       for (const code of codes) {
         progress = { done: progress.done + 1, total: codes.length };
         if (doneToday.has(code)) continue;
+        tried += 1;
         try {
           const got = await fetchOne(client, code);
           /* **이어 붙인다.** 갈아치우면 보관 일수를 늘려도 과거가 안 자란다 */
           if (got.length > 0) {
             const opts = mergeOpts ? { ...mergeOpts, regularClose: regClose.get(code) } : undefined;
             bars[code] = mergeBars(bars[code] ?? [], got, keep, opts);
+            okCount += 1;
           }
         } catch {
           /* 이 종목만 건너뛴다 — 지난번 값이 있으면 그대로 남는다 */
@@ -557,6 +580,8 @@ export async function buildCloses(client: KiwoomClient, opts: { force?: boolean 
     }
 
     await flush();
+    /* (2026-09-18 전수검증 A4) 받을 종목이 있었는데 하나도 못 받았다 — 성공이 아니다 */
+    if (tried > 0 && okCount === 0) throw new Error(`일봉 전종목 실패 — ${tried}종목 중 0종목 (키움 응답 없음)`);
     return cache!;
   })().finally(() => {
     running = null;

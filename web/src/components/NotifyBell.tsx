@@ -104,10 +104,17 @@ export function NotifyBell() {
   }, [showCfg, cfgSrc.length]);
   const boxRef = useRef<HTMLDivElement | null>(null);
 
+  /*
+   * 응답 순서 지킴 (2026-09-18 전수검증 D8) — 탭을 「전체 → 종목」으로 빨리 바꾸면 느린 「전체」 응답이
+   * 나중에 와서 「종목」 목록을 덮었다. 마지막으로 보낸 요청만 반영한다.
+   */
+  const loadSeq = useRef(0);
   const load = useCallback(() => {
+    const seq = ++loadSeq.current;
     api
       .notices({ limit: 60, group: filter })
       .then((r) => {
+        if (seq !== loadSeq.current) return;
         setItems(r.items);
         setUnread(r.unread);
         setUnreadBy(r.unreadBy);

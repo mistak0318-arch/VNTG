@@ -1,4 +1,9 @@
 import { recordApiCall } from "./apiUsage.js";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import type { KiwoomClient } from "./kiwoomClient.js";
+import { getSection, type MarketFlow } from "./marketOverview.js";
 
 /**
  * 장중 투자자별 **누적 순매수** (2026-08-26 실측 — 「차트 밑에 장중 수급 변화 찍어줘」).
@@ -25,6 +30,72 @@ export interface IntraFlowPoint {
 export type FlowMarket = "01" | "02" | "03";
 
 const cache = new Map<string, { at: number; date: string; points: IntraFlowPoint[] }>();
+let goneUntil = 0; // (2026-09-18 E1-b) 410 을 만난 뒤 한 시간은 안 두드린다
+
+/*
+ * **우리가 직접 찍는 표본** (2026-09-18 — 벤티지: "지수 클릭하면 당일 수급현황 그래프 보여줬던 거 왜 없앴어? 다시 살려").
+ *
+ * 네이버가 Time 표를 닫아(410) 곡선이 사라졌다. 같은 그림을 남의 표 없이 그린다 — 시황 「국내 지수」 카드가 이미
+ * 받는 오늘 누적 수급(ka10051, flow 섹션·억원)을 **2분마다 한 점씩** 파일에 적어 두면 하루가 곧 누적 곡선이다.
+ * 코스피(01)·코스닥(02)만 — K200 선물(03)은 키움에 투자자별 수급이 없어 못 그린다.
+ * 파일은 data/intradayFlow/YYYY-MM-DD.json 하나에 두 시장. 재시작해도 이어 붙는다.
+ */
+const SAMPLE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "data", "intradayFlow");
+type SampleFile = Partial<Record<FlowMarket, IntraFlowPoint[]>>;
+const sampleCache = new Map<string, SampleFile>();
+
+async function loadSamples(date: string): Promise<SampleFile> {
+  const hit = sampleCache.get(date);
+  if (hit) return hit;
+  let f: SampleFile = {};
+  try {
+    f = JSON.parse(await readFile(join(SAMPLE_DIR, `${date}.json`), "utf-8")) as SampleFile;
+  } catch {
+    f = {};
+  }
+  sampleCache.set(date, f);
+  return f;
+}
+
+/** 시황 flow 섹션의 오늘 누적을 한 점 적는다 — 스케줄러가 장중 2분마다 부른다. 같은 분이면 안 적는다 */
+export async function sampleIntradayFlow(client: KiwoomClient): Promise<void> {
+  const d = new Date(Date.now() + 9 * 3600_000);
+  const minute = d.getUTCHours() * 60 + d.getUTCMinutes();
+  if (minute < 9 * 60 || minute > 15 * 60 + 40) return;
+  const flow = (await getSection("flow", client)).data as MarketFlow | null;
+  if (!flow) return;
+  const date = d.toISOString().slice(0, 10).replace(/-/g, "");
+  const t = `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+  const f = await loadSamples(date);
+  let changed = false;
+  for (const [m, src] of [["01", flow.kospi], ["02", flow.kosdaq]] as const) {
+    const arr = f[m] ?? (f[m] = []);
+    const last = arr[arr.length - 1];
+    if (last && last.t === t) continue;
+    /* 값이 하나도 안 바뀌었으면(섹션 캐시가 그대로) 점을 안 늘린다 — 곡선이 계단으로 굳지 않게 */
+    if (last && last.individual === src.individual && last.foreign === src.foreign && last.institution === src.institution) continue;
+    arr.push({ t, individual: src.individual, foreign: src.foreign, institution: src.institution });
+    changed = true;
+  }
+  if (!changed) return;
+  try {
+    await mkdir(SAMPLE_DIR, { recursive: true });
+    await writeFile(join(SAMPLE_DIR, `${date}.json`), JSON.stringify(f), "utf-8");
+  } catch {
+    /* 못 적어도 다음 2분에 다시 */
+  }
+}
+
+/** 오늘(없으면 가장 최근 닷새 안) 표본 — 시간 오름차순 */
+async function sampledFlow(sosok: FlowMarket): Promise<{ date: string; points: IntraFlowPoint[] }> {
+  for (let back = 0; back < 5; back++) {
+    const ymd = kstDate(back);
+    const f = await loadSamples(ymd);
+    const pts = f[sosok] ?? [];
+    if (pts.length > 0) return { date: `${ymd.slice(0, 4)}-${ymd.slice(4, 6)}-${ymd.slice(6, 8)}`, points: pts };
+  }
+  return { date: "", points: [] };
+}
 
 function num(s: string): number {
   const n = Number(s.replace(/[,+\s]/g, ""));
@@ -73,6 +144,8 @@ export async function intradayFlow(
   sosok: FlowMarket,
 ): Promise<{ date: string; points: IntraFlowPoint[] }> {
   const hit = cache.get(sosok);
+  /* 네이버가 닫혀 있으면 우리 표본으로 (선물 03 은 표본이 없어 빈 채로) */
+  if (Date.now() < goneUntil) return sosok === "03" ? { date: "", points: [] } : sampledFlow(sosok);
   if (hit) {
     const past = hit.date !== kstDate(0);
     if (Date.now() - hit.at < (past ? 24 * 3600_000 : 10 * 60_000)) {
@@ -112,6 +185,14 @@ export async function intradayFlow(
   } catch (e) {
     void recordApiCall("naver", `intraFlow:${sosok}`, "failed");
     if (hit) return { date: hit.date, points: hit.points };
+    /*
+     * (2026-09-18 전수검증 E1-b) 네이버가 이 주소를 **닫았다**(HTTP 410 Gone, 어제 날짜로 물어도 410). 던지면 시트가
+     * 열릴 때마다 500 + 스택이다. 「없음」으로 주고 한 시간 동안 다시 안 두드린다. 대체 출처는 따로 정할 일.
+     */
+    if (e instanceof Error && /HTTP 410/.test(e.message)) {
+      goneUntil = Date.now() + 3600_000;
+      return sosok === "03" ? { date: "", points: [] } : sampledFlow(sosok);
+    }
     throw e;
   }
 }

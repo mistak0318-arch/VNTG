@@ -360,8 +360,12 @@ export async function evaluateAccounts(client: KiwoomClient): Promise<EvaluatedA
     const holdings: EvaluatedHolding[] = a.holdings.map((h) => {
       const q = priceMap.get(h.code);
       const price = q?.price ?? 0;
-      const value = price * h.qty;
       const cost = h.avgPrice * h.qty;
+      /*
+       * 현재가를 못 받은 종목(price 0)은 **원가로 잰다** (2026-09-18 전수검증 B18). 예전엔 평가 0 ·
+       * 손익 −매입금액이라 조회 한 번 죽으면 「−100%」가 합계에 섞였다. 화면은 price 0 으로 「못 받음」을 안다.
+       */
+      const value = price > 0 ? price * h.qty : cost;
       const profit = value - cost;
       return {
         ...h,

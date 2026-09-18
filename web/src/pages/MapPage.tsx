@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { tileHeat, useAppearance } from "../useAppearance";
 import { useWatchGroupTiles, type GroupSource } from "../useWatchGroupTiles";
 import { api, type EvaluatedTheme, type SectorRow, type ThemeRow, type ThemeStrength } from "../api";
@@ -113,6 +113,9 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
   const [mine, setMine] = useState<EvaluatedTheme[]>([]);
   const [mineLoading, setMineLoading] = useState(true);
   const [mineError, setMineError] = useState<string | null>(null);
+  /** 내 태그의 스냅샷 시각(ms) — 서버 `snapshotAt` (2026-09-18 전수검증 D1) */
+  const [mineAt, setMineAt] = useState<number | null>(null);
+  const mineSeq = useRef(0);
 
   /*
    * 네이버 테마 모드 (2026-08-28, 테마 DB 개편) — **266개 분류를 지도에 올린다.**
@@ -121,13 +124,43 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
    */
   const [naver, setNaver] = useState<ThemeStrength[] | null>(null);
   const [naverError, setNaverError] = useState<string | null>(null);
-  useEffect(() => {
-    if (mode !== "naver" || naver !== null) return;
+  /** 네이버 테마 스냅샷 시각(ms) — 서버 `at` 는 epoch 문자열, 비면 모른다 */
+  const [naverAt, setNaverAt] = useState<number | null>(null);
+  /*
+   * 응답 순서 지킴 (2026-09-18 전수검증 D20) — 새로고침 직후 느린 옛 응답이 새 것을 덮지 않게.
+   * 나중에 보낸 요청만 반영한다.
+   */
+  const naverSeq = useRef(0);
+  const loadNaver = useCallback(() => {
+    const seq = ++naverSeq.current;
     api
       .themeStrength("kr")
-      .then((r) => setNaver(r.themes))
-      .catch((e: Error) => setNaverError(e.message));
-  }, [mode, naver]);
+      .then((r) => {
+        if (seq !== naverSeq.current) return;
+        setNaver(r.themes);
+        const at = Number(r.at);
+        setNaverAt(Number.isFinite(at) && at > 0 ? at : null);
+        setNaverError(null);
+      })
+      .catch((e: Error) => {
+        if (seq !== naverSeq.current) return;
+        setNaverError(e.message);
+      });
+  }, []);
+  useEffect(() => {
+    if (mode !== "naver" || naver !== null) return;
+    loadNaver();
+  }, [mode, naver, loadNaver]);
+  /*
+   * **한 번 받으면 끝이던 것을 주기 갱신으로** (2026-09-18 전수검증 D1).
+   * 다른 모드(테마·업종 180초, 관심종목 20~120초)는 스스로 다시 받는데 네이버 테마만
+   * 페이지를 연 시각에 멈춰 있었다. 테마·업종과 같은 180초로, 조용히(스켈레톤 없이) 갈아끼운다.
+   */
+  useEffect(() => {
+    if (mode !== "naver") return;
+    const timer = setInterval(loadNaver, 180_000);
+    return () => clearInterval(timer);
+  }, [mode, loadNaver]);
   /*
    * **테마를 숨기면 다시 받는다** (2026-08-31 — "어제 만든 숨기기 기능 작동안한다").
    *
@@ -145,15 +178,20 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
     .sort((a, b) => b.changeRate - a.changeRate);
 
   async function loadMine(force = false) {
+    /* 응답 순서 지킴 (2026-09-18 전수검증 D20) — 태그 변경·새로고침이 겹칠 때 옛 응답이 새 것을 덮지 않게 */
+    const seq = ++mineSeq.current;
     setMineLoading(true);
     setMineError(null);
     try {
       const r = await api.customThemes(force);
+      if (seq !== mineSeq.current) return;
       setMine(r.themes);
+      setMineAt(r.snapshotAt > 0 ? r.snapshotAt : null);
     } catch (e) {
+      if (seq !== mineSeq.current) return;
       setMineError(e instanceof Error ? e.message : "내 테마를 못 불러왔습니다");
     } finally {
-      setMineLoading(false);
+      if (seq === mineSeq.current) setMineLoading(false);
     }
   }
 
@@ -292,7 +330,22 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
           sectors.refresh();
         }}
         loading={loading}
-        updatedAt={mode === "theme" ? themes.updatedAt : sectors.updatedAt}
+        /*
+         * **지금 그려진 데이터의 시각**을 보여 준다 (2026-09-18 전수검증 D1). 내 태그·네이버·관심종목
+         * 모드에서도 업종 섹션 시각이 찍혀 있었다 — 보고 있는 값과 무관한 시각이다. 관심종목
+         * 모드는 훅이 시각을 안 주므로 비운다(엉뚱한 시각보다 없는 편이 낫다).
+         */
+        updatedAt={
+          mode === "mine"
+            ? mineAt
+            : mode === "naver"
+              ? naverAt
+              : mode === "theme"
+                ? themes.updatedAt
+                : mode === "sector"
+                  ? sectors.updatedAt
+                  : null
+        }
       />
       {/*
         모드 버튼 — **끌어서 순서를 바꾼다** (2026-08-28 요청). CSS order 로만 움직이므로

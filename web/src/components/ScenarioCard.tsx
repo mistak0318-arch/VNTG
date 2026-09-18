@@ -103,19 +103,19 @@ export function ScenarioCard({
 
   return (
     <div className="overlay" onClick={onCancel}>
-      <div className="sheet sc-card" onClick={(e) => e.stopPropagation()}>
-        <div className="sc-head">
+      <div className="sheet scn-card" onClick={(e) => e.stopPropagation()}>
+        <div className="scn-head">
           <b>진입 시나리오 — {name}</b>
-          <button className="sc-close" onClick={onCancel} aria-label="닫기">
+          <button className="scn-close" onClick={onCancel} aria-label="닫기">
             ✕
           </button>
         </div>
-        <div className="sc-hint">
+        <div className="scn-hint">
           사기 전에 적는 게 이 카드의 전부입니다. 여기 적으면 <b>복기 노트의 오늘 매수</b>로
           저장되고, 손절선은 <b>손절 감시</b>가 뭅니다.
         </div>
 
-        <div className="sc-grid">
+        <div className="scn-grid">
           <label>
             단가
             <input
@@ -130,7 +130,7 @@ export function ScenarioCard({
             <input inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="주" />
           </label>
           <label>
-            손절선 <i className="sc-req">필수</i>
+            손절선 <i className="scn-req">필수</i>
             <input inputMode="numeric" value={stop} onChange={(e) => setStop(e.target.value)} placeholder="어디서 자르나" />
           </label>
           <label>
@@ -140,15 +140,15 @@ export function ScenarioCard({
         </div>
 
         {rr !== null && (
-          <div className={`sc-rr ${rr >= 2 ? "good" : rr >= 1 ? "mid" : "bad"}`}>
+          <div className={`scn-rr ${rr >= 2 ? "good" : rr >= 1 ? "mid" : "bad"}`}>
             손익비 <b>{rr.toFixed(1)} : 1</b>
             {rr < 1 && " — 얻을 것보다 잃을 것이 큽니다"}
           </div>
         )}
 
         {tags.length > 0 && (
-          <div className="sc-tags">
-            <span className="sc-tags-label">왜 사나</span>
+          <div className="scn-tags">
+            <span className="scn-tags-label">왜 사나</span>
             {tags.map((tag) => {
               const on = reasons.includes(tag.key);
               return (
@@ -169,7 +169,7 @@ export function ScenarioCard({
         )}
 
         <textarea
-          className="sc-note"
+          className="scn-note"
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder="시나리오 한 줄 — 무엇이 보이면 계획대로고, 무엇이 보이면 틀린 건가"
@@ -178,11 +178,11 @@ export function ScenarioCard({
 
         {error && <div className="error-banner">{error}</div>}
 
-        <div className="sc-actions">
+        <div className="scn-actions">
           <button className="filter-btn active" onClick={() => void save()} disabled={saving}>
             {saving ? "저장 중…" : "기록하고 보유로"}
           </button>
-          <button className="sc-skip" onClick={onSkip}>
+          <button className="scn-skip" onClick={onSkip}>
             기록 없이 표시만
           </button>
         </div>

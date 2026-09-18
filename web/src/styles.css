@@ -7539,13 +7539,15 @@ button.nav-group-toggle {
 .wl-conc-warn { color: var(--red); font-weight: 600; }
 
 /* ── 진입 전 시나리오 카드 — 「보유」 전환 관문 ── */
-.sc-card { max-width: 420px; }
-.sc-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.4rem; }
-.sc-close { background: none; border: none; color: var(--muted); font-size: 1rem; cursor: pointer; padding: 4px 8px; }
-.sc-hint { font-size: 0.74rem; color: var(--muted); margin-bottom: 0.7rem; line-height: 1.5; }
-.sc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem 0.7rem; }
-.sc-grid label { display: flex; flex-direction: column; gap: 3px; font-size: 0.72rem; color: var(--muted); }
-.sc-grid input {
+/* (2026-09-18 전수검증 C2~C5) sc- → scn- 로 이름 바꿈. 현미경(ScopePage) 의 .sc-card·.sc-grid·.sc-note·.sc-head·.sc-hint 와
+   겹쳐 서로 덮어쓰고 있었다 (카드 max-width 420 이 현미경 카드에, 현미경 .sc-note 의 flex 가 이 textarea 에). */
+.scn-card { max-width: 420px; }
+.scn-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.4rem; }
+.scn-close { background: none; border: none; color: var(--muted); font-size: 1rem; cursor: pointer; padding: 4px 8px; }
+.scn-hint { font-size: 0.74rem; color: var(--muted); margin-bottom: 0.7rem; line-height: 1.5; }
+.scn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem 0.7rem; }
+.scn-grid label { display: flex; flex-direction: column; gap: 3px; font-size: 0.72rem; color: var(--muted); }
+.scn-grid input {
   background: var(--panel-2);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -7554,14 +7556,14 @@ button.nav-group-toggle {
   font-size: 0.9rem;
   width: 100%;
 }
-.sc-req { font-style: normal; color: var(--red); font-size: 0.65rem; }
-.sc-rr { margin-top: 0.55rem; font-size: 0.8rem; }
-.sc-rr.good b { color: var(--red); }
-.sc-rr.mid b { color: var(--text); }
-.sc-rr.bad { color: var(--blue); }
-.sc-tags { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-top: 0.65rem; }
-.sc-tags-label { font-size: 0.72rem; color: var(--muted); margin-right: 2px; }
-.sc-note {
+.scn-req { font-style: normal; color: var(--red); font-size: 0.65rem; }
+.scn-rr { margin-top: 0.55rem; font-size: 0.8rem; }
+.scn-rr.good b { color: var(--red); }
+.scn-rr.mid b { color: var(--text); }
+.scn-rr.bad { color: var(--blue); }
+.scn-tags { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-top: 0.65rem; }
+.scn-tags-label { font-size: 0.72rem; color: var(--muted); margin-right: 2px; }
+.scn-note {
   width: 100%;
   margin-top: 0.65rem;
   background: var(--panel-2);
@@ -7572,8 +7574,8 @@ button.nav-group-toggle {
   font-size: 0.8rem;
   resize: vertical;
 }
-.sc-actions { display: flex; align-items: center; gap: 0.8rem; margin-top: 0.75rem; }
-.sc-skip { background: none; border: none; color: var(--muted); font-size: 0.72rem; cursor: pointer; text-decoration: underline; }
+.scn-actions { display: flex; align-items: center; gap: 0.8rem; margin-top: 0.75rem; }
+.scn-skip { background: none; border: none; color: var(--muted); font-size: 0.72rem; cursor: pointer; text-decoration: underline; }
 .ss-list {
   font-style: normal;
   font-size: 0.68rem;
@@ -13776,15 +13778,17 @@ thead .sd-emph {
 
 /* ------------------------------------------------------------------ */
 /* 화제 낱말 근거 (2026-08-31)                                          */
+/* (2026-09-18 전수검증 C1·C6) 지금의 화제(TopicPulse) 는 pulse- → tp- 로. */
+/* 아래 주도주·급소(.pulse, PulsePanel) 와 이름이 겹쳐 keywordFlow.css 가 덮어쓰고 있었다. */
 /* ------------------------------------------------------------------ */
-.pulse-term {
+.tp-term {
   cursor: pointer;
 }
-.pulse-term.open {
+.tp-term.open {
   outline: 1px solid var(--text-dim);
   outline-offset: 1px;
 }
-.pulse-ev-box {
+.tp-ev-box {
   margin-top: 8px;
   padding: 9px 11px;
   border: 1px solid var(--border);
@@ -13793,38 +13797,38 @@ thead .sd-emph {
   font-size: 12.5px;
   line-height: 1.6;
 }
-.pulse-ev-head {
+.tp-ev-head {
   display: flex;
   align-items: baseline;
   gap: 8px;
   flex-wrap: wrap;
   margin-bottom: 4px;
 }
-.pulse-ev-box .pulse-ev-q {
+.tp-ev-box .tp-ev-q {
   display: block;
   margin: 4px 0 6px;
   padding-left: 8px;
   border-left: 2px solid var(--border);
   color: var(--text-dim);
 }
-.pulse-ev-codes {
+.tp-ev-codes {
   display: flex;
   gap: 4px;
   flex-wrap: wrap;
   align-items: center;
   margin-bottom: 6px;
 }
-.pulse-ev-news {
+.tp-ev-news {
   margin: 0;
   padding-left: 16px;
 }
-.pulse-ev-news li {
+.tp-ev-news li {
   margin-bottom: 3px;
 }
-.pulse-ev-news a {
+.tp-ev-news a {
   color: var(--text);
 }
-.pulse-ev-news a:hover {
+.tp-ev-news a:hover {
   color: var(--blue);
 }
 
@@ -16508,9 +16512,10 @@ select.ord-in { appearance: auto; cursor: pointer; }
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--live-on) 22%, transparent);
 }
 .live-dot.on b { color: var(--live-on); }
-.live-dot.wait { border-color: rgba(255, 176, 32, 0.5); }
-.live-dot.wait i { background: #ffb020; }
-.live-dot.wait b { color: #ffb020; }
+/* (2026-09-18 전수검증 C23) 박힌 주황 #ffb020 → --warn. 라이트 테마에선 흰 바탕에 묻히던 색 */
+.live-dot.wait { border-color: color-mix(in srgb, var(--warn) 50%, transparent); }
+.live-dot.wait i { background: var(--warn); }
+.live-dot.wait b { color: var(--warn); }
 .live-dot:hover { border-color: var(--muted); }
 
 /* ── 눌러서 여는 상태 ── 점 하나로는 「끊겼다」까지만 말할 수 있다 */
@@ -17599,11 +17604,13 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .usr-trend-row span { color: var(--muted); }
 .usr-trend-bar { display: flex; height: 12px; border-radius: 999px; overflow: hidden; background: var(--panel); }
 .usr-trend-bar i { display: block; height: 100%; }
-.usr-trend-bar i.sb { background: #d9432f; }
-.usr-trend-bar i.b { background: #ef7d6a; }
-.usr-trend-bar i.h { background: #9a9a9a; }
-.usr-trend-bar i.s { background: #6b8fd6; }
-.usr-trend-bar i.ss { background: #2f5fc4; }
+/* (2026-09-18 전수검증 C23) 박힌 hex → 테마 변수. 양끝은 --red/--blue, 가운데는 --muted, 약한 쪽은 판 색과 섞어 옅게
+   (메모·엑셀 테마는 --red/--blue 가 무채색이라 이제 같이 따라온다) */
+.usr-trend-bar i.sb { background: var(--red); }
+.usr-trend-bar i.b { background: color-mix(in srgb, var(--red) 60%, var(--panel-2)); }
+.usr-trend-bar i.h { background: var(--muted); }
+.usr-trend-bar i.s { background: color-mix(in srgb, var(--blue) 60%, var(--panel-2)); }
+.usr-trend-bar i.ss { background: var(--blue); }
 .usr-trend-row small { color: var(--muted); white-space: nowrap; }
 .usr-profile { border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); padding: 0.55rem 0.7rem; font-size: 0.84rem; line-height: 1.5; }
 .usr-profile-meta { font-size: 0.76rem; color: var(--muted); margin-bottom: 0.3rem; }
@@ -17760,7 +17767,7 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 
 /* 신호등 국면 판정기 (2026-09-07 밤) */
 .msig-lv { font-weight: 400; color: var(--muted); font-size: 0.85em; }
-.msig-early { display: block; color: #e6a23c; }
+.msig-early { display: block; color: var(--accent); } /* (2026-09-18 전수검증 C23) #e6a23c = 다크 --accent 그대로, 라이트는 어두운 쪽으로 */
 .msig-arrow { font-size: 0.8em; margin-left: 0.15rem; }
 .msig-arrow.up { color: var(--red); }
 .msig-arrow.down { color: var(--blue); }
@@ -19327,8 +19334,11 @@ tr.gv-strong td:first-child { color: var(--text); }
 .ubz-cols { display: grid; grid-template-columns: 1fr; gap: 10px; }
 @media (min-width: 900px) { .ubz-cols { grid-template-columns: 1fr 1fr 1fr; align-items: start; } }
 .ubz-list { display: flex; flex-direction: column; gap: 2px; }
+/* (2026-09-18 전수검증 C8) 인기·trending 줄은 자식이 셋(순위·이름·등락) 이고 종목토론·ETF 순위만 넷(+순위변동).
+   넷을 명시하면 셋짜리 줄은 빈 넷째 칸 앞 gap 만큼 등락률이 오른쪽 끝에서 6px 들어왔다.
+   셋만 명시하고 넷째는 암시적 열(grid-auto-flow: column) 로 생기게 한다. */
 .ubz-row {
-  display: grid; grid-template-columns: 1.6rem 1fr auto auto; gap: 6px; align-items: center; width: 100%;
+  display: grid; grid-template-columns: 1.6rem 1fr auto; grid-auto-flow: column; grid-auto-columns: auto; gap: 6px; align-items: center; width: 100%;
   padding: 5px 6px; border: 0; border-radius: 6px; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer;
 }
 .ubz-row:hover { background: var(--panel-2); }
@@ -19389,13 +19399,16 @@ tr.gv-strong td:first-child { color: var(--text); }
 .mfp-sent-item i.up { color: var(--red); font-weight: 700; }
 .mfp-sent-item i.down { color: var(--blue); font-weight: 700; }
 /* 두 열은 칸이 넉넉할 때만 — 태블릿에서 카드 한 칸이 400px 쯤이라 반으로 가르면 이름이 잘렸다 (2026-09-17 벤티지) */
-.mfp-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 10px; }
+/* (2026-09-18 전수검증 C19) 320px 폰은 카드 안쪽이 262px 쯤이라 270px 최소폭이 가로 스크롤을 냈다 — 칸이 좁으면 칸 폭까지만 */
+.mfp-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(270px, 100%), 1fr)); gap: 10px; }
 .mfp-h { font-size: 0.74rem; font-weight: 700; margin-bottom: 3px; }
 .mfp-h i { font-style: normal; font-weight: 400; color: var(--muted); margin-left: 4px; }
 .mfp-row { display: grid; grid-template-columns: 1fr auto 3em; gap: 6px; align-items: center; width: 100%; padding: 3px 4px; border: 0; border-radius: 4px; background: transparent; color: var(--text); font: inherit; font-size: 0.8rem; text-align: left; cursor: pointer; }
 .mfp-row:hover { background: var(--panel-2); }
 /* 이름은 잘라도 대표(반도체·금)는 남게 — 긴 ETF 이름 꼬리(i)만 줄임표 */
-.mfp-nm { min-width: 0; display: flex; align-items: baseline; gap: 3px; white-space: nowrap; }
+/* (2026-09-18 전수검증 C18) 대표 이름 자체가 칸보다 길면 nowrap 글자가 등락률 칸 위로 넘쳐 겹쳤다 — 칸 안에서 자른다
+   (flex 상자라 text-overflow 는 안 먹고, 꼬리 줄임표는 아래 i 가 맡는다) */
+.mfp-nm { min-width: 0; overflow: hidden; display: flex; align-items: baseline; gap: 3px; white-space: nowrap; }
 .mfp-nm i { font-style: normal; color: var(--muted); font-size: 0.68rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .mfp-row em { font-style: normal; }
 .mfp-mult { font-style: normal; font-size: 0.68rem; color: var(--muted); text-align: right; }
@@ -19414,7 +19427,10 @@ tr.gv-strong td:first-child { color: var(--text); }
 .nvbb-ico { font-size: 16px; line-height: 1; }
 .nvbb-new { font-size: 0.6rem; font-weight: 700; color: #fff; background: var(--red); border-radius: 999px; padding: 1px 5px; line-height: 1.2; }
 /* 폰에서 460px 고정폭이 화면을 넘어 오른쪽이 잘렸다 (2026-09-17 벤티지 캡처) — 화면 안으로, 길면 안에서 스크롤 */
-.nvbb-pop { width: 460px; max-width: calc(100vw - 20px); max-height: 72vh; overflow-y: auto; gap: 0; box-sizing: border-box; }
+.nvbb-pop { max-height: 72vh; overflow-y: auto; gap: 0; box-sizing: border-box; }
+/* (2026-09-18 전수검증 C20) 폭은 넓은 화면에서만 — 폰(≤720) 은 위 .ht-pop 의 left/right 10px 고정 규칙이 잡는데,
+   이 줄이 뒤에 실려 width 460 이 그 규칙을 순서로 덮고 있었다 (481~720px 에서 팝업이 화면 폭을 안 채웠다) */
+@media (min-width: 721px) { .nvbb-pop { width: 460px; max-width: calc(100vw - 20px); } }
 .nvbb-pop .nvb-h { align-items: flex-start; line-height: 1.4; word-break: keep-all; overflow-wrap: anywhere; }
 .nvbb-h { font-size: 0.78rem; font-weight: 600; padding: 2px 4px 6px; }
 .nvbb-h i { font-style: normal; font-weight: 400; color: var(--muted); font-size: 0.7rem; margin-left: 4px; }
@@ -19478,7 +19494,8 @@ tr.gv-strong td:first-child { color: var(--text); }
 .mnw-verdict.in { background: color-mix(in srgb, var(--red) 16%, transparent); color: var(--red); }
 .mnw-verdict.out { background: color-mix(in srgb, var(--blue) 16%, transparent); color: var(--blue); }
 /* 계좌 줄엔 em.num 이 둘(등락·수익률)이라 위 `.mnw-row > em.num { grid-area: rate }` 가 둘 다 잡아 겹쳤다 (2026-09-17 캡처) */
-.mnw-row > em.mnw-pnl { grid-area: pnl; font-size: 0.72rem; opacity: 0.8; }
+/* (2026-09-18 전수검증 C17) 위 em.num 규칙과 특이도가 같아 순서로만 이기고 있었다 — .num 까지 붙여 확실히 위로 */
+.mnw-row > em.num.mnw-pnl { grid-area: pnl; font-size: 0.72rem; opacity: 0.8; }
 .mnw-rot { padding: 0 5px; border-radius: 999px; background: var(--panel-2); }
 .mnw-rot.부상 { color: var(--red); }
 .mnw-rot.주도 { color: var(--accent); }

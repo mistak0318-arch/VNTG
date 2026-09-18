@@ -2883,6 +2883,12 @@ function WatchForm({
             placeholder="종목명 또는 6자리 코드"
             clearOnPick={false}
             onPick={(c, n) => {
+              /* 종목이 바뀌면 옛 종목의 발동가·지정가·수량을 턴다 — OrderForm 의 wipeFor 와 같은 이유 (2026-09-18 전수검증 B10) */
+              if (c !== code) {
+                setWPrice("");
+                setWLimit("");
+                setQty("");
+              }
               setCode(c);
               setName(n);
               setQ(null);

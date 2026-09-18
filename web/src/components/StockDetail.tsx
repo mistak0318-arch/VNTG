@@ -201,6 +201,12 @@ export function StockDetail({
             const cur = rolled ? lastSession!.close! : Math.abs(Number(info.cur_prc));
             const sign = (v: number | null) => (v === null ? "" : v > 0 ? "positive" : v < 0 ? "negative" : "");
             const pct = (v: number | null) => (v === null ? "" : `${v > 0 ? "+" : ""}${v.toFixed(2)}%`);
+            /* flu_rt 가 비면 「NaN%」가 찍히던 것 — 모르면 null 로 두고 칸을 비운다 (2026-09-18 전수검증 D14) */
+            const fluRt = (() => {
+              if (info.flu_rt == null || String(info.flu_rt) === "") return null;
+              const n = Number(String(info.flu_rt).replace(/\+/g, ""));
+              return Number.isFinite(n) ? n : null;
+            })();
             const reg = (info._regular ?? null) as {
               date: string;
               close: number;
@@ -208,7 +214,7 @@ export function StockDetail({
               liveLabel: string;
             } | null;
             if (!reg || !(reg.close > 0)) {
-              const r0 = rolled && lastSession?.base ? ((cur - lastSession.base) / lastSession.base) * 100 : Number(info.flu_rt);
+              const r0 = rolled && lastSession?.base ? ((cur - lastSession.base) / lastSession.base) * 100 : fluRt;
               return (
                 <span className={`sheet-live num ${sign(r0)}`}>
                   <b>{cur.toLocaleString("ko-KR")}</b>
@@ -253,7 +259,7 @@ export function StockDetail({
                   title={
                     exBase
                       ? `지금 ${reg.liveLabel} 값 — 기준가 ${exBase.toLocaleString("ko-KR")} 대비 ${pct(liveRate)} (권리락·배당락 등으로 기준가가 어제 종가와 다릅니다 — 거래소 등락률과 같은 기준)`
-                      : `지금 ${reg.liveLabel} 값 — 정규장 종가 대비 ${pct(liveRate)} · 전일 대비 ${pct(Number(info.flu_rt))}`
+                      : `지금 ${reg.liveLabel} 값 — 정규장 종가 대비 ${pct(liveRate)}${fluRt === null ? "" : ` · 전일 대비 ${pct(fluRt)}`}`
                   }
                 >
                   <em>{reg.liveLabel}{exBase ? "·락" : ""}</em>

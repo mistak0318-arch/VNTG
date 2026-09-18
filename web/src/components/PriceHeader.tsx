@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, fmtAbsNum, fmtNum, type ExchangeQuote, type MarkWhy, type RawRecord } from "../api";
 import { PeriodReturns, type LastSession } from "./PeriodReturns";
 import { afterMarketEra, krPhase, type KrPhase } from "../marketSession";
@@ -135,6 +135,24 @@ export function PriceHeader({
    */
   const [strength, setStrength] = useState<number | null>(null);
 
+  /*
+   * **종목이 바뀌면 앞 종목 값을 비운다** (2026-09-18 전수검증 D2).
+   *
+   * 종목발굴에서 화살표로 넘기면 이 컴포넌트는 그대로 두고 `code` 만 갈린다. 그때 NXT/KRX 시·고·저,
+   * 거래대금, 상장주식수(회전율 분모), 체결강도, 그리고 새벽 `rolled` 경로가 쓰는 어제 일봉(`last`)이
+   * 새 응답이 올 때까지 **앞 종목 것**으로 남아 있었다 — 새 종목 현재가 옆에 앞 종목 회전율이 찍힌다.
+   * 모르는 동안은 「-」가 정직하다. 부모(StockDetail·개별종목분석)의 lastSession 도 같이 비운다.
+   */
+  const onLastSessionRef = useRef(onLastSession);
+  onLastSessionRef.current = onLastSession;
+  useEffect(() => {
+    setLast(null);
+    onLastSessionRef.current?.(null);
+    setNxt(null);
+    setKrx(null);
+    setStrength(null);
+  }, [code]);
+
   useEffect(() => {
     if (!code) return;
     let cancelled = false;
@@ -160,6 +178,12 @@ export function PriceHeader({
   const [allValue, setAllValue] = useState<number | null>(null);
   /** 상장주식수(주) — 회전율의 분모. `ka10007` 이 천주로 준다 */
   const [shares, setShares] = useState<number | null>(null);
+  /* 위 D2 와 같은 이유 — 거래대금·상장주식수도 앞 종목 값을 비운다 (2026-09-18 전수검증 D2) */
+  useEffect(() => {
+    setKrxValue(null);
+    setAllValue(null);
+    setShares(null);
+  }, [code]);
 
   useEffect(() => {
     if (!code) return;

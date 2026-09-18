@@ -356,7 +356,11 @@ function kst(at = Date.now()): Date {
 }
 
 function dayKey(at = Date.now()): string {
-  return kst(at).toISOString().slice(0, 10);
+  /*
+   * (2026-09-18 전수검증 A10) `kst()` 는 **로컬 getter** 용이다(TZ=Asia/Seoul 이면 0 을 더한다) — 거기에
+   * `toISOString` 을 쓰면 UTC 날짜라 00:00~09:00 KST 에는 어제가 나왔다. 다른 모듈처럼 +9h 고정.
+   */
+  return new Date(at + 9 * 3600_000).toISOString().slice(0, 10);
 }
 
 function shouldStart(at = Date.now()): boolean {
@@ -670,7 +674,8 @@ export async function runAfterClose(
   if (want("marks"))
     await step("marks", "전종목 마크 (조회 0회)", async () => {
       const m = await buildStockMarks(client);
-      if (m.error) return `실패: ${m.error}`;
+      /* (2026-09-18 전수검증 A6) 문자열로 돌려주면 ✅ 로 적혀 재시도도 안 됐다 — 실패는 던진다 */
+      if (m.error) throw new Error(m.error);
       return `${m.count.toLocaleString()}종목 · ${(m.ms / 1000).toFixed(1)}초`;
     }, () => {
       const p = marksProgress();
@@ -924,32 +929,39 @@ export function startAfterCloseScheduler(client: KiwoomClient): void {
      */
     if (shouldWrap()) {
       /*
+       * (2026-09-18 전수검증 A1) 예전엔 이 블록의 모든 갈래가 `return` 이라 **20:10 을 넘기면 그날 정규 회차·실패
+       * 재시도가 영영 안 돌았다** — 20:30 에 켠 미니PC, 재시도 시계가 20:10 을 넘긴 날. 이제 마무리는 「이번 틱에
+       * 실제로 돌았을 때만」 return 하고, 나머지는 아래로 내려가 정규 회차·재시도가 **제 도장(상태 파일)** 으로 판단한다.
+       * 정규 회차가 오늘 아직 안 돌았으면 그것부터(마무리는 ②원장을 전제로 한다) — 마무리는 다음 틱에.
+       */
+      const st0 = await loadState().catch(() => null);
+      const regularPending = !(st0?.day === day && st0.finishedAt) && !(st0?.day !== day && (await alreadyDone(day)));
+      /*
        * 「오늘 마무리가 끝났나」는 **파일 도장**으로 본다 (2026-09-16 밤). 이력 파일로 보다가 그 파일이 깨진 로컬에서
        * 다 성공한 뒤에도 30분마다 또 돌았다(시작 텔레그램이 세 번). 도장은 세 단계가 다 ✅ 일 때만 찍는다.
        */
-      if (await doneToday("wrapDone")) return;
-      const last = await afterCloseLastByStep().catch(() => ({}) as Record<string, StepResult & { day: string }>);
-      const done = ["barsFinal", "ledgerFinal", "afterReaction"].every((k) => last[k]?.day === day && last[k]?.ok);
-      if (done) {
-        await markToday("wrapDone");
-        return;
+      if (!regularPending && !(await doneToday("wrapDone"))) {
+        const last = await afterCloseLastByStep().catch(() => ({}) as Record<string, StepResult & { day: string }>);
+        const done = ["barsFinal", "ledgerFinal", "afterReaction"].every((k) => last[k]?.day === day && last[k]?.ok);
+        if (done) {
+          await markToday("wrapDone");
+        } else if (wrapTry.day !== day || (wrapTry.n < 3 && Date.now() - wrapTry.at >= RETRY_GAP_MS)) {
+          /*
+           * 실패했으면 **30분 뒤에 한 번 더, 두 번까지** (2026-09-16 점검). 그냥 두면 5분 틱마다 다시 들어와
+           * 시작 텔레그램이 자정까지 열두 번 간다 — 예컨대 ②원장이 아직 도는 중이라 ledgerFinal 이 던지는 날.
+           */
+          wrapTry = { day, n: wrapTry.day === day ? wrapTry.n + 1 : 1, at: Date.now() };
+          const r = await runAfterClose(client, true, ["barsFinal", "ledgerFinal", "afterReaction"], "마무리 회차 (일봉·공매도·대차 확정값)").catch(
+            (e) => {
+              console.error("[afterClose] 마무리 회차 실패 —", e instanceof Error ? e.message : e);
+              return null;
+            },
+          );
+          if (r && !r.running && r.steps.length > 0 && r.steps.every((s) => s.ok)) await markToday("wrapDone");
+          return;
+        }
+        /* 시도 횟수를 다 썼거나 30분을 기다리는 중 — 실패는 요약 알림에 이미 적혔다. 아래 재시도는 따로 본다 */
       }
-      /*
-       * 실패했으면 **30분 뒤에 한 번 더, 두 번까지** (2026-09-16 점검). 그냥 두면 5분 틱마다 다시 들어와
-       * 시작 텔레그램이 자정까지 열두 번 간다 — 예컨대 ②원장이 아직 도는 중이라 ledgerFinal 이 던지는 날.
-       */
-      if (!done && (wrapTry.day !== day || (wrapTry.n < 3 && Date.now() - wrapTry.at >= RETRY_GAP_MS))) {
-        wrapTry = { day, n: wrapTry.day === day ? wrapTry.n + 1 : 1, at: Date.now() };
-        const r = await runAfterClose(client, true, ["barsFinal", "ledgerFinal", "afterReaction"], "마무리 회차 (일봉·공매도·대차 확정값)").catch(
-          (e) => {
-            console.error("[afterClose] 마무리 회차 실패 —", e instanceof Error ? e.message : e);
-            return null;
-          },
-        );
-        if (r && !r.running && r.steps.length > 0 && r.steps.every((s) => s.ok)) await markToday("wrapDone");
-        return;
-      }
-      if (!done) return; // 시도 횟수를 다 썼다 — 실패는 요약 알림에 이미 적혔다
     }
 
     /*
@@ -974,7 +986,13 @@ export function startAfterCloseScheduler(client: KiwoomClient): void {
 
     /* ① 실패한 단계가 있으면 그것만 다시 — 성공한 것은 안 건드린다 */
     if (run?.day === day && !run.running && retry?.day === day) {
-      const failed = run.steps.filter((s) => !s.ok).map((s) => s.key);
+      /*
+       * (2026-09-18 전수검증 A1) 20:10 마무리가 돌면 메모리 `run` 은 마무리 회차라 정규 회차의 실패가 안 보인다 —
+       * 상태 파일의 실패 목록을 합친다. 마무리 단계는 제 재시도(wrapTry)가 있으니 여기서 뺀다.
+       */
+      const failed = [...new Set([...run.steps.filter((s) => !s.ok).map((s) => s.key), ...(state?.day === day ? state.failedSteps : [])])].filter(
+        (k) => !WRAP_KEYS.has(k),
+      );
       if (failed.length > 0 && retry.tried < RETRY_MAX && Date.now() - retry.at >= RETRY_GAP_MS) {
         retry = { day, tried: retry.tried + 1, at: Date.now() };
         /* (2026-09-10 전수 점검 F) 횟수를 파일에도 — 재시작해도 두 번 넘게 안 돈다 */

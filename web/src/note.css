@@ -189,6 +189,7 @@
 :root[data-theme="note"] .card,
 :root[data-theme="note"] .sf-block,
 :root[data-theme="note"] .sc-card,
+:root[data-theme="note"] .scn-card, /* (2026-09-18 전수검증 C2) 시나리오 카드는 scn- 으로 갈라졌다 */
 :root[data-theme="note"] .sa,
 :root[data-theme="note"] .sim-rule,
 :root[data-theme="note"] .sim-form {
@@ -462,8 +463,8 @@
 :root[data-theme="note"] .live-dot.wait i { background: var(--muted); }
 :root[data-theme="note"] .live-dot b { color: var(--muted); }
 :root[data-theme="note"] .nb-bell.has { color: var(--text) !important; }
-:root[data-theme="note"] .pulse-term,
-:root[data-theme="note"] .pulse-term.news,
+:root[data-theme="note"] .tp-term, /* (2026-09-18 전수검증 C1) pulse-term → tp-term */
+:root[data-theme="note"] .tp-term.news,
 :root[data-theme="note"] .bf-badge,
 :root[data-theme="note"] .bf-badge-strength,
 :root[data-theme="note"] .bf-badge-signal {
@@ -493,6 +494,17 @@
   border-color: var(--border) !important;
 }
 :root[data-theme="note"] .watch-star { color: #8f8a7e !important; }
+/* 흰 글자 + var(--red) 바탕 알약 — 이 테마의 --red 가 #1f1d19 라 검은 알약에 흰 글자로 튀었다 (2026-09-18 전수검증 C22)
+   AI 시황 NEW · 손절 없음 · 감시 매수/매도 칩 · CIS 도장 bad. 위 em.ok/bad 와 같은 종이색으로 */
+:root[data-theme="note"] .nvbb-new,
+:root[data-theme="note"] .ord-noexit,
+:root[data-theme="note"] .ord-wchip.buy,
+:root[data-theme="note"] .ord-wchip.sell,
+:root[data-theme="note"] .cis-stamp.bad {
+  background: var(--panel-2);
+  color: var(--text);
+  border-color: var(--border);
+}
 :root[data-theme="note"] em.bad,
 :root[data-theme="note"] .wl-pass.bad,
 :root[data-theme="note"] .msig-mark.bad { color: var(--muted) !important; }
