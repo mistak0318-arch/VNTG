@@ -226,7 +226,7 @@ export function StockAnalysisPage({
               )}
               <CreditChip credit={credit} />
               {/* 관심종목 담기 (2026-09-08 — 벤티지 "여기에도 넣어줘야지"). 클릭 시트와 같은 단추다 */}
-              <WatchToggleButton code={stock.code} name={shownName} price={Number(info?.cur_prc ?? 0)} className="wt-inline" />
+              <WatchToggleButton code={stock.code} name={shownName} price={Math.abs(Number(info?.cur_prc ?? 0))} className="wt-inline" /* 부호 붙은 cur_prc → 음수 편입가 (2026-09-18 전수검증 D3) */ />
               {watched.isWatched(stock.code) ? "★ " : ""}
               {shownName} <span className="analysis-code">{stock.code}</span>
             </h2>

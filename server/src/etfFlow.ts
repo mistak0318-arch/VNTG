@@ -10,6 +10,7 @@
  * 으로 바뀌어도 화면은 산다. 신호등 점수에는 안 들어간다 — 보는 자리다.
  */
 import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { isTradingDay } from "./tradingDay.js";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
@@ -134,6 +135,8 @@ function kstDay(): string {
 function marketOpened(): boolean {
   const k = new Date(Date.now() + 9 * 3600_000);
   const dow = k.getUTCDay();
+  /* 휴장일도 「안 열림」 — 한글날 10시에 asOf=오늘·전 종목 0% 로 나오던 것 (2026-09-18 전수검증 A17) */
+  if (!isTradingDay(new Date(`${k.toISOString().slice(0, 10)}T12:00:00+09:00`))) return false;
   return dow !== 0 && dow !== 6 && k.getUTCHours() * 60 + k.getUTCMinutes() >= 9 * 60;
 }
 function n(v: unknown): number {
@@ -268,7 +271,17 @@ const SENT_PICKS = {
 
 let sentCache: { at: number; sides: SentimentSide[] } | null = null;
 
+/* (2026-09-18 전수검증 A16) 동시 호출이 전체시세 15쪽을 두 번 조회하지 않게 — etfFlow 와 같은 in-flight 잠금 */
+let sentJob: Promise<{ at: number; sides: SentimentSide[]; note: string }> | null = null;
 export async function etfSentiment(client: KiwoomClient, opts: { fresh?: boolean } = {}): Promise<{ at: number; sides: SentimentSide[]; note: string }> {
+  if (sentJob) return sentJob;
+  sentJob = etfSentimentCompute(client, opts).finally(() => {
+    sentJob = null;
+  });
+  return sentJob;
+}
+
+async function etfSentimentCompute(client: KiwoomClient, opts: { fresh?: boolean } = {}): Promise<{ at: number; sides: SentimentSide[]; note: string }> {
   const NOTE =
     "개인이 방향에 거는 돈 — 인버스·곱버스 거래대금을 레버리지 거래대금으로 나눈 것. 비율이 20일 평균을 크게 넘으면 하락 베팅이 몰린 것이라 역발상 재료, 반대로 레버리지만 뜨거우면 상승 추격 과열. 어제까지는 일봉, 오늘은 전체시세 어림.";
   const fresh = Boolean(opts.fresh) && (!sentCache || Date.now() - sentCache.at > 30_000);

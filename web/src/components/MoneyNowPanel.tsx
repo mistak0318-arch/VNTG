@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, type MoneyAccountRow, type MoneyBuyerRow, type MoneyNow, type MoneyWhereTheme } from "../api";
 
 /**
@@ -48,7 +48,7 @@ function BuyerLine({ b, i, onSelectStock }: { b: MoneyBuyerRow; i: number; onSel
       </span>
       <em className={`num ${cls(b.rate)}`}>{pct(b.rate)}</em>
       <span className="mnw-boost" title={b.boostKind === "30분" ? "최근 30분 거래대금 ÷ 오늘 평균 30분 거래대금" : "오늘 거래대금 ÷ (20일 평균 × 시각별 진행률)"}>
-        ×{b.boost?.toFixed(1)} <i>{b.boostKind}</i>
+        ×{b.boost == null ? "—" : b.boost.toFixed(1)} <i>{b.boostKind}</i>
       </span>
       <span className="mnw-sub">
         {b.theme && <i className="mnw-theme-tag">{b.theme}</i>}
@@ -107,16 +107,23 @@ export function MoneyNowPanel({ onSelectStock }: { onSelectStock?: (code: string
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const loadSeq = useRef(0);
   const load = (fresh = false) => {
     setBusy(true);
+    const seq = ++loadSeq.current; // ↻ 직후 늦게 온 옛 폴링이 새 값을 덮지 않게 (2026-09-18 전수검증 D19)
     api
       .moneyNow(fresh)
       .then((r) => {
+        if (seq !== loadSeq.current) return;
         setData(r);
         setError(null);
       })
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setBusy(false));
+      .catch((e: Error) => {
+        if (seq === loadSeq.current) setError(e.message);
+      })
+      .finally(() => {
+        if (seq === loadSeq.current) setBusy(false);
+      });
   };
   useEffect(() => {
     load();

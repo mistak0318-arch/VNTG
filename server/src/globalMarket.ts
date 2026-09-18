@@ -285,7 +285,7 @@ const TTL_MS = 60_000; // 외부 API 호출 제한을 고려해 1분 캐싱
  * 한투 해외선물옵션 계좌가 생기면 그쪽으로 옮긴다.
  */
 const FAST_TTL_MS = 10_000;
-const FAST_FX_KEYS = new Set(["usdkrw", "jpyusd", "jpykrw"]);
+const FAST_FX_KEYS = new Set(["usdkrw", "usdjpy", "jpykrw"]); // (2026-09-18 전수검증 A23) jpyusd 오타 — 달러/엔이 60초 주기였다
 let fastAt = 0;
 let fastInflight: Promise<void> | null = null;
 

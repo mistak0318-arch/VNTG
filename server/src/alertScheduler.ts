@@ -6,6 +6,7 @@ import { pruneLiveAlerts, runLiveAlerts } from "./liveAlerts.js";
 import { runNaverAlerts } from "./naverAlerts.js";
 import { runMoneyNowBriefing } from "./moneyNowBriefing.js";
 import { moneyNow } from "./moneyNow.js";
+import { isTradingDay } from "./tradingDay.js";
 import { sampleIntradayFlow } from "./naverIntradayFlow.js";
 import { pruneStopWatch, runStopWatch } from "./stopWatch.js";
 import { getActiveSuper } from "./superSignal.js";
@@ -63,6 +64,8 @@ function isMarketHours(now = new Date()): boolean {
   const minutes = kst.getHours() * 60 + kst.getMinutes();
   const date = `${kst.getFullYear()}-${String(kst.getMonth() + 1).padStart(2, "0")}-${String(kst.getDate()).padStart(2, "0")}`;
   const end = afterMarketEra(date) ? MIN.afterClose : MIN.regularClose;
+  /* 휴장일(추석 9/24 등)엔 안 돈다 — 주말만 거르고 있었다 (2026-09-18 전수검증 A12) */
+  if (!isTradingDay(new Date(`${date}T12:00:00+09:00`))) return false;
   return minutes >= MIN.regularOpen && minutes <= end;
 }
 
