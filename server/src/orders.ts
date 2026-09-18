@@ -1217,6 +1217,15 @@ export async function prepareOrder(
   if (!/^\d{6}$/.test(input.code)) reject("종목코드가 6자리가 아니다", input, ip);
   if (!Number.isInteger(input.qty) || input.qty <= 0 || input.qty > 100_000) reject("수량이 이상하다", input, ip);
   if (input.price !== null && (!Number.isInteger(input.price) || input.price <= 0)) reject("가격이 이상하다", input, ip);
+  /* 호가 단위 (2026-09-18 B14, 벤티지 선택 「거절 + 맞춘 값 제안」) — 틀리면 키움이 마지막에 거절하고 「5분 3회 거절」에도 셌다 */
+  if (input.price !== null && toTick(input.price) !== input.price) {
+    const lo = toTick(input.price);
+    reject(`호가 단위가 아니다 — ${lo.toLocaleString()} 또는 ${(lo + tickOf(input.price)).toLocaleString()} 으로 (단위 ${tickOf(input.price)}원)`, input, ip);
+  }
+  if (input.condPrice !== null && input.condPrice !== undefined && input.condPrice > 0 && toTick(input.condPrice) !== input.condPrice) {
+    const lo = toTick(input.condPrice);
+    reject(`발동가가 호가 단위가 아니다 — ${lo.toLocaleString()} 또는 ${(lo + tickOf(input.condPrice)).toLocaleString()} 으로`, input, ip);
+  }
   if (input.condPrice !== null && (!Number.isInteger(input.condPrice) || input.condPrice <= 0)) {
     reject("조건단가가 이상하다", input, ip);
   }
@@ -1660,6 +1669,15 @@ export async function prepareModify(
   if (!Number.isInteger(input.qty) || input.qty <= 0) reject("정정 수량은 1주 이상", input, ip);
   if (input.remain > 0 && input.qty > input.remain) reject(`정정 수량 ${input.qty}주가 남은 ${input.remain}주를 넘는다`, input, ip);
   if (!Number.isFinite(input.price) || input.price <= 0) reject("정정 단가가 없다", input, ip);
+  /* 호가 단위 (2026-09-18 B14) — 새 주문과 같은 잣대 */
+  if (toTick(input.price) !== input.price) {
+    const lo = toTick(input.price);
+    reject(`정정 단가가 호가 단위가 아니다 — ${lo.toLocaleString()} 또는 ${(lo + tickOf(input.price)).toLocaleString()} 으로 (단위 ${tickOf(input.price)}원)`, input, ip);
+  }
+  if (input.condPrice !== null && input.condPrice > 0 && toTick(input.condPrice) !== input.condPrice) {
+    const lo = toTick(input.condPrice);
+    reject(`정정 발동가가 호가 단위가 아니다 — ${lo.toLocaleString()} 또는 ${(lo + tickOf(input.condPrice)).toLocaleString()} 으로`, input, ip);
+  }
   const g = await getGuard();
   /* 단가 울타리 — 새 주문과 같은 잣대. 0 을 하나 더 친 손가락은 정정에서도 잡는다 */
   const q = await quoteOf(createKiwoomClientFromEnv(), input.code).catch(() => null);
@@ -3474,9 +3492,23 @@ async function placeDualStops(rows: AutoWatch[], date: string): Promise<boolean>
  * tick() 과 같은 규칙(max). 세 자리가 각자 find 로 첫 줄만 보던 것을 하나로 (2차 검진 🟠A-6).
  */
 function filledOf(fl: OpenRow[], ordNo: string): number {
-  let n = 0;
-  for (const x of fl) if (x.ordNo === ordNo && x.filled > n) n = x.filled;
-  return n;
+  /*
+   * (2026-09-18 B13, 벤티지 선택 「안전 쪽으로」) ka10076 의 cntr_qty 가 주문 누적인지 건별인지 아직 실측이 없다.
+   * 예전엔 최댓값(누적 가정) — 건별이면 40+40 을 40 으로 읽어 60주를 또 팔 수 있었다. 이제 **같은 줄(시각·수량·단가가 같은
+   * 중복)은 하나로, 나머지는 더하고, 주문 수량을 천장**으로 — 건별이면 정확하고, 누적이면 많이 세는 쪽(덜 파는 쪽)으로 틀린다.
+   */
+  const mine = fl.filter((x) => x.ordNo === ordNo && x.filled > 0);
+  if (mine.length === 0) return 0;
+  const seen = new Set<string>();
+  let sum = 0;
+  for (const x of mine) {
+    const k = `${x.time}|${x.filled}|${x.price}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    sum += x.filled;
+  }
+  const ordQty = Math.max(...mine.map((x) => x.qty));
+  return ordQty > 0 ? Math.min(sum, ordQty) : sum;
 }
 
 /**

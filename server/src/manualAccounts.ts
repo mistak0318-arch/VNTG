@@ -80,6 +80,8 @@ export interface ManualAccount {
   cash?: number;
   /** 예수금을 마지막으로 손댄 시각 — 오래된 값을 그대로 믿지 않도록 */
   cashUpdatedAt?: string;
+  /** 종목을 담고 뺄 때 예수금이 자동으로 움직인 흔적 (2026-09-18 B19) — 최근 200건 */
+  cashLog?: { at: string; shift: number; why: string }[];
   /**
    * **무엇을 붙박이로 둘 것인가** (2026-09-08).
    *
@@ -229,11 +231,23 @@ function costOf(h: ManualHolding): number {
   return Math.round((Number(h.avgPrice) || 0) * (Number(h.qty) || 0));
 }
 
-function withCashShift(a: ManualAccount, before: number, after: number): ManualAccount {
+function withCashShift(a: ManualAccount, before: number, after: number, why = ""): ManualAccount {
   if ((a.anchor ?? "cash") === "total") return a;
   const shift = before - after;
   if (shift === 0) return a;
-  return { ...a, cash: Math.round((a.cash ?? 0) + shift), cashUpdatedAt: new Date().toISOString() };
+  /* (2026-09-18 B19, 벤티지 선택) 자동 이동은 **흔적을 남긴다** — 「예수금이 왜 이 값이지」를 되짚을 수 있게. 최근 200건 */
+  const log = [...(a.cashLog ?? []), { at: new Date().toISOString(), shift: Math.round(shift), why }].slice(-200);
+  return { ...a, cash: Math.round((a.cash ?? 0) + shift), cashUpdatedAt: new Date().toISOString(), cashLog: log };
+}
+
+/* (2026-09-18 B19) 같은 요청이 10초 안에 또 오면(타임아웃 뒤 재시도) 두 번 옮기지 않는다 */
+const recentWrites = new Map<string, number>();
+function isDuplicate(key: string): boolean {
+  const now = Date.now();
+  for (const [k, t] of recentWrites) if (now - t > 10_000) recentWrites.delete(k);
+  if (recentWrites.has(key)) return true;
+  recentWrites.set(key, now);
+  return false;
 }
 
 export async function upsertHolding(
@@ -243,10 +257,11 @@ export async function upsertHolding(
   if (!h.code) throw new Error("종목코드가 필요합니다.");
   if (!(h.qty > 0)) throw new Error("수량은 1주 이상이어야 합니다.");
   const items = await load();
+  if (isDuplicate(`upsert:${id}:${h.code}:${h.qty}:${h.avgPrice}:${h.boughtAt ?? ""}`)) return items;
   const next = items.map((a) => {
     if (a.id !== id) return a;
     const old = a.holdings.find((x) => x.code === h.code);
-    const moved = withCashShift(a, old ? costOf(old) : 0, costOf(h));
+    const moved = withCashShift(a, old ? costOf(old) : 0, costOf(h), `${h.name || h.code} ${old ? "수정" : "담기"} ${h.qty}주@${h.avgPrice}`);
     /* 평단이 새로 적혔으면 그 시각을 남긴다 — 수량만 고친 것은 값을 새로 낸 것이 아니다 */
     const priced: ManualHolding =
       !old || old.avgPrice !== h.avgPrice ? { ...h, pricedAt: new Date().toISOString() } : { ...h, pricedAt: old.pricedAt };
@@ -264,10 +279,11 @@ export async function upsertHolding(
 
 export async function removeHolding(id: string, code: string): Promise<ManualAccount[]> {
   const items = await load();
+  if (isDuplicate(`remove:${id}:${code}`)) return items;
   const next = items.map((a) => {
     if (a.id !== id) return a;
     const old = a.holdings.find((x) => x.code === code);
-    const moved = withCashShift(a, old ? costOf(old) : 0, 0);
+    const moved = withCashShift(a, old ? costOf(old) : 0, 0, `${old?.name || code} 빼기`);
     return { ...moved, holdings: a.holdings.filter((x) => x.code !== code) };
   });
   await persist(next);

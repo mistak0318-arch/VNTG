@@ -3783,6 +3783,9 @@ function PositionsTab({ status, prefill, onDone, onSelectStock }: { status: Orde
     );
 
   const noExitCount = view.positions.filter((x) => x.noExit).length;
+  /* 머리의 총 손익도 줄과 같은 셈 — 키움 평가손익 + 실시간 차분의 합 (2026-09-18 B9). 실시간이 없으면 키움 값 그대로 */
+  const pnlLive = view.positions.reduce((s, p) => s + p.pnl + ((view.prices[p.code]?.price ?? p.cur) - p.cur) * p.qty, 0);
+  const pnlRateLive = view.investTotal > 0 ? (pnlLive / view.investTotal) * 100 : view.pnlRateTotal;
   const tickAgo = status.watchTickAgoSec;
   const loopBad = tickAgo !== null && tickAgo !== undefined && tickAgo > 90;
 
@@ -3793,14 +3796,14 @@ function PositionsTab({ status, prefill, onDone, onSelectStock }: { status: Orde
         영웅문S 잔고 화면을 따라 (2026-09-07 밤, 벤티지가 캡처를 보내며 "유사하게 만들어봐"):
         「총 손익 | −710 원 | −3.80%」 머리 → 총 매입 / 총 평가 / 실현손익 / 추정자산 2×2 → 종목 표(두 줄 칸).
       */}
-      <div className={`kb ${view.pnlTotal > 0 ? "up" : view.pnlTotal < 0 ? "down" : ""}`}>
+      <div className={`kb ${pnlLive > 0 ? "up" : pnlLive < 0 ? "down" : ""}`}>
         <button type="button" className="kb-head" onClick={() => setKbOpen((v) => !v)} aria-expanded={kbOpen}>
           <span className="kb-title">총 손익</span>
           <b className="kb-pnl">
-            {view.pnlTotal > 0 ? "+" : view.pnlTotal < 0 ? "−" : ""}
-            {Math.abs(Math.round(view.pnlTotal)).toLocaleString()} <i>원</i>
+            {pnlLive > 0 ? "+" : pnlLive < 0 ? "−" : ""}
+            {Math.abs(Math.round(pnlLive)).toLocaleString()} <i>원</i>
           </b>
-          <em className="kb-rate">{pctKo(view.pnlRateTotal)}</em>
+          <em className="kb-rate">{pctKo(pnlRateLive)}</em>
           <span className="kb-arrow">{kbOpen ? "︿" : "﹀"}</span>
         </button>
         {kbOpen && (
@@ -3905,8 +3908,9 @@ function PositionsTab({ status, prefill, onDone, onSelectStock }: { status: Orde
           </div>
           {view.positions.map((pos) => {
             const price = view.prices[pos.code]?.price ?? pos.cur;
-            const pnl = (price - pos.avg) * pos.qty;
-            const rate = pos.avg > 0 ? ((price - pos.avg) / pos.avg) * 100 : 0;
+            /* 키움 평가손익(비용 포함) + 실시간 차분 — 줄·머리·키움 앱이 같은 셈 (2026-09-18 B9, 벤티지 선택) */
+            const pnl = pos.pnl + (price - pos.cur) * pos.qty;
+            const rate = pos.avg > 0 ? (pnl / (pos.avg * pos.qty)) * 100 : 0;
             const isOpen = posOpen(pos.code);
             return (
               <div key={pos.code} className={`kb-row${isOpen ? " open" : ""}${pos.noExit ? " noexit" : ""}`}>
@@ -4089,8 +4093,9 @@ function PositionCard({
   onToggleOpen: () => void;
 }) {
   const price = cur?.price ?? pos.cur;
-  const pnl = (price - pos.avg) * pos.qty;
-  const pnlRate = pos.avg > 0 ? ((price - pos.avg) / pos.avg) * 100 : 0;
+  /* 키움 평가손익(비용 포함) + 실시간 차분 (2026-09-18 B9) */
+  const pnl = pos.pnl + (price - pos.cur) * pos.qty;
+  const pnlRate = pos.avg > 0 ? (pnl / (pos.avg * pos.qty)) * 100 : 0;
   const room = pos.stopLine && price > 0 ? ((price - pos.stopLine) / price) * 100 : null;
   /* 매도 링크 수량은 ableQty 가 아니라 freeQty+watchQty — ableQty 엔 이중 스톱이 문 수량이 빠져 폼이 0주로 열렸다 (2차 검진 🟠C-4) */
   const h: OrderHolding = { code: pos.code, name: pos.name, qty: pos.qty, ableQty: Math.max(pos.ableQty, pos.freeQty + pos.watchQty), avg: pos.avg, cur: pos.cur, pnl: pos.pnl, pnlRate: pos.pnlRate, creditType: pos.creditType, loanDate: pos.loanDate };
