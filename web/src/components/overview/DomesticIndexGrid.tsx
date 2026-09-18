@@ -180,7 +180,7 @@ export function DomesticIndexGrid({
                 {futFlow
                   ? `${futFlow.date.slice(5).replace("-", "/")} 순매수 · 네이버 ±10분`
                   : futEmpty
-                    ? "선물 수급 없음 — 네이버가 이 표를 닫았다(9/18). 대체 출처 검토 중"
+                    ? "선물 수급 없음 — 네이버 응답이 비었다"
                     : "선물 수급 불러오는 중…"}
               </div>
             )}

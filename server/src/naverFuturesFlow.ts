@@ -1,4 +1,7 @@
 import { recordApiCall } from "./apiUsage.js";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 /**
  * 코스피200 선물 투자자별 수급 (2026-08-25 실측).
@@ -26,79 +29,79 @@ export interface FuturesFlowDay {
   institution: number;
 }
 
-let cache: { at: number; days: FuturesFlowDay[] } = { at: 0, days: [] };
-const TTL = 10 * 60_000;
 /*
- * (2026-09-18 전수검증 E1) 2026-09-18 부터 네이버가 이 주소를 **닫았다**(HTTP 410 Gone — 날짜와 무관). 매 폴링마다
- * 500 + 스택(10분에 40줄)이 쌓이던 것. 410 을 만나면 6시간 동안 빈 배열을 돌려주고 다시 안 두드린다.
- * 화면은 「없음」으로 비고, 대체 출처(한투 선물옵션 투자자 등)는 따로 정할 일이다.
+ * **2026-09-18 — 옛 표(investorDealTrendDay)는 HTTP 410 으로 닫혔다.** 벤티지: "네이버는 새로운 사이트에서 보여지는 거 아냐?
+ * 다시 검색해봐" → 맞았다. 새 모바일 API 가 **오늘 값**을 준다(과거 표는 없다):
+ *
+ *   https://m.stock.naver.com/api/index/FUT/trend
+ *   → {"bizdate":"20260918","personalValue":"+411","foreignValue":"+14,006","institutionalValue":"-14,343"}   (계약, 순매수)
+ *
+ * 하루치만 오니 **우리가 날마다 적어 둔다** (data/futuresFlowDays.json). 30일 그래프는 오늘부터 쌓이는 만큼만 보인다.
+ * 같은 API 가 KOSPI·KOSDAQ·KPI200 도 준다(억원) — 그쪽은 키움 ka10051 이 있어 안 쓴다.
  */
-let goneUntil = 0;
+const STORE = join(dirname(fileURLToPath(import.meta.url)), "..", "data", "futuresFlowDays.json");
+let cache: { at: number; days: FuturesFlowDay[] } = { at: 0, days: [] };
+let loaded = false;
+const TTL = 2 * 60_000; // 장중 곡선 표본(2분)과 같은 박자 — 응답이 100바이트라 부담이 없다
 
-function num(s: string): number {
-  const n = Number(s.replace(/[,+\s]/g, ""));
+function num(s: unknown): number {
+  const n = Number(String(s ?? "").replace(/[,+\s]/g, ""));
   return Number.isFinite(n) ? n : 0;
 }
 
-async function fetchPage(page: number): Promise<FuturesFlowDay[]> {
-  const bizdate = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10).replace(/-/g, "");
-  const res = await fetch(
-    `https://finance.naver.com/sise/investorDealTrendDay.naver?bizdate=${bizdate}&sosok=03&page=${page}`,
-    { headers: { "user-agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(8000) },
-  );
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const html = new TextDecoder("euc-kr").decode(await res.arrayBuffer());
-
-  /*
-   * 표의 한 줄: <td>26.08.25</td> 다음에 숫자 셀 열 개(개인·외국인·기관계·기관·
-   * 기타법인·금융투자·보험·투신·은행·기타금융·연기금 — 실측 기준 머리 순서).
-   * 날짜 셀을 닻으로 잡고 그 뒤 숫자들을 줍는다.
-   */
-  const out: FuturesFlowDay[] = [];
-  const rowRe = /(\d{2}\.\d{2}\.\d{2})<\/td>([\s\S]*?)<\/tr>/g;
-  for (const m of html.matchAll(rowRe)) {
-    const nums = [...m[2].matchAll(/>\s*([+-]?[\d,]+)\s*</g)].map((x) => num(x[1]));
-    if (nums.length < 3) continue;
-    const [yy, mm, dd] = m[1].split(".");
-    out.push({
-      date: `20${yy}-${mm}-${dd}`,
-      individual: nums[0],
-      foreign: nums[1],
-      institution: nums[2],
-    });
+async function loadStore(): Promise<void> {
+  if (loaded) return;
+  loaded = true;
+  try {
+    const raw = JSON.parse(await readFile(STORE, "utf-8")) as FuturesFlowDay[];
+    if (Array.isArray(raw)) cache.days = raw.filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d.date));
+  } catch {
+    /* 아직 없다 — 오늘부터 */
   }
-  return out;
 }
 
-/** 최근 N일 (기본 30) — 과거 → 최근 순으로 돌려준다 */
+async function fetchToday(): Promise<FuturesFlowDay | null> {
+  const res = await fetch("https://m.stock.naver.com/api/index/FUT/trend", {
+    headers: { "user-agent": "Mozilla/5.0 (Linux; Android 12) Chrome/120 Mobile Safari/537.36", accept: "application/json" },
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const j = (await res.json()) as Record<string, unknown>;
+  const b = String(j.bizdate ?? "");
+  if (!/^\d{8}$/.test(b)) return null;
+  return {
+    date: `${b.slice(0, 4)}-${b.slice(4, 6)}-${b.slice(6, 8)}`,
+    individual: num(j.personalValue),
+    foreign: num(j.foreignValue),
+    institution: num(j.institutionalValue),
+  };
+}
+
+/** 최근 N일 (기본 30) — 과거 → 최근 순. 오늘 값은 장중이면 누적 진행값 */
 export async function futuresFlow(days = 30): Promise<FuturesFlowDay[]> {
-  if (Date.now() - cache.at < TTL && cache.days.length >= days) return cache.days.slice(-days);
-  if (Date.now() < goneUntil) return cache.days.slice(-days);
+  await loadStore();
+  if (Date.now() - cache.at < TTL) return cache.days.slice(-days);
   try {
-    const all: FuturesFlowDay[] = [];
-    const seen = new Set<string>();
-    // 한 쪽에 10일 — 30일이면 3쪽
-    for (let page = 1; page <= Math.ceil(days / 10) && all.length < days; page += 1) {
-      const rows = await fetchPage(page);
-      if (rows.length === 0) break;
-      for (const r of rows) {
-        if (seen.has(r.date)) continue;
-        seen.add(r.date);
-        all.push(r);
+    const today = await fetchToday();
+    if (today) {
+      const rest = cache.days.filter((d) => d.date !== today.date);
+      rest.push(today);
+      rest.sort((a, b) => a.date.localeCompare(b.date));
+      cache = { at: Date.now(), days: rest.slice(-400) };
+      try {
+        await mkdir(dirname(STORE), { recursive: true });
+        await writeFile(STORE, JSON.stringify(cache.days), "utf-8");
+      } catch {
+        /* 못 적어도 다음에 */
       }
-      await new Promise((r) => setTimeout(r, 300));
+    } else {
+      cache.at = Date.now();
     }
-    all.sort((a, b) => a.date.localeCompare(b.date));
-    if (all.length > 0) cache = { at: Date.now(), days: all };
     void recordApiCall("naver", "futuresFlow", "ok");
-    return all.slice(-days);
+    return cache.days.slice(-days);
   } catch (e) {
     void recordApiCall("naver", "futuresFlow", "failed");
-    if (e instanceof Error && /HTTP 410/.test(e.message)) {
-      if (goneUntil === 0) console.warn("[naverFuturesFlow] 네이버가 주소를 닫았다(410) — 6시간 쉬고 다시 본다");
-      goneUntil = Date.now() + 6 * 3600_000;
-      return cache.days.slice(-days);
-    }
+    cache.at = Date.now() - TTL + 30_000; // 30초 뒤에 다시
     if (cache.days.length > 0) return cache.days.slice(-days);
     throw e;
   }
