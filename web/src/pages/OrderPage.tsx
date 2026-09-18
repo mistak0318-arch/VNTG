@@ -1842,6 +1842,8 @@ function OrderForm({
             보였다는 뜻이다. 그걸 골라 「취소」를 누르면 이미 없는 수량으로 취소가 나간다.
             폴링 주기(5초)가 아니라 **거르지 않은 것**이 원인이었다.
           */}
+          {/* 키움 공지 2026-09-18 — 9/21(월)부터 정규장 미체결은 15:40 에 키움이 자동취소한다. 애프터에 쓰려면 다시 내야 한다 */}
+          <div className="ord-caps">정규장 미체결은 <b>15:40 에 키움이 자동취소</b>한다(9/21~). 애프터마켓(16:00~)에 쓰려면 다시 내야 한다 — 자동감시주문은 서버가 애프터에도 보고 있다</div>
           {openRows === null && <div className="ord-caps">미체결을 읽는 중…</div>}
           {openRows?.filter((r) => r.remain > 0).length === 0 && <div className="ord-caps">미체결 주문이 없다</div>}
           {openRows && openRows.filter((r) => r.remain > 0).length > 0 && (
