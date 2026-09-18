@@ -932,20 +932,39 @@ async function buildPlan(
     case "closing":
     case "auction": {
       const scan = await loadCloseBetScan().catch(() => null);
-      /* 교차 — 종배 후보 ∩ 사는 손(배수 1.2↑) ∩ 마크(슈퍼·쌍끌이·외인3칸). 세 눈이 겹치는 것만 (2026-09-17 저녁) */
+      /*
+       * 교차 — 종배 후보 ∩ 사는 손(배수 1.2↑) ∩ 마크(슈퍼·쌍끌이·외인3칸). 세 눈이 겹치는 것만 (2026-09-17 저녁).
+       *
+       * ⚠️ **후보는 「오늘 것」일 수 없다** (2026-09-18 전수검증 #9, 벤티지가 「어제 원장으로 내고 어제 기준이라 적기」를 고름).
+       * 종배 스캔은 9/16 부터 **18:30 뒤 예비 경로**로 밀렸고(파이프라인 15:55 가 본길), 원장도 16:40 전후에 나온다 —
+       * 즉 이 슬롯(14:30~15:30)에 오늘 후보는 존재할 수 없어서 `scan.date === date` 가 늘 거짓이었다. 어제 초록으로 낸다.
+       * 종배는 원래 **전날 원장**으로 후보를 줍는 일이라 뜻이 맞는다. 대신 어느 날 기준인지 줄에 적는다.
+       * 너무 묵은 것(5거래일 = 달력 8일 넘음)은 안 쓴다 — 그건 「없다」가 정직하다.
+       */
       const cross: PlanItem[] = [];
-      if (scan && scan.date === date) {
+      const scanAge = scan ? Math.round((Date.parse(`${date}T00:00:00+09:00`) - Date.parse(`${scan.date}T00:00:00+09:00`)) / 86_400_000) : null;
+      const usable = scan && scanAge !== null && scanAge >= 0 && scanAge <= 8 && scan.green.length > 0;
+      if (usable) {
+        const md = `${scan.date.slice(5, 7)}/${scan.date.slice(8, 10)}`;
+        const basis = scanAge === 0 ? "오늘" : `${md} 기준`;
         const poolOf = new Map(pool.map((b) => [b.code, b]));
         for (const g of scan.green) {
           const b = poolOf.get(g.code);
           const m = marks?.[g.code];
           const markHit = m ? m.super || m.twin || m.fgn3 : false;
-          if (b && markHit) cross.push({ code: g.code, name: g.name, text: `종배 ${g.score}점 · ${b.boostKind} 배수 ${b.boost?.toFixed(1)}${b.strength !== null ? ` · 강도 ${Math.round(b.strength)}` : ""} · ${m?.super ? "🌟 슈퍼" : m?.twin ? "🧲🧲 쌍끌이" : "🧲 외인3칸"}` });
+          if (b && markHit) cross.push({ code: g.code, name: g.name, text: `종배 ${g.score}점(${basis}) · ${b.boostKind} 배수 ${b.boost?.toFixed(1)}${b.strength !== null ? ` · 강도 ${Math.round(b.strength)}` : ""} · ${m?.super ? "🌟 슈퍼" : m?.twin ? "🧲🧲 쌍끌이" : "🧲 외인3칸"}` });
         }
-        for (const g of scan.green.slice(0, 8)) items.push({ code: g.code, name: g.name, text: `종배 점수 ${g.score} · 목록 ${g.lists}개` });
-      } else items.push({ name: "종배 후보", text: "오늘 스캔이 아직 없습니다 — 종가배팅 탭에서 돌리기" });
+        if (scanAge > 0) items.push({ name: "종배 후보", text: `${md} 원장 기준 ${scan.green.length}종목 — 오늘 후보는 장 마감 뒤(16:40 전후)에 나온다` });
+        for (const g of scan.green.slice(0, 8)) items.push({ code: g.code, name: g.name, text: `종배 점수 ${g.score} · 목록 ${g.lists}개${scanAge > 0 ? ` · ${basis}` : ""}` });
+      } else items.push({ name: "종배 후보", text: "쓸 수 있는 원장이 없습니다 — 종가배팅 탭에서 돌리기" });
       items.push(...top(3));
-      return { slot: slot.key, title: "마감 전 — 종가배팅", items, note: "14:30 잠정치·프로그램이 마지막 30분을 정한다. 15:20 전에 주문 정리", cross };
+      return {
+        slot: slot.key,
+        title: "마감 전 — 종가배팅",
+        items,
+        note: `14:30 잠정치·프로그램이 마지막 30분을 정한다. 15:20 전에 주문 정리${usable && (scanAge ?? 0) > 0 ? " · 종배 후보·교차는 어제 원장 기준(오늘 원장은 마감 뒤)" : ""}`,
+        cross,
+      };
     }
     case "gap":
     case "after": {
@@ -1022,7 +1041,7 @@ export function moneyNowText(m: MoneyNow): string {
   if (m.buckets.quiet.length > 0) lines.push(`🧲 조용히 담는 중: ${esc(m.buckets.quiet.slice(0, 4).map((b) => `${b.name} ×${b.boost?.toFixed(1)}`).join(" · "))}`);
   if (m.buckets.breakout.length > 0) lines.push(`🚪 돌파 임박: ${esc(m.buckets.breakout.slice(0, 3).map((b) => b.name).join(" · "))}`);
   if (m.buckets.hot.length > 0) lines.push(`🔥 이미 튐(추격 금지): ${esc(m.buckets.hot.slice(0, 3).map((b) => `${b.name} ${b.rate === null ? "" : `${b.rate > 0 ? "+" : ""}${b.rate.toFixed(0)}%`}`).join(" · "))}`);
-  if (m.plan.cross && m.plan.cross.length > 0) lines.push(`⚡ 교차(종배∩사는 손∩마크): ${esc(m.plan.cross.map((c) => c.name).join(" · "))}`);
+  if (m.plan.cross && m.plan.cross.length > 0) lines.push(`⚡ 교차(종배∩사는 손∩마크): ${esc(m.plan.cross.map((c) => c.name).join(" · "))}${/기준/.test(m.plan.cross[0]?.text ?? "") ? " (종배는 어제 원장 기준)" : ""}`);
   const mine = m.account.rows.filter((r) => r.verdict !== "quiet").slice(0, 5);
   if (mine.length > 0) lines.push(`내 계좌: ${esc(mine.map((r) => `${r.name} ${r.verdict === "in" ? "들어옴" : "빠짐"}`).join(" · "))}`);
   lines.push(`<i>${esc(m.slot.advice)}</i>`);
