@@ -4,7 +4,7 @@ import { api, type ScopeDetail, type ScopeFlow, type ScopeRow, fmtKst, kstYmd } 
 import { MiniLine } from "../components/MiniLine";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { useWatchedCodes } from "../useWatchedCodes";
-import { fid, useRealtime } from "../useRealtime";
+import { fid, useRealtime, krxOverlayLive } from "../useRealtime";
 import { SuperMark } from "../useSuperMarks";
 import { BuzzDaysButtons, useBuzz } from "../components/BuzzBadge";
 import { JudgeChips, JudgeLegend } from "../components/JudgeChips";
@@ -545,6 +545,11 @@ export function ScopePage({ onSelectStock }: { onSelectStock: (code: string, nam
   }, [rows.length]);
   /** 실시간이 준 현재가·등락률 — 없으면 null 이고, 그때는 폴링 값을 쓴다 */
   const liveOf = (code: string): { price: number; rate: number | null } | null => {
+    /*
+     * 장 시간·스트림 건강 가드 (2026-09-18 전수검증 D12·D13) — 나이(90초)만 봤다. 조건검색 화면(ScreenerPage)처럼
+     * **KRX 덮기 시간**이 아니거나 스트림이 죽었으면 조회 값을 그대로 쓴다. 프리장 KRX 0% 가 통합 값을 덮던 부류를 막는다.
+     */
+    if (!krxOverlayLive() || !rt.healthy) return null;
     const v = rt.values[`0B:${code}`];
     /* (2026-09-11 저녁) 30 → 90 으로 되돌렸다. 조용한 종목이 30초마다 실시간↔조회로 깜빡였다.
      * 스트림이 죽는 것은 `rt.healthy` 가 서버 `beat`(10초)로 35초 안에 잡는다 — 그게 진짜 안전장치다 */

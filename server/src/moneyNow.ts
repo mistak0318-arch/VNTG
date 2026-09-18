@@ -26,6 +26,7 @@ import { loadStockMarks, type StockMark } from "./stockMarks.js";
 import { evaluateAccounts } from "./manualAccounts.js";
 import { loadCloseBetScan } from "./closeBetScan.js";
 import { indexDetail } from "./indexDetail.js";
+import { MIN } from "./marketHours.js";
 import { getStockIndex } from "./stockListCache.js";
 import { etfAll } from "./routes/etf.js";
 import { readFile, writeFile, appendFile, mkdir } from "node:fs/promises";
@@ -193,7 +194,9 @@ function kst(): { date: string; minute: number; day: number; hhmm: string } {
 function slotOf(minute: number, weekend: boolean): Slot {
   if (weekend) return { key: "night", label: "휴장", advice: "주말 — 지난 장 복기와 다음 주 일정. 아래 값은 마지막 장 기준입니다" };
   if (minute < 8 * 60) return { key: "night", label: "장 전", advice: "어젯밤 미국 섹터 ETF 와 오늘 일정부터. 국내 값은 어제 마감 기준" };
-  if (minute < 9 * 60) return { key: "pre", label: "NXT 프리", advice: "프리마켓 갭은 얇은 호가 — 방향만 보고 추격하지 않기. 09:00 시초가 확인" };
+  if (minute < MIN.nxtPreClose) return { key: "pre", label: "NXT 프리", advice: "프리마켓 갭은 얇은 호가 — 방향만 보고 추격하지 않기. 09:00 시초가 확인" };
+  /* 08:50~09:00 은 NXT 프리도 끝나 어느 시장도 안 연다 (2026-09-18 전수검증 A24) — 예전엔 09:00 까지 「프리」였다 */
+  if (minute < 9 * 60) return { key: "pre", label: "개장 직전", advice: "NXT 프리도 끝났고 정규장은 09:00 — 지금은 어느 시장도 안 엽니다. 예상 시초가와 갭만 확인" };
   if (minute < 9 * 60 + 30) return { key: "open", label: "개장 30분", advice: "갭·VI 가 쏟아지는 시간. 첫 30분 추격 금지 — 09:30 외인·기관 잠정치가 나온 뒤 판단" };
   if (minute < 11 * 60 + 30) return { key: "morning", label: "오전", advice: "추세가 정해지는 시간. 부상 테마의 대표 종목이 신고가를 지키는지, 사는 손이 이어지는지" };
   if (minute < 13 * 60) return { key: "lunch", label: "점심", advice: "거래가 얇아 값이 흔들린다 — 새 진입보다 오전 포지션 점검. 11:20 잠정치로 방향 재확인" };

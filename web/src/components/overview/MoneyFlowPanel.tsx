@@ -53,6 +53,8 @@ export function MoneyFlowPanel({ onSelectStock }: { onSelectStock: (code: string
   const [list, setList] = useState<EtfListRow[] | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [chart, setChart] = useState<ChartTarget | null>(null);
+  /** 네 조합(미국 ETF·국내 ETF·심리·순위)을 마지막으로 받은 시각 — 서버는 5분 캐시라 값은 그보다 옛것일 수 있다 */
+  const [pulledAt, setPulledAt] = useState<number | null>(null);
 
   /* 카드 ↻ 로 다시 마운트됐으면(세대 > 0) 첫 조회는 서버 캐시를 건너뛴다 — 주기 갱신은 캐시 그대로 */
   const gen = useCardRefresh();
@@ -68,7 +70,11 @@ export function MoneyFlowPanel({ onSelectStock }: { onSelectStock: (code: string
         api.etfFlow(fresh).then((r) => alive && (setKr(r.rows), setKrAsOf(r.asOf))).catch(() => errs.push("국내 ETF")),
         api.etfSentiment(fresh).then((r) => alive && setSides(r.sides)).catch(() => errs.push("심리")),
         api.etfList(fresh).then((r) => alive && setList(r.rows)).catch(() => errs.push("ETF 순위")),
-      ]).then(() => alive && setErrors(errs));
+      ]).then(() => {
+        if (!alive) return;
+        setErrors(errs);
+        setPulledAt(Date.now()); // 기준 시각 (2026-09-18 전수검증 D10) — 서버가 asOf 를 안 주는 조합이라 받은 시각을 적는다
+      });
     };
     pull();
     const t = window.setInterval(pull, 5 * 60_000);
@@ -120,6 +126,12 @@ export function MoneyFlowPanel({ onSelectStock }: { onSelectStock: (code: string
   return (
     <div className="ov-card-b mfp">
       {errors.length > 0 && <div className="mfp-err">못 받음: {errors.join(" · ")}</div>}
+      {pulledAt !== null && (
+        <div className="mfp-stamp" title="네 조합(미국 ETF·국내 ETF·심리·ETF 순위)을 받은 시각 — 서버는 5분 캐시라 값은 그보다 옛것일 수 있습니다">
+          {new Date(pulledAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })} 기준
+          {krAsOf ? ` · 국내 ETF ${krAsOf}` : ""}
+        </div>
+      )}
       {sides && sides.length > 0 && (
         <div className="mfp-sent">
           <span className="mfp-k">⚖️ 심리</span>

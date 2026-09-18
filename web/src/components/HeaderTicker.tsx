@@ -127,15 +127,23 @@ export function HeaderTicker({ onGo }: { onGo: () => void }) {
     onGo();
   };
 
+  /*
+   * **멈춘 값은 멈췄다고 말한다** (2026-09-18 전수검증 D16). 섹션이 죽어도 마지막 값이 그대로 보여
+   * 「지금 값」처럼 읽혔다. 3분 넘게 안 바뀌면 흐리게 + 몇 분 전인지 툴팁에.
+   */
+  const ageMs = indices.updatedAt === null ? null : Date.now() - indices.updatedAt;
+  const stale = ageMs !== null && ageMs > 180_000;
+  const ageKo = ageMs === null ? "" : ` · ${Math.floor(ageMs / 60_000)}분 전 값`;
+
   /** 펼침의 지수 한 행 — 이름 · 지수 · 등락률 · 상승/하락/보합 수 */
   const idxRow = (code: string, label: string) => {
     const c = byCode.get(code);
     return (
       <button
         key={code}
-        className="ht-row"
+        className={`ht-row${stale ? " ht-stale" : ""}`}
         onClick={go}
-        title={c ? `${label} ${fmtIdx(c.price)} · 상승 ${c.rising} · 보합 ${c.flat} · 하락 ${c.falling} — 시황으로` : `${label} — 받는 중`}
+        title={c ? `${label} ${fmtIdx(c.price)} · 상승 ${c.rising} · 보합 ${c.flat} · 하락 ${c.falling}${ageKo} — 시황으로` : `${label} — 받는 중`}
       >
         <span className="ht-name">{label}</span>
         {c ? (

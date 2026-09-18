@@ -138,7 +138,8 @@ function EtfListTab({ onSelectStock }: { onSelectStock: (code: string, name: str
 
       {chips && (
         <div className="rp-ss-chips">
-          {chip("대금 1위", chips.tv, `${fmtNum(chips.tv?.tradeValue ?? 0)}억`, 1)}
+          {/* 색은 등락 방향대로 (2026-09-18 전수검증 D17) — 예전엔 1 을 넘겨 늘 빨강이었다 */}
+          {chip("대금 1위", chips.tv, `${fmtNum(chips.tv?.tradeValue ?? 0)}억`)}
           {chip("급등", chips.up, pct(chips.up?.changeRate))}
           {chip("급락", chips.down, pct(chips.down?.changeRate))}
           {chip("프리미엄", chips.prem, pct(chips.prem?.deviation), chips.prem?.deviation)}

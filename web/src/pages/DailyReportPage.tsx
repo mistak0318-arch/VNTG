@@ -396,7 +396,8 @@ export function DailyReportPage({
 
   return (
     <div className="report">
-      <RefreshBar onRefresh={reloadAll} updatedAt={indices.updatedAt}>
+      {/* 머리 시각도 본문과 같은 잣대 — 가장 오래된 섹션 (2026-09-18 전수검증 D15). 예전엔 제일 새 것(indices)이라 본문과 달랐다 */}
+      <RefreshBar onRefresh={reloadAll} updatedAt={oldest ?? indices.updatedAt}>
         <div className="filter-row" style={{ margin: 0 }}>
           {editionList.map((e) => (
             <button

@@ -311,6 +311,15 @@ export async function runLiveAlerts(
   let ok = true;
   if (superOnes.length > 0) ok = (await sendTelegram(formatLiveAlerts(superOnes), "super")).ok && ok;
   if (rest.length > 0) ok = (await sendTelegram(formatLiveAlerts(rest), "signal")).ok && ok;
+  /*
+   * **못 보냈으면 중복 키를 되돌린다** (2026-09-18 전수검증 A11). 키를 보내기 전에 저장하니, 텔레그램이 한 번
+   * 막힌 회차의 알림은 영영 안 왔다(키가 이미 「보냈다」로 남아서). 알림종은 dedupeKey 로 따로 막으니 다시 보내도
+   * 종이 두 번 울리지 않는다. 저장은 실패해도 다음 회차가 다시 잰다.
+   */
+  if (!ok) {
+    for (const a of out) sent.delete(`${a.code}:${a.kind}:${a.kind === "vi" ? a.detail.slice(0, 16) : day}`);
+    await saveSent().catch(() => undefined);
+  }
   return { alerts: out, sent: ok, live: true };
 }
 

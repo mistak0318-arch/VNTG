@@ -693,7 +693,11 @@ export async function runAfterClose(
       const parts = [`${r.ran}식 돌림`];
       const fresh = r.newHits.filter((h) => h.added.length > 0);
       if (fresh.length > 0) parts.push(`새로 ${fresh.map((h) => `${h.preset} ${h.added.length}`).join(" · ")}`);
-      if (r.skipped.length > 0) parts.push(`건너뜀 ${r.skipped.length}`);
+      /*
+       * **사유를 같이 적는다** (2026-09-18 전수검증 #10). 개수만 적으니 「마크가 오늘 것이 아니라 안 돌림」
+       * (조건식 자동이 통째로 죽은 것)과 「식에 신호등 기준이 있어 손으로 돌려야 함」(정상)이 같은 글자로 보였다.
+       */
+      if (r.skipped.length > 0) parts.push(`건너뜀 ${r.skipped.length} (${r.skipped[0]}${r.skipped.length > 1 ? " 외" : ""})`);
       return parts.join(" · ");
     });
 

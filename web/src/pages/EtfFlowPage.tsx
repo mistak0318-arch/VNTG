@@ -22,6 +22,8 @@ export function EtfFlowPage({ onSelectStock }: { onSelectStock: (code: string, n
   const [asOf, setAsOf] = useState<"오늘" | "어제">("오늘");
   const [error, setError] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<"d1" | "d5" | "d20" | "volRatio">("d1");
+  /** 마지막으로 받은 시각 (2026-09-18 전수검증 D11) — 서버 5분 캐시라 값은 그보다 옛것일 수 있다 */
+  const [pulledAt, setPulledAt] = useState<number | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -33,6 +35,7 @@ export function EtfFlowPage({ onSelectStock }: { onSelectStock: (code: string, n
           setRows(r.rows);
           setNote(r.note);
           setAsOf(r.asOf);
+          setPulledAt(Date.now());
         })
         .catch((e: Error) => alive && setError(e.message));
     void pull();
@@ -111,7 +114,10 @@ export function EtfFlowPage({ onSelectStock }: { onSelectStock: (code: string, n
           </div>
         </section>
       ))}
-      <div className="table-note">{note}</div>
+      <div className="table-note">
+        {note}
+        {pulledAt !== null && ` · ${new Date(pulledAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })} 기준 (5분마다 갱신)`}
+      </div>
     </div>
   );
 }

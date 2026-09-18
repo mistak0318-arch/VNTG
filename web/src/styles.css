@@ -19391,6 +19391,8 @@ tr.gv-strong td:first-child { color: var(--text); }
 
 /* ═══ 돈의 방향 (한미 ETF) 카드 (2026-09-17, MoneyFlowPanel) — usBridge 자리 ═══ */
 .mfp { display: flex; flex-direction: column; gap: 8px; }
+/* 머리글 지수가 멈췄을 때 (2026-09-18 전수검증 D16) */
+.ht-row.ht-stale { opacity: 0.55; }
 .mfp-err { font-size: 0.72rem; color: var(--muted); }
 .mfp-k { font-size: 0.72rem; color: var(--muted); margin-right: 4px; white-space: nowrap; }
 .mfp-sent { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 0.8rem; }
@@ -19401,6 +19403,8 @@ tr.gv-strong td:first-child { color: var(--text); }
 /* 두 열은 칸이 넉넉할 때만 — 태블릿에서 카드 한 칸이 400px 쯤이라 반으로 가르면 이름이 잘렸다 (2026-09-17 벤티지) */
 /* (2026-09-18 전수검증 C19) 320px 폰은 카드 안쪽이 262px 쯤이라 270px 최소폭이 가로 스크롤을 냈다 — 칸이 좁으면 칸 폭까지만 */
 .mfp-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(270px, 100%), 1fr)); gap: 10px; }
+/* 돈의 방향 카드 기준 시각 (2026-09-18 전수검증 D10) */
+.mfp-stamp { font-size: 0.68rem; color: var(--muted); margin-bottom: 4px; }
 .mfp-h { font-size: 0.74rem; font-weight: 700; margin-bottom: 3px; }
 .mfp-h i { font-style: normal; font-weight: 400; color: var(--muted); margin-left: 4px; }
 .mfp-row { display: grid; grid-template-columns: 1fr auto 3em; gap: 6px; align-items: center; width: 100%; padding: 3px 4px; border: 0; border-radius: 4px; background: transparent; color: var(--text); font: inherit; font-size: 0.8rem; text-align: left; cursor: pointer; }

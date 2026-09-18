@@ -49,6 +49,7 @@ export const AFTER_MARKET_FROM = "2026-09-14";
 export const MIN = {
   nxtPreOpen: 480, // 08:00
   krxOrderFrom: 510, // 08:30 — KRX 주문 접수 시작(동시호가)
+  nxtPreClose: 530, // 08:50 — NXT 프리마켓 단일가 마감 (2026-09-18 전수검증 A24). 08:50~09:00 은 어느 시장도 안 연다
   regularOpen: 540, // 09:00
   closeAuction: 920, // 15:20 — 마감 동시호가 시작
   regularClose: 930, // 15:30
