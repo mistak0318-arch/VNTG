@@ -38,7 +38,9 @@ export interface FuturesFlowDay {
  *   단위는 **억원**이다 — 벤티지가 13:35 키움 앱과 나란히 찍어 줬다: 키움 외국인 15,789·기관 15,706 억원, 네이버 15,451·15,423.
  *   처음엔 옛 표처럼 계약으로 읽어 「계약 × 지수 × 25만원」 환산이 붙어 4만 2천억으로 부풀었다.
  *
- * 하루치만 오니 **우리가 날마다 적어 둔다** (data/futuresFlowDays.json). 30일 그래프는 오늘부터 쌓이는 만큼만 보인다.
+ * `?bizdate=YYYYMMDD` 를 붙이면 **과거 날짜도 그대로 준다** (2026-09-18 전수조사 실측 45/45일). 그래서 하루치를 날마다
+ * 적어 두면서(data/futuresFlowDays.json), 빈 날은 **소급해 채운다** — 30일 그래프가 오늘부터가 아니라 처음부터 보인다.
+ * 주말·휴장일은 세 값이 다 0 으로 오니 저장하지 않는다.
  * 같은 API 가 KOSPI·KOSDAQ·KPI200 도 준다(억원) — 그쪽은 키움 ka10051 이 있어 안 쓴다.
  */
 const STORE = join(dirname(fileURLToPath(import.meta.url)), "..", "data", "futuresFlowDays.json");
@@ -62,8 +64,9 @@ async function loadStore(): Promise<void> {
   }
 }
 
-async function fetchToday(): Promise<FuturesFlowDay | null> {
-  const res = await fetch("https://m.stock.naver.com/api/index/FUT/trend", {
+async function fetchDay(bizdate?: string): Promise<FuturesFlowDay | null> {
+  const url = `https://m.stock.naver.com/api/index/FUT/trend${bizdate ? `?bizdate=${bizdate}` : ""}`;
+  const res = await fetch(url, {
     headers: { "user-agent": "Mozilla/5.0 (Linux; Android 12) Chrome/120 Mobile Safari/537.36", accept: "application/json" },
     signal: AbortSignal.timeout(8000),
   });
@@ -71,6 +74,7 @@ async function fetchToday(): Promise<FuturesFlowDay | null> {
   const j = (await res.json()) as Record<string, unknown>;
   const b = String(j.bizdate ?? "");
   if (!/^\d{8}$/.test(b)) return null;
+  if (bizdate && b !== bizdate) return null; // 물은 날짜가 아니면 버린다
   return {
     date: `${b.slice(0, 4)}-${b.slice(4, 6)}-${b.slice(6, 8)}`,
     individual: num(j.personalValue),
@@ -79,27 +83,79 @@ async function fetchToday(): Promise<FuturesFlowDay | null> {
   };
 }
 
+/** 세 값이 다 0 — 휴장일이거나 아직 집계 전. 저장하지 않는다 */
+function empty(d: FuturesFlowDay): boolean {
+  return d.individual === 0 && d.foreign === 0 && d.institution === 0;
+}
+
+async function save(): Promise<void> {
+  try {
+    await mkdir(dirname(STORE), { recursive: true });
+    await writeFile(STORE, JSON.stringify(cache.days), "utf-8");
+  } catch {
+    /* 못 적어도 다음에 */
+  }
+}
+
+/**
+ * **빈 과거를 한 번 채운다** (2026-09-18). 최근 45일 중 평일인데 파일에 없는 날을 `?bizdate=` 로 받아 온다.
+ * 한 날에 한 번, 사이에 250ms — 40일이면 10초쯤이라 첫 호출 하나만 늦고 그 뒤로는 파일에서 나온다.
+ * 프로세스당 한 번만 돈다(`filled`) — 휴장일은 늘 비므로 매번 다시 두드리면 헛일이다.
+ */
+let filled = false;
+async function backfill(): Promise<void> {
+  if (filled) return;
+  filled = true;
+  const have = new Set(cache.days.map((d) => d.date));
+  const want: string[] = [];
+  for (let back = 1; back <= 45; back += 1) {
+    const d = new Date(Date.now() + 9 * 3600_000 - back * 86_400_000);
+    const dow = d.getUTCDay();
+    if (dow === 0 || dow === 6) continue;
+    const iso = d.toISOString().slice(0, 10);
+    if (!have.has(iso)) want.push(iso);
+  }
+  if (want.length === 0) return;
+  let got = 0;
+  for (const iso of want) {
+    try {
+      const row = await fetchDay(iso.replace(/-/g, ""));
+      if (row && !empty(row)) {
+        cache.days.push(row);
+        got += 1;
+      }
+    } catch {
+      break; // 막히면 그만 — 다음 재시작에 다시
+    }
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  if (got > 0) {
+    cache.days.sort((a, b) => a.date.localeCompare(b.date));
+    await save();
+    console.log(`[naverFuturesFlow] 지난 수급 ${got}일 소급 저장 (${cache.days.length}일 보유)`);
+  }
+}
+
 /** 최근 N일 (기본 30) — 과거 → 최근 순. 오늘 값은 장중이면 누적 진행값 */
 export async function futuresFlow(days = 30): Promise<FuturesFlowDay[]> {
   await loadStore();
-  if (Date.now() - cache.at < TTL) return cache.days.slice(-days);
+  if (Date.now() - cache.at < TTL) {
+    void backfill().catch(() => undefined);
+    return cache.days.slice(-days);
+  }
   try {
-    const today = await fetchToday();
-    if (today) {
+    const today = await fetchDay();
+    if (today && !empty(today)) {
       const rest = cache.days.filter((d) => d.date !== today.date);
       rest.push(today);
       rest.sort((a, b) => a.date.localeCompare(b.date));
       cache = { at: Date.now(), days: rest.slice(-400) };
-      try {
-        await mkdir(dirname(STORE), { recursive: true });
-        await writeFile(STORE, JSON.stringify(cache.days), "utf-8");
-      } catch {
-        /* 못 적어도 다음에 */
-      }
+      await save();
     } else {
       cache.at = Date.now();
     }
     void recordApiCall("naver", "futuresFlow", "ok");
+    await backfill().catch(() => undefined);
     return cache.days.slice(-days);
   } catch (e) {
     void recordApiCall("naver", "futuresFlow", "failed");

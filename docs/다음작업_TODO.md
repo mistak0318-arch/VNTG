@@ -169,13 +169,22 @@
 - **배포**: 깃발 파일(`docs/미니PC_원격배포.md`). 금지 창 **15:15~16:00**(15:40 종배 스캔이 ~15:55 까지 돈다) · 20:00~마감 뒤 정리 끝
 - **실전 주문 키**: 키움 5020-1985 (소액 전용, IP 등록). `server/.env` 의 `KIWOOM_ORDER_*`
 
-## 9/18 저녁 이후 — 네이버 새 API 전수조사 (벤티지: "어제 네이버 새로운 api 전수조사 제대로 한 거 맞어??")
+## 네이버 API — 전수조사 **끝남** (2026-09-18 14:0x)
 
-9/18 에 옛 금융 페이지 둘(investorDealTrendDay/Time)이 HTTP 410 으로 닫혔고, 새 모바일 API 에서 `m.stock.naver.com/api/index/FUT/trend`
-(선물 오늘 수급) 를 찾아 붙였다. **하지만 새 API 전체를 뒤진 것은 아니다** — 이름을 찍어 본 열댓 개 중 200 은
-`/api/index/{KOSPI|KOSDAQ|KPI200|FUT}/{basic|integration|trend|price}` 와 `/api/stock/{code}/trend` 뿐이었다.
-- [ ] 우리가 아직 네이버 옛 페이지(finance.naver.com HTML)로 긁는 것 전부 목록화: 테마 목록/상세 · ETF 목록 · 종목토론 · 주요뉴스 · 그 밖
-- [ ] 각각 새 모바일 API(`m.stock.naver.com/api/...`)나 새 PC 사이트(`stock.naver.com`)에 **JSON 으로 같은 것이 있는지** 찾아 갈아탄다 —
-      HTML 파싱은 다음 개편에 또 죽는다. 페이지를 브라우저(claude-in-chrome — 내장 브라우저는 m.stock.naver.com 차단)로 열고 네트워크 탭에서 실제 호출 주소를 받아 적는 방식으로
-- [ ] `/api/index/FUT/trend` 단위(계약)·시각(±몇 분 지연) 실측, 과거 일자 표가 어딘가에 있는지(`.../trend?bizdate=`) 확인
-- [ ] 장중 투자자별 누적(Time 표)의 새 주소 — 못 찾으면 지금처럼 우리 표본(2분)으로 간다
+벤티지 지시로 우리가 부르는 네이버 주소를 전부 찍었다. 도구: `scratchpad/naver_sweep.py`·`naver_backfill.py`(다음에 또 필요하면 같은 방식).
+
+| 갈래 | 상태 | 결론 |
+|---|---|---|
+| `investorDealTrendDay/Time.naver` | **410 죽음** | 선물은 새 API 로 갈아탐(2215f60), 장중 누적은 우리 2분 표본이 유일 |
+| `finance.naver.com/api/sise/etfItemList.nhn` | 200 (1,000여 ETF 한 번에) | 그대로 쓴다. 죽으면 `m.stock.naver.com/api/stocks/etf`(1,171개·페이지당 100·12회)로 폴백 — **미리 안 바꾼다** |
+| 금융뉴스 목록 HTML(`news_list.naver`) | 200 | 그대로. 새 `api/news/list` 는 이미 주요뉴스·속보에 쓰는 중(둘 다 살아 있음) |
+| 종목토론 HTML(`item/board.naver`) | 200이지만 새 주소로 넘기는 껍데기 | 이미 `front-api/discussion/list` 사용 중 |
+| 우리가 쓰는 새 API 15개 | **전부 200** | 생존. 인자 주의: `discussion/list` 는 size·nationType·discussionType, `researches/v2/weekly-hot` 은 **하이픈 날짜**(2026-09-11) |
+| 공매도 · 프로그램매매 · 업종PER | **404 (없음)** | 새 API 에도 없다. 기존 결론([[vntg-hts-api-constraints]]) 그대로 |
+| `api/stocks/industry` 업종 목록 | 200 | 등락률·상승/하락 종목수뿐 — 키움으로 이미 있는 값이라 안 붙인다 |
+
+**가장 큰 소득**: `api/index/{FUT|KOSPI|KOSDAQ|KPI200}/trend?bizdate=YYYYMMDD` 가 **과거 날짜를 준다**(45/45일 실측).
+선물 수급을 소급해 채우게 고쳤다 — 30일 그래프가 오늘부터가 아니라 처음부터 보인다. 지수(KOSPI/KOSDAQ)도 같은 길이
+열려 있으니, 키움 수급이 빈 날의 **대조용**으로 쓸 수 있다(지금은 안 붙임 — 필요해지면 그때).
+
+- [ ] (남은 것 하나) 옛 `etfItemList.nhn` 이 죽는 날 새 API 폴백 붙이기. 죽기 전엔 안 건드린다
