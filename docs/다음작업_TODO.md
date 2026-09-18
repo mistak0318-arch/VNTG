@@ -168,3 +168,14 @@
 - **애프터마켓 판정 되돌리기**: `server/src/marketHours.ts` 의 `AFTER_MARKET_FROM` 을 미래 날짜로 — 한 줄
 - **배포**: 깃발 파일(`docs/미니PC_원격배포.md`). 금지 창 **15:15~16:00**(15:40 종배 스캔이 ~15:55 까지 돈다) · 20:00~마감 뒤 정리 끝
 - **실전 주문 키**: 키움 5020-1985 (소액 전용, IP 등록). `server/.env` 의 `KIWOOM_ORDER_*`
+
+## 9/18 저녁 이후 — 네이버 새 API 전수조사 (벤티지: "어제 네이버 새로운 api 전수조사 제대로 한 거 맞어??")
+
+9/18 에 옛 금융 페이지 둘(investorDealTrendDay/Time)이 HTTP 410 으로 닫혔고, 새 모바일 API 에서 `m.stock.naver.com/api/index/FUT/trend`
+(선물 오늘 수급) 를 찾아 붙였다. **하지만 새 API 전체를 뒤진 것은 아니다** — 이름을 찍어 본 열댓 개 중 200 은
+`/api/index/{KOSPI|KOSDAQ|KPI200|FUT}/{basic|integration|trend|price}` 와 `/api/stock/{code}/trend` 뿐이었다.
+- [ ] 우리가 아직 네이버 옛 페이지(finance.naver.com HTML)로 긁는 것 전부 목록화: 테마 목록/상세 · ETF 목록 · 종목토론 · 주요뉴스 · 그 밖
+- [ ] 각각 새 모바일 API(`m.stock.naver.com/api/...`)나 새 PC 사이트(`stock.naver.com`)에 **JSON 으로 같은 것이 있는지** 찾아 갈아탄다 —
+      HTML 파싱은 다음 개편에 또 죽는다. 페이지를 브라우저(claude-in-chrome — 내장 브라우저는 m.stock.naver.com 차단)로 열고 네트워크 탭에서 실제 호출 주소를 받아 적는 방식으로
+- [ ] `/api/index/FUT/trend` 단위(계약)·시각(±몇 분 지연) 실측, 과거 일자 표가 어딘가에 있는지(`.../trend?bizdate=`) 확인
+- [ ] 장중 투자자별 누적(Time 표)의 새 주소 — 못 찾으면 지금처럼 우리 표본(2분)으로 간다

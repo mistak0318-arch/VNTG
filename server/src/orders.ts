@@ -1277,7 +1277,7 @@ export async function prepareOrder(
     if (tt.cond) reject("자동감시엔 스톱지정가를 쓰지 않는다 — 감시가 곧 스톱이다", input, ip);
     if (wi.exec === "market" && tt.code !== "3") reject("시장가로 내는 감시는 매매구분이 시장가여야 한다", input, ip);
     if (wi.exec !== "market" && tt.code !== "0") reject("지정가로 내는 감시는 매매구분이 보통이어야 한다", input, ip);
-    const q = await quoteOf(main, input.code, true); // KRX 단독 — 판정과 같은 값 (2026-09-18 전수검증 B4)
+    const q = await quoteOf(main, input.code, venueOpen("KRX")); // 열린 시장 우선 — KRX 열려 있으면 KRX, 닫혀 있으면 통합 (2026-09-18 B3·B4, 벤티지 선택)
     if (!q || q.price <= 0) reject("현재가를 못 읽어 감시 조건을 잴 수 없다", input, ip);
     let basisPrice: number | null = null;
     let trigger = 0;
@@ -1439,7 +1439,9 @@ export async function prepareOrder(
 
   let ref = 0;
   try {
-    ref = (await priceMap(main, [input.code])).get(input.code) ?? 0;
+    /* 가격 자의 기준값은 **열린 시장 우선** (2026-09-18 B3, 벤티지 선택) — KRX 가 열려 있으면 KRX 체결, 닫혀 있으면(NXT 만) 통합 */
+    if (venueOpen("KRX")) ref = (await quoteOf(main, input.code, true))?.price ?? 0;
+    if (ref <= 0) ref = (await priceMap(main, [input.code])).get(input.code) ?? 0;
   } catch {
     ref = 0;
   }
@@ -1605,7 +1607,7 @@ async function buyBlockReason(code: string, g: OrderGuard): Promise<string | nul
   return null;
 }
 
-/** 오늘 자동감시 매도가 체결되며 실현한 손익의 합 — 발동 순간의 평단(avgAtFire)과 체결가로 */
+/** 오늘 자동감시 매도가 체결되며 실현한 **손실**의 합(익절 제외) — 발동 순간의 평단(avgAtFire)과 체결가로 */
 function realizedLossToday(rows: AutoWatch[]): number {
   const { date } = kstParts();
   let sum = 0;
@@ -1614,7 +1616,9 @@ function realizedLossToday(rows: AutoWatch[]): number {
     if ((r.mock ?? true) !== orderIsMock()) continue;
     if (r.ticket.side !== "sell" || r.status !== "filled" || !r.fillPrice || !r.fillQty || !r.avgAtFire) continue;
     if (!r.firedAt || kstParts(new Date(r.firedAt)).date !== date) continue;
-    sum += (r.fillPrice - r.avgAtFire) * r.fillQty;
+    /* **손실만 합산** (2026-09-18 B15, 벤티지 선택) — 익절이 손절을 상계해 차단이 풀리던 것. 익절은 안 센다 */
+    const pnl = (r.fillPrice - r.avgAtFire) * r.fillQty;
+    if (pnl < 0) sum += pnl;
   }
   return sum;
 }
@@ -2497,6 +2501,9 @@ export interface AutoWatch {
   dualOrdNo?: string;
   dualDate?: string;
   dualMsg?: string;
+  /** 매도 감시 거절 재시도 (2026-09-18 B17) — 몇 번 거절됐나 · 언제부터 다시 볼 수 있나 */
+  failCount?: number;
+  retryAt?: string;
 }
 
 const WATCH_FILE = join(DATA_DIR, "orderWatch.json");
@@ -2961,7 +2968,9 @@ async function runAutoWatchLocked(main: KiwoomClient): Promise<void> {
     if (live.length > 0 && isTradingDate(date) && minute >= WATCH_FROM && minute <= watchTo(date)) {
       for (const r of live) void ensureLiveCode(r.ticket.code);
       const prices = await livePrices(main, [...new Set(live.map((r) => r.ticket.code))]);
+      const nowIso = new Date().toISOString();
       for (const r of live) {
+        if (r.retryAt && r.retryAt > nowIso) continue; // 거절 뒤 쉬는 중 (2026-09-18 B17)
         const q = prices.get(r.ticket.code);
         if (!q) continue;
         const hit = r.spec.dir === "le" ? q.price <= r.spec.trigger : q.price >= r.spec.trigger;
@@ -3249,11 +3258,28 @@ async function fireAutoWatch(r: AutoWatch, cur: number, from: string, rows: Auto
      * 15:40 정합성이 우리 기록에 없는 체결을 잡는다.
      */
     const maybeSent = MAYBE_SENT_RE.test(msg); // (2026-09-10 전수 점검) 연결 끊김·5xx 도 접수됐을 수 있다 — fired 로 둔다(타임아웃과 같은 길)
-    r.status = maybeSent ? "fired" : "failed";
-    r.msg = maybeSent ? `응답 없음 — 접수됐을 수 있다. 미체결·체결 탭 확인 (${msg})` : msg;
-    await appendLog({ kind: "error", code: t.code, name: t.name, qty: t.qty, venue: t.venue, msg: `감시 발동 ${maybeSent ? "응답 없음" : "실패"} (${r.id}) — ${msg}`, raw: e instanceof KiwoomApiError ? e.raw : undefined });
-    void sendTelegram(`⚠️ ${tag} <b>감시 발동 ${maybeSent ? "응답 없음" : "실패"}</b> ${esc(t.name)} ${sideKo} ${t.qty}주\n${esc(msg)}\n${maybeSent ? "접수됐을 수 있다 — 미체결·체결 탭을 확인하라." : "다시 안 냅니다."}`, "order").catch(() => undefined);
-    void pushNotice({ kind: "stock", source: "autoWatch", level: "urgent", title: `${tag} ⚠️ 감시 발동 ${maybeSent ? "응답 없음" : "실패"} · ${t.name} ${sideKo} ${t.qty}주`, body: msg, code: t.code, name: t.name, link: "#/order", dedupeKey: `watch:fail:${r.id}`, dedupeHours: 24 }).catch(() => undefined);
+    /*
+     * **매도 감시는 거절 세 번까지 다시 본다** (2026-09-18 B17, 벤티지 선택). 거절 한 번(호가단위·거래정지·관리종목 애프터 등)에
+     * failed 로 접으면 손절이 영영 사라졌다. 1분 쉬고 waiting 으로 되돌린다 — 조건이 여전히 맞으면 다시 낸다. 매수는 예전대로 1회.
+     */
+    const retry = !maybeSent && t.side === "sell" && (r.failCount ?? 0) < 2;
+    if (retry) {
+      r.failCount = (r.failCount ?? 0) + 1;
+      r.retryAt = new Date(Date.now() + 60_000).toISOString();
+      r.status = "waiting";
+      r.firedAt = undefined;
+      r.firePrice = undefined;
+      r.msg = `거절 ${r.failCount}/3 — ${msg} · 1분 뒤 다시 본다`;
+    } else {
+      r.status = maybeSent ? "fired" : "failed";
+      r.msg = maybeSent ? `응답 없음 — 접수됐을 수 있다. 미체결·체결 탭 확인 (${msg})` : msg;
+    }
+    const failKo = maybeSent ? "응답 없음" : retry ? `거절 ${r.failCount}/3` : "실패";
+    await appendLog({ kind: "error", code: t.code, name: t.name, qty: t.qty, venue: t.venue, msg: `감시 발동 ${failKo} (${r.id}) — ${msg}`, raw: e instanceof KiwoomApiError ? e.raw : undefined });
+    void sendTelegram(`⚠️ ${tag} <b>감시 발동 ${failKo}</b> ${esc(t.name)} ${sideKo} ${t.qty}주
+${esc(msg)}
+${maybeSent ? "접수됐을 수 있다 — 미체결·체결 탭을 확인하라." : retry ? "1분 뒤 다시 봅니다." : "다시 안 냅니다."}`, "order").catch(() => undefined);
+    void pushNotice({ kind: "stock", source: "autoWatch", level: "urgent", title: `${tag} ⚠️ 감시 발동 ${failKo} · ${t.name} ${sideKo} ${t.qty}주`, body: msg, code: t.code, name: t.name, link: "#/order", dedupeKey: `watch:fail:${r.id}:${r.failCount ?? 0}`, dedupeHours: 24 }).catch(() => undefined);
   }
 }
 
@@ -3351,7 +3377,7 @@ export async function watchQuote(main: KiwoomClient, code: string): Promise<{
   ableQty: number;
   deposit: number;
 }> {
-  const [q, acct] = await Promise.all([quoteOf(main, code, true), orderAccount().catch(() => null)]); // 폼도 KRX — 서버가 정할 발동가와 같은 값 (2026-09-18 전수검증 B4)
+  const [q, acct] = await Promise.all([quoteOf(main, code, venueOpen("KRX")), orderAccount().catch(() => null)]); // 폼도 서버와 같은 기준 — 열린 시장 우선 (2026-09-18 B4)
   if (!q) throw new Error("현재가를 못 읽었다");
   const h = acct?.holdings.find((x) => x.code === code && !x.creditType) ?? null;
   return {

@@ -409,6 +409,14 @@ export function createOrderRouter(main: KiwoomClient): Router {
   router.post("/stop", async (req, res) => {
     try {
       const b = (req.body ?? {}) as Record<string, unknown>;
+      /* **손절선을 없애는 것(0)만 주문 비밀번호** (2026-09-18 B12, 벤티지 선택) — 정하기·옮기기는 그대로 세션만 */
+      if (!(Number(b.stop) > 0)) {
+        const r = await checkPassword(String(b.password ?? ""));
+        if (!r.ok) {
+          res.status(401).json({ error: r.error });
+          return;
+        }
+      }
       const stops = await setOrderStop(String(b.code ?? ""), Number(b.stop) || 0, String(b.name ?? ""));
       res.json({ stops });
     } catch (e) {

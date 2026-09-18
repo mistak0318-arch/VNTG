@@ -1058,9 +1058,9 @@ export const api = {
   orderOpen: () => getJson<{ rows: OrderRow[]; error?: string }>("/api/order/open"),
   orderFills: () => getJson<{ rows: OrderRow[]; error?: string }>("/api/order/fills"),
   orderAccount: () => getJson<OrderAccount>("/api/order/account"),
-  /** 계좌 자리의 손절선 — 0 을 주면 지운다. 주문이 아니므로 주문 비밀번호는 안 묻는다 */
-  orderSetStop: (code: string, stop: number, name: string) =>
-    orderPost<{ stops: OrderAccount["stops"] }>("/api/order/stop", { code, stop, name }),
+  /** 계좌 자리의 손절선 — 0 을 주면 지운다. 지울 때만 주문 비밀번호 (2026-09-18 B12) */
+  orderSetStop: (code: string, stop: number, name: string, password?: string) =>
+    orderPost<{ stops: OrderAccount["stops"] }>("/api/order/stop", { code, stop, name, ...(password !== undefined ? { password } : {}) }),
   orderLog: (limit = 100) => getJson<{ rows: OrderLogRow[] }>(`/api/order/log?limit=${limit}`),
   orderPrepare: (input: {
     side: "buy" | "sell";
