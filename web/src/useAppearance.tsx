@@ -308,6 +308,18 @@ export function chartColors(theme: ThemeName) {
       up: "#3a3631",
       down: "#b0aba0",
     };
+  /*
+   * 읽기 — 종이빛 위의 차트 (2026-09-19). **격자가 제일 중요하다.**
+   *
+   * ⚠️ 처음에 이 분기를 빼먹어 `reading` 이 맨 아래 다크로 떨어졌다. 다크의 격자는 `#1a232d`(거의 검정)라
+   * 다크 바탕에서는 안 보이는 선인데, 종이빛 위에 얹히자 **까만 모눈종이**가 됐다(벤티지 9/19 캡처).
+   * 캔버스는 CSS 로 못 덮으니 여기서 값을 줘야 한다 — 테마를 더 만들 때 이 함수를 먼저 볼 것.
+   *
+   * 격자는 바탕과 거의 같은 톤으로 깔아 **있는 줄 모르게** 둔다. 봉은 테마의 채도 낮춘 빨강·파랑(--red/--blue)과
+   * 같은 값이라 표의 숫자 색과 화면에서 어긋나지 않는다.
+   */
+  if (theme === "reading")
+    return { text: "#665f4f", grid: "#e7dfd0", border: "#dcd2bf", volume: "#d2c8b4", up: "#b23b32", down: "#2d5f8f" };
   return theme === "light"
     ? { text: "#5b6673", grid: "#e8ecf1", border: "#d0d7e0", volume: "#c9d2dc", up: "#ff5c5c", down: "#4c8dff" }
     : { text: "#8b98a5", grid: "#1a232d", border: "#223040", volume: "#3a4553", up: "#ff5c5c", down: "#4c8dff" };
