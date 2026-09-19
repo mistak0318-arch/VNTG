@@ -18,6 +18,8 @@ import { stockSummary } from "../stockSummary.js";
 import { getSectorMood } from "../sectorMood.js";
 import { findStock, searchStocks } from "../stockListCache.js";
 import { analystOpinion } from "../analystOpinion.js";
+import { listWatchlist } from "../watchlist.js";
+import { orderAccount } from "../orders.js";
 import { hantooReady } from "../hantooClient.js";
 import { investorEstimate } from "../hantooSchedule.js";
 import { fillSyncStatus, syncRecent, tradesOf } from "../fillStore.js";
@@ -243,6 +245,68 @@ export function createMarketRouter(client: KiwoomClient): Router {
   });
 
   // 주식호가 (ka10004)
+  /**
+   * **여러 종목의 지금 값 + 내 것인지** (2026-09-19) — 뉴스 카드의 관련 종목 칩이 쓴다.
+   *
+   * 벤티지가 증시플러스 뉴스속보를 보여 주며 "참고할 만한 게 있냐"고 물었다. 우리 뉴스 카드는 썸네일·요약·
+   * 언론사까지 그쪽보다 많이 주는데 **관련 종목 칩이 이름뿐**이라, 「이 뉴스에 시장이 반응했나」를 누르기 전엔
+   * 몰랐다. 그쪽은 칩에 등락률을 붙여 목록에서 바로 답을 준다 — 그거 하나만 가져온다.
+   *
+   * 다만 우리는 한 발 더 간다: 그 종목이 **내 보유·관심종목인지**를 함께 준다(`mine`). 남의 앱은 편집자가
+   * 「중요」를 고르지만 우리는 **네 포트폴리오 기준**으로 고를 수 있다.
+   *
+   * 비용: `ka10095` 는 `|` 로 여러 종목을 한 번에 준다 — 뉴스 한 쪽(30여 종목)이 **조회 1~2회**.
+   * 60초 캐시라 같은 목록을 다시 열어도 안 는다. 보유는 주문 쪽 계좌 캐시(2.5초)를 얹기만 한다.
+   */
+  router.get("/quotes", async (req, res, next) => {
+    try {
+      const codes = [
+        ...new Set(
+          String(req.query.codes ?? "")
+            .split(",")
+            .map((c) => c.trim())
+            .filter((c) => /^\d{6}$/.test(c)),
+        ),
+      ].slice(0, 80);
+      if (codes.length === 0) {
+        res.json({ quotes: {} });
+        return;
+      }
+      const quotes: Record<string, { price: number; changeRate: number; mine: "hold" | "watch" | null }> = {};
+      /* ka10095 는 한 번에 무한정은 아니다 — 다른 곳(cisRun·etfHoldingsScore)과 같이 50개씩 끊는다 */
+      for (let i = 0; i < codes.length; i += 50) {
+        const part = codes.slice(i, i + 50);
+        const { data } = await client.request<Record<string, unknown>>("/api/dostk/stkinfo", "ka10095", {
+          stk_cd: part.map((c) => `${c}_AL`).join("|"),
+        });
+        const rows = Array.isArray(data.atn_stk_infr) ? (data.atn_stk_infr as Record<string, unknown>[]) : [];
+        for (const r of rows) {
+          const code = String(r.stk_cd ?? "").replace(/_(AL|NX)$/i, "");
+          const n = (v: unknown) => {
+            const x = Number(String(v ?? "").replace(/[+,\s]/g, ""));
+            return Number.isFinite(x) ? x : 0;
+          };
+          const price = Math.abs(n(r.cur_prc));
+          if (code && price > 0) quotes[code] = { price, changeRate: n(r.flu_rt), mine: null };
+        }
+      }
+      /* 내 것인지 — 관심종목은 파일, 보유는 주문 계좌 캐시. 둘 다 실패해도 시세는 준다 */
+      const [watch, acct] = await Promise.all([
+        listWatchlist().catch(() => [] as { code: string }[]),
+        orderAccount().catch(() => null),
+      ]);
+      const held = new Set((acct?.holdings ?? []).filter((h) => h.qty > 0).map((h) => h.code));
+      const watched = new Set(watch.map((w) => w.code));
+      for (const [code, q] of Object.entries(quotes)) {
+        q.mine = held.has(code) ? "hold" : watched.has(code) ? "watch" : null;
+      }
+      res.set("Cache-Control", "private, max-age=60");
+      res.json({ quotes });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.get("/quote/:code", async (req, res, next) => {
     try {
       const { data } = await client.request(MRKCOND_RESOURCE, "ka10004", {

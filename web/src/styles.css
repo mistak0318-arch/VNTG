@@ -17911,6 +17911,33 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .mn-stocks { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.15rem; }
 .mn-stock { font: inherit; font-size: 0.7rem; line-height: 1.3; padding: 0.05rem 0.4rem; border-radius: 999px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); cursor: pointer; }
 .mn-stock:hover { border-color: var(--blue); color: var(--blue); }
+/*
+ * 종목 칩의 등락률·내 것 표시 (2026-09-19 — 벤티지가 증시플러스 뉴스속보를 보여 주며).
+ * 칩이 이름뿐이라 「이 뉴스에 시장이 반응했나」를 누르기 전엔 몰랐다.
+ * 이름은 --text 로 두고 **숫자에만** 색을 준다 — 칩 전체를 물들이면 목록이 알록달록해서 오히려 안 읽힌다.
+ */
+.mn-stock > .mn-rate { font-style: normal; margin-left: 0.28rem; font-variant-numeric: tabular-nums; font-size: 0.95em; }
+.mn-stock.up > .mn-rate { color: var(--red); }
+.mn-stock.down > .mn-rate { color: var(--blue); }
+.mn-stock.flat > .mn-rate { color: var(--muted); }
+/* 내 것 — ◆ 보유 · ★ 관심. 테두리도 같이 세워 곁눈으로 잡히게 */
+.mn-stock > .mn-mine { font-style: normal; margin-right: 0.2rem; font-size: 0.9em; }
+.mn-stock.mine-hold { border-color: color-mix(in srgb, var(--accent) 70%, transparent); }
+.mn-stock.mine-hold > .mn-mine { color: var(--accent); }
+.mn-stock.mine-watch { border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.mn-stock.mine-watch > .mn-mine { color: var(--accent); opacity: 0.85; }
+/*
+ * 「나에게 중요한 기사」 — 왼쪽 띠 하나로. 제목 색을 바꾸면 언론사·요약까지 같이 튀어
+ * 목록이 시끄러워진다. 띠는 곁눈으로 잡히면서 글은 안 건드린다.
+ */
+.mn-card.mn-hot { position: relative; }
+.mn-card.mn-hot::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  border-radius: 3px 0 0 3px;
+}
+.mn-card.mn-hot.mine::before { background: var(--accent); }
+.mn-card.mn-hot.move::before { background: color-mix(in srgb, var(--red) 55%, transparent); }
+.mn-card.mn-hot.mine .mn-tit { color: var(--text); font-weight: 700; }
 /* 벤티지 (2026-09-08): "제목이랑 본문이 너무 붙어서 알아보기 힘드네. 본문 3줄로 줄이고 간격을 띄워보자" */
 .mn-sum.lead { color: var(--text); opacity: 0.8; margin-top: 0.35rem; -webkit-line-clamp: 3; }
 .mn-card .mn-tit { margin-bottom: 0.1rem; }

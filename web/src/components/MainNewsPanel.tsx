@@ -39,6 +39,12 @@ export function MainNewsPanel({ cat = "main", onSelectStock }: { cat?: NaverNews
    * 요약 자리에 넣는다. 늦게 와도 되고 못 와도 된다 — 그동안은 목록 요약이 있다.
    */
   const [leads, setLeads] = useState<Record<string, { lead: string; stocks: { code: string; name: string }[] }>>({});
+  /*
+   * 관련 종목의 **지금 값** (2026-09-19 — 벤티지가 증시플러스 뉴스속보를 보여 주며). 칩이 이름뿐이라
+   * 「이 뉴스에 시장이 반응했나」를 누르기 전엔 몰랐다. 등락률과 **내 보유·관심 여부**를 같이 받는다.
+   * 조회는 목록 한 쪽에 1~2회(ka10095 가 여러 종목을 한 번에 준다) · 서버 60초 캐시.
+   */
+  const [quotes, setQuotes] = useState<Record<string, { price: number; changeRate: number; mine: "hold" | "watch" | null }>>({});
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +52,7 @@ export function MainNewsPanel({ cat = "main", onSelectStock }: { cat?: NaverNews
 
   // 탭을 바꾸면 1쪽부터 — 지난 탭의 쪽수를 들고 가면 빈 쪽이 나온다
   useEffect(() => setPage(1), [cat]);
+  useEffect(() => setQuotes({}), [cat, page]); // 앞 목록의 값이 새 목록 칩에 남지 않게
 
   useEffect(() => {
     let alive = true;
@@ -72,6 +79,43 @@ export function MainNewsPanel({ cat = "main", onSelectStock }: { cat?: NaverNews
       alive = false;
     };
   }, [cat, page]);
+
+  /*
+   * 종목 칩 시세 — `leads` 가 채워진 뒤 한 번. 목록이 바뀌면(카테고리·쪽) 다시 받는다.
+   * 코드가 하나도 없으면 아무것도 안 부른다.
+   */
+  useEffect(() => {
+    const codes = [...new Set(Object.values(leads).flatMap((l) => l.stocks.map((x) => x.code)))].filter((c) => /^\d{6}$/.test(c));
+    if (codes.length === 0) return;
+    let alive = true;
+    api
+      .marketQuotes(codes)
+      .then((r) => alive && setQuotes((prev) => ({ ...prev, ...r.quotes })))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [leads]);
+
+  /*
+   * **나에게 중요한 기사**를 가른다 (2026-09-19, 벤티지 선택: 내 종목 + 급등락 ±5%).
+   *
+   * 남의 앱은 편집자가 「중요」를 고르지만 우리는 **내 포트폴리오 기준**으로 고를 수 있다 —
+   * 관련 종목에 내 보유·관심이 있으면 `mine`, 크게 움직인 종목이 있으면 `move`.
+   * 둘 다면 `mine` 이 이긴다(내 것이 먼저다).
+   */
+  const hotOf = (link: string): "mine" | "move" | null => {
+    const ss = leads[link]?.stocks ?? [];
+    if (ss.length === 0) return null;
+    let move = false;
+    for (const s of ss) {
+      const q = quotes[s.code];
+      if (!q) continue;
+      if (q.mine) return "mine";
+      if (Math.abs(q.changeRate) >= 5) move = true;
+    }
+    return move ? "move" : null;
+  };
 
   function flip(next: number) {
     setPage(next);
@@ -104,7 +148,7 @@ export function MainNewsPanel({ cat = "main", onSelectStock }: { cat?: NaverNews
       ) : (
         <div className="mn-grid">
           {items.map((n) => (
-            <a className="mn-card" href={n.link} target="_blank" rel="noreferrer" key={n.link}>
+            <a className={`mn-card${hotOf(n.link) ? ` mn-hot ${hotOf(n.link)}` : ""}`} href={n.link} target="_blank" rel="noreferrer" key={n.link}>
               {/* 썸네일이 없는 기사도 있다 — 그때는 글 카드로 */}
               {/* 네이버 CDN 이 리퍼러를 볼 때가 있어 안 보낸다 — 핫링크 차단 회피 */}
               {n.thumb && (
@@ -115,20 +159,35 @@ export function MainNewsPanel({ cat = "main", onSelectStock }: { cat?: NaverNews
                 <span className={`mn-sum ${leads[n.link]?.lead ? "lead" : ""}`}>{leads[n.link]?.lead || n.summary}</span>
                 {leads[n.link]?.stocks && leads[n.link].stocks.length > 0 && (
                   <span className="mn-stocks">
-                    {leads[n.link].stocks.map((s) => (
-                      <button
-                        key={s.code}
-                        className="mn-stock"
-                        title={`${s.name} 종목 상세 열기`}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          onSelectStock?.(s.code, s.name);
-                        }}
-                      >
-                        {s.name}
-                      </button>
-                    ))}
+                    {leads[n.link].stocks.map((s) => {
+                      const q = quotes[s.code];
+                      const cls = q ? (q.changeRate > 0 ? "up" : q.changeRate < 0 ? "down" : "flat") : "";
+                      return (
+                        <button
+                          key={s.code}
+                          className={`mn-stock ${cls} ${q?.mine ? `mine-${q.mine}` : ""}`}
+                          title={
+                            q
+                              ? `${s.name} ${q.price.toLocaleString()}원 ${q.changeRate > 0 ? "+" : ""}${q.changeRate.toFixed(2)}%${q.mine === "hold" ? " · 보유 중" : q.mine === "watch" ? " · 관심종목" : ""} — 상세 열기`
+                              : `${s.name} 종목 상세 열기`
+                          }
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onSelectStock?.(s.code, s.name);
+                          }}
+                        >
+                          {q?.mine && <i className="mn-mine">{q.mine === "hold" ? "◆" : "★"}</i>}
+                          {s.name}
+                          {q && (
+                            <em className="mn-rate">
+                              {q.changeRate > 0 ? "+" : ""}
+                              {q.changeRate.toFixed(2)}%
+                            </em>
+                          )}
+                        </button>
+                      );
+                    })}
                   </span>
                 )}
                 <span className="mn-meta">

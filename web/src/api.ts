@@ -1061,6 +1061,11 @@ export const api = {
   /** 계좌 자리의 손절선 — 0 을 주면 지운다. 지울 때만 주문 비밀번호 (2026-09-18 B12) */
   orderSetStop: (code: string, stop: number, name: string, password?: string) =>
     orderPost<{ stops: OrderAccount["stops"] }>("/api/order/stop", { code, stop, name, ...(password !== undefined ? { password } : {}) }),
+  /** 여러 종목의 지금 값 + 내 보유·관심 여부 — 뉴스 카드의 종목 칩 (2026-09-19) */
+  marketQuotes: (codes: string[]) =>
+    getJson<{ quotes: Record<string, { price: number; changeRate: number; mine: "hold" | "watch" | null }> }>(
+      `/api/market/quotes?codes=${codes.join(",")}`,
+    ),
   orderLog: (limit = 100) => getJson<{ rows: OrderLogRow[] }>(`/api/order/log?limit=${limit}`),
   orderPrepare: (input: {
     side: "buy" | "sell";
