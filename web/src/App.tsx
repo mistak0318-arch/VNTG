@@ -353,6 +353,9 @@ export const VALID_TABS: ReadonlySet<string> = new Set<string>(
   MENU.flatMap((g) => g.items).map((i) => i.key),
 );
 
+/** 읽기 모드에서 조판(행간·한 줄 길이·본문 크기)을 바꿀 화면 — 글이 주인공인 다섯 (2026-09-19) */
+const READING_TABS = new Set<Tab>(["news", "telegram", "report", "journal", "guide"]);
+
 export default function App() {
   /* 홈 = 브리핑. 앱을 열면 「오늘 시장이 어떤가」부터 — 파고들기는 대시보드로 */
   const { route, navigate } = useHashRoute("briefing");
@@ -1339,7 +1342,11 @@ export default function App() {
           </header>
         </div>
 
-        <div className="main-inner">
+        {/*
+          읽기 모드(2026-09-19)가 **글이 주인공인 화면에만** 조판을 걸 수 있게 표식을 단다.
+          다른 테마에서는 아무 일도 하지 않는다 — `reading.css` 만 이 속성을 본다.
+        */}
+        <div className="main-inner" {...(READING_TABS.has(tab) ? { "data-read": "1" } : {})}>
           {/* 인증이 끊기면 앱 전체가 값을 못 받는다 — 화면을 옮겨도 계속 보여야 한다 */}
           <AuthExpiredBar />
 

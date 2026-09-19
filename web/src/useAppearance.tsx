@@ -22,7 +22,13 @@ import type { Hotkey } from "./hotkey";
  * 폰에서 자연스러운 화면은 메모다 — 종이색 바탕, 시스템 글꼴, 빨강·파랑은 색펜 톤으로.
  * 위엔 「‹ 폴더 · 완료」, 아래엔 메모 앱 도구줄. 자세한 건 `components/NoteChrome.tsx`.
  */
-export type ThemeName = "dark" | "light" | "excel" | "note";
+/**
+ * `reading` 은 **오래 읽는 모드**다 (2026-09-19). 벤티지: "눈이 좀 편안하고 가독성 좋고 뉴스기사 읽거나
+ * 텔레그램 읽을때 읽기 편한 모드". 위장이 아니라 조판이다 — 종이빛 세피아에 순백·순흑을 피하고,
+ * **글이 주인공인 화면에만**(뉴스·공시 / 텔레그램 동향 / 데일리 리포트 / 복기 노트 / 가이드) 행간·한 줄
+ * 길이·본문 크기를 키운다. 표·차트·주문은 그대로다 — 읽기 모드에서도 숫자는 숫자다. `reading.css` 참고.
+ */
+export type ThemeName = "dark" | "light" | "excel" | "note" | "reading";
 export type FontName = "system" | "pretendard" | "noto" | "gothic" | "mono";
 /** 메뉴바를 어느 쪽에 둘지 */
 export type NavSide = "left" | "right";

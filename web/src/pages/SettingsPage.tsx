@@ -513,6 +513,7 @@ export function SettingsPage() {
               { key: "light" as const, label: "라이트" },
               { key: "excel" as const, label: "엑셀" },
               { key: "note" as const, label: "메모" },
+              { key: "reading" as const, label: "읽기" },
             ]).map((t) => (
               <button
                 key={t.key}
@@ -524,6 +525,14 @@ export function SettingsPage() {
             ))}
           </div>
         </div>
+        {appearance.theme === "reading" && (
+          <div className="st-cfg-note">
+            읽기 모드는 <b>오래 읽는 화면</b>을 위한 것입니다 — 종이빛 바탕에 먹빛 글자(순백·순흑을 피합니다),
+            등락 빨강·파랑은 채도를 낮춰 표에서 숫자를 읽는 기능은 그대로 둡니다. <b>뉴스·공시 · 텔레그램 동향 ·
+            데일리 리포트 · 복기 노트 · 가이드</b> 다섯 화면에서는 행간과 한 줄 길이(68자)까지 읽기용으로 바뀌고,
+            시세분석·조건검색 같은 <b>표 화면은 지금 그대로</b>입니다.
+          </div>
+        )}
         {appearance.theme === "note" && (
           <div className="st-cfg-note">
             메모 모드는 <b>폰의 메모 앱</b>처럼 보이게 합니다 — 종이색 바탕, 그 기기의 시스템 글꼴,

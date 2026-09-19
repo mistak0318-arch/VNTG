@@ -141,7 +141,7 @@ function loadDraw(code?: string): DrawItem[] {
 
 /** 그린 선 색 — 캔버스는 CSS 변수를 못 읽어 리터럴로. 엑셀 모드는 회색 */
 function drawColor(theme: string): string {
-  return theme === "excel" ? "#5a5a5a" : theme === "note" ? "#6b665b" : "#f5c542";
+  return theme === "excel" ? "#5a5a5a" : theme === "note" ? "#6b665b" : theme === "reading" ? "#8a6f2e" : "#f5c542";
 }
 
 function sma(candles: Candle[], period: number): { time: Time; value: number }[] {
@@ -391,7 +391,10 @@ export function CandleChart({
         ? { ...m, color: ["#3a3a3a", "#6a6a6a", "#8f8f8f", "#adadad", "#c4c4c4", "#d6d6d6", "#e2e2e2"][i % 7] }
         : theme === "note"
           ? { ...m, color: ["#3a3631", "#6b665b", "#8f8a7e", "#a8a399", "#bdb8ad", "#cdc8bd", "#d9d3c5"][i % 7] }
-          : m,
+          : theme === "reading"
+            ? /* 종이빛 위에서 밝은 선은 묻힌다 — 한 톤 어둡고 따뜻하게 (2026-09-19) */
+              { ...m, color: ["#8a6f2e", "#2d5f8f", "#45784a", "#9a5b3a", "#6d6555", "#7a5c86", "#2b6b70"][i % 7] }
+            : m,
     );
   /** effect 의존성으로 쓸 지문 — 배열은 매 렌더 새 객체라 그대로는 못 쓴다 */
   const maKey = maLines.map((m) => `${m.period}:${m.color}`).join(",");
@@ -818,7 +821,7 @@ export function CandleChart({
        * 위에 그리는 물건이라 모양도 이쪽이 맞다. 다크·라이트는 그대로 투명.
        */
       layout: {
-        background: { type: ColorType.Solid, color: theme === "excel" ? "#ffffff" : "transparent" },
+        background: { type: ColorType.Solid, color: theme === "excel" ? "#ffffff" : "transparent" }, // reading 은 투명 — 카드의 종이색이 비친다
         textColor: c.text,
       },
       /*
