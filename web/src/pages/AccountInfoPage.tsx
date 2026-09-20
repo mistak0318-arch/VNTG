@@ -256,7 +256,7 @@ export function AccountInfoPage({ onSelectStock }: { onSelectStock: (code: strin
           <div className="acct2-cell">
             <span>평가금액</span>
             <b>{fmt(evalTotal)}</b>
-            {priceBasis === "NXT" && <small title="정규장 밖이라 NXT(통합) 현재가로 잰 값 — 키움 앱과 같은 기준">NXT 현재가 기준</small>}
+            {priceBasis && <small title="KRX 체결이 없는 시간이라 통합(NXT 포함) 현재가로 다시 잰 값 — 키움 앱과 같은 기준">통합 현재가 기준</small>}
           </div>
           <div className={`acct2-cell ${signOf(pnlTotal)}`}>
             <span>평가손익</span>

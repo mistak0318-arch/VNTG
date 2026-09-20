@@ -13,7 +13,8 @@ import {
 } from "../manualAccounts.js";
 import { allHistory, dropHistory, recordSnapshot } from "../manualHistory.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
-import { venueOpen } from "../orders.js";
+import { MIN, krxAfterMarket } from "../marketHours.js";
+import { isTradingDay } from "../tradingDay.js";
 import { peekSnapshot } from "../marketSnapshot.js";
 import { listThemes } from "../customThemes.js";
 
@@ -33,31 +34,59 @@ function signedNum(v: unknown): number {
  * **NXT 만 열린 시간엔 NXT 현재가로 다시 잰다** (2026-09-18 — 벤티지 08:48 캡처: 키움 앱 +214,694(+6.31%) vs 우리 +76,990(+2.26%)).
  *
  * kt00018 을 `dmst_stex_tp: KRX` 로 부르니 08:00~09:00·15:30~20:00 엔 **KRX 마지막 체결(어제 종가)** 로 평가가 나온다.
- * 키움 앱은 그 시간에 NXT 체결가로 보여 준다. 여기서 보유 종목마다 통합(_AL) 현재가(ka10095)를 받아 **차이만큼 더한다** —
+ * 키움 앱은 그 시간에 NXT 체결가로 보여 준다. 여기서 보유 종목의 통합(_AL) 현재가(ka10095)를 받아 **차이만큼 더한다** —
  * 평가손익·수익률은 키움 값(비용 포함)에 (새 값−옛 값)×수량을 얹는 식이라 비용을 두 번 빼지 않는다.
  * 정규장엔 손대지 않는다(KRX 값 그대로). 조회가 실패한 종목은 그대로 둔다.
  */
+/**
+ * **KRX 에 체결이 도는 시간인가** — 정규장 09:00~15:30 · 애프터마켓 16:00~20:00(9/14~).
+ *
+ * ⚠️ 처음엔 `venueOpen("KRX")` 로 물었는데 **그건 「주문을 받아 주나」이지 「체결이 도나」가 아니다.**
+ * KRX 는 08:30 부터 개장 동시호가 주문을 받지만 체결은 09:00 이라, 08:30~09:00 에는 잔고의 KRX 현재가가
+ * 여전히 **어제 종가**다. 그 사이 덮기가 꺼져 버려 키움 앱보다 손익이 과하게 나왔다
+ * (2026-09-21 08:50 실측 — 우리 −1.86% vs 키움 −0.58%. 통합가로 다시 재니 −0.57% 로 맞았다).
+ */
+function krxTrading(now = new Date()): boolean {
+  const d = new Date(now.getTime() + 9 * 3600_000);
+  const date = d.toISOString().slice(0, 10);
+  const minute = d.getUTCHours() * 60 + d.getUTCMinutes();
+  if (!isTradingDay(new Date(`${date}T12:00:00+09:00`))) return false;
+  if (minute >= MIN.regularOpen && minute <= MIN.regularClose) return true;
+  return krxAfterMarket(date, minute);
+}
+
 async function overlayNxtPrices(client: KiwoomClient, data: Record<string, unknown>): Promise<Record<string, unknown>> {
-  if (venueOpen("KRX") || !venueOpen("NXT")) return data;
+  if (krxTrading()) return data;
   const list = Array.isArray(data.acnt_evlt_remn_indv_tot) ? (data.acnt_evlt_remn_indv_tot as Record<string, unknown>[]) : [];
   if (list.length === 0) return data;
+  /*
+   * **한 번에 받는다** (2026-09-21). 처음엔 보유 종목마다 ka10095 를 따로 불렀다 — 계좌 화면이 20초마다
+   * 물으니 보유 열 종목이면 분당 서른 번이다. ka10095 는 `|` 로 여러 종목을 한 번에 준다(다른 곳과 같은 길).
+   */
+  const codes = [...new Set(list.map((r) => String(r.stk_cd ?? "").replace(/^A/, "").replace(/_.*$/, "")).filter((c) => /^\d{6}$/.test(c)))];
+  const priced = new Map<string, number>();
+  for (let i = 0; i < codes.length; i += 50) {
+    try {
+      const { data: q } = await client.request<Record<string, unknown>>("/api/dostk/stkinfo", "ka10095", {
+        stk_cd: codes.slice(i, i + 50).map((c) => `${c}_AL`).join("|"),
+      });
+      const rows = Array.isArray(q.atn_stk_infr) ? (q.atn_stk_infr as Record<string, unknown>[]) : [];
+      for (const row of rows) {
+        const c = String(row.stk_cd ?? "").replace(/_(AL|NX)$/i, "");
+        const p = toWon(row.cur_prc);
+        if (c && p > 0) priced.set(c, p);
+      }
+    } catch {
+      /* 이 묶음은 KRX 값 그대로 */
+    }
+  }
   let dEval = 0;
   const out: Record<string, unknown>[] = [];
   for (const r of list) {
     const code = String(r.stk_cd ?? "").replace(/^A/, "").replace(/_.*$/, "");
     const qty = toWon(r.rmnd_qty);
     const oldCur = toWon(r.cur_prc);
-    let cur = oldCur;
-    if (/^\d{6}$/.test(code) && qty > 0) {
-      try {
-        const { data: q } = await client.request<Record<string, unknown>>("/api/dostk/stkinfo", "ka10095", { stk_cd: code });
-        const rows = Array.isArray(q.atn_stk_infr) ? (q.atn_stk_infr as Record<string, unknown>[]) : [];
-        const p = toWon(rows[0]?.cur_prc);
-        if (p > 0) cur = p;
-      } catch {
-        /* 이 종목은 KRX 값 그대로 */
-      }
-    }
+    const cur = priced.get(code) ?? oldCur;
     if (cur === oldCur || qty <= 0) {
       out.push(r);
       continue;
@@ -71,7 +100,7 @@ async function overlayNxtPrices(client: KiwoomClient, data: Record<string, unkno
       evlt_amt: String(toWon(r.evlt_amt) + delta),
       evltv_prft: String(pnl),
       prft_rt: pur > 0 ? ((pnl / pur) * 100).toFixed(2) : r.prft_rt,
-      _basis: "NXT",
+      _basis: "통합",
     });
     dEval += delta;
   }
@@ -85,7 +114,7 @@ async function overlayNxtPrices(client: KiwoomClient, data: Record<string, unkno
     tot_evlt_pl: String(totPnl),
     tot_prft_rt: totPur > 0 ? ((totPnl / totPur) * 100).toFixed(2) : data.tot_prft_rt,
     prsm_dpst_aset_amt: String(toWon(data.prsm_dpst_aset_amt) + dEval),
-    _priceBasis: "NXT",
+    _priceBasis: "통합",
   };
 }
 
