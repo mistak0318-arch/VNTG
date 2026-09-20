@@ -39,6 +39,18 @@ function mark(v: boolean): void {
   for (const l of listeners) l(v);
 }
 
+/**
+ * **문지기가 로그인 페이지를 돌려줬다** (2026-09-21 추가) — 아래 `noteFetchFailure` 가 못 잡는 길이다.
+ *
+ * 그쪽은 요청이 **실패**했을 때(리다이렉트를 따라가다 CORS 에 막혀 TypeError) 도는데,
+ * 앱(WebView)에서는 Access 가 **200 에 로그인 HTML** 을 그대로 실어 보낼 때가 있다. 그러면 요청은
+ * 「성공」이라 여기까지 오지 못하고, 화면엔 `Unexpected token '<'` 같은 파서 오류만 떴다
+ * (벤티지 9/21 아침 캡처 — 시세분석이 그 글자만 크게 띄웠다).
+ */
+export function markAuthExpired(): void {
+  mark(true);
+}
+
 /** 다시 들어온 뒤 배너를 내린다 */
 export function clearAuthExpired(): void {
   mark(false);
@@ -64,4 +76,41 @@ export function noteFetchFailure(): void {
       checking = null;
     }
   })();
+}
+
+/**
+ * **모든 `/api/` 응답을 한 겹에서 지킨다** (2026-09-21).
+ *
+ * `api.ts` 의 `req()` 만 고쳐서는 안 됐다 — 컴포넌트 여럿이 `fetch` 를 **직접** 부르기 때문이다
+ * (BrokerFlowPanel·CumulativeRank·PriceHeader·ProgramFlowPanel·ChannelSearchPanel…).
+ * 그쪽으로 온 로그인 페이지는 가드도 못 보고 `res.json()` 에 닿아 `Unexpected token '<'` 로 끝났다
+ * (벤티지 9/21 아침 캡처). 파일 스무 개를 고치는 대신 **입구 한 곳**을 씌운다.
+ *
+ * 규칙은 `req()` 와 같다 — 우리 `/api/` 는 예외 없이 JSON 이므로 HTML 이 왔으면 둘 중 하나다:
+ *   200 + HTML → Cloudflare Access 로그인 페이지(세션 6시간). 인증 만료 띠를 세운다.
+ *   그 밖 + HTML → 서버의 기본 404·500 페이지. 인증과 무관하니 그대로 알린다.
+ */
+let guardInstalled = false;
+export function installApiGuard(): void {
+  if (guardInstalled || typeof window === "undefined" || typeof window.fetch !== "function") return;
+  guardInstalled = true;
+  const orig = window.fetch.bind(window);
+  const pathOf = (input: RequestInfo | URL): string => {
+    try {
+      const raw = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      return raw.startsWith("http") ? new URL(raw).pathname : raw;
+    } catch {
+      return "";
+    }
+  };
+  window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const res = await orig(input, init);
+    if (!pathOf(input).startsWith("/api/")) return res;
+    if (!/text\/html/i.test(res.headers.get("content-type") ?? "")) return res;
+    if (res.ok) {
+      mark(true);
+      throw new Error("로그인이 풀렸습니다 — 새로고침하면 다시 들어갑니다");
+    }
+    throw new Error(`서버가 JSON 대신 HTML 을 보냈습니다 (${res.status})`);
+  };
 }

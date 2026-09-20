@@ -1,4 +1,4 @@
-import { noteFetchFailure } from "./authGuard";
+import { noteFetchFailure, markAuthExpired } from "./authGuard";
 import { markNeedLogin } from "./loginState";
 
 export type RawRecord = Record<string, unknown>;
@@ -35,6 +35,24 @@ async function req(path: string, init?: RequestInit): Promise<Response> {
      */
     const selfAuth = path.startsWith("/api/auth/") || path.startsWith("/api/order/");
     if (res.status === 401 && !selfAuth) markNeedLogin();
+    /*
+     * **JSON 자리에 HTML 이 왔다** (2026-09-21 — 벤티지 아침 캡처 `Unexpected token '<', "<!DOCTYPE "`).
+     *
+     * 우리 `/api/` 는 예외 없이 JSON 이다. HTML 이 온 경우는 둘뿐인데 **상태 코드로 갈린다**:
+     *   200 + HTML → Cloudflare Access 의 **로그인 페이지**. 세션이 여섯 시간이라 밤새 지나면 아침 첫 요청이
+     *                여기로 떨어진다. 앱(WebView)에서는 리다이렉트가 아니라 본문으로 실려 와서 `noteFetchFailure`
+     *                가 못 잡았다 — 요청은 「성공」이었으니까. 그래서 인증 만료 띠를 직접 세운다.
+     *   그 밖 + HTML → 서버의 기본 404·500 페이지(없는 주소 등). 이건 인증 문제가 아니므로 그대로 알린다.
+     *
+     * 어느 쪽이든 `res.json()` 에 닿으면 파서 오류가 나 사람은 무슨 일인지 알 수 없다. 여기서 끊는다.
+     */
+    if (/text\/html/i.test(res.headers.get("content-type") ?? "")) {
+      if (res.ok) {
+        markAuthExpired();
+        throw new Error("로그인이 풀렸습니다 — 새로고침하면 다시 들어갑니다");
+      }
+      throw new Error(`서버가 JSON 대신 HTML 을 보냈습니다 (${res.status} ${path})`);
+    }
     return res;
   } catch (e) {
     noteFetchFailure();

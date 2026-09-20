@@ -12,6 +12,7 @@ import "./overview.css";
 import "./excel.css";
 import "./note.css";
 import "./reading.css";
+import { installApiGuard } from "./authGuard";
 import "./login.css";
 import "./keywordFlow.css";
 
@@ -26,6 +27,9 @@ import "./keywordFlow.css";
 void loadPrefs().then(() => {
   // 다른 기기가 배포한 기기별 설정(화면설정 등)이 있으면 렌더 전에 적용 — 도장이 중복을 막는다
   applyPushedPrefs();
+/* 인증 만료·HTML 응답을 입구에서 잡는다 (2026-09-21) — 렌더 전에 씌워야 첫 요청부터 걸린다 */
+installApiGuard();
+
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
       <AppearanceProvider>
