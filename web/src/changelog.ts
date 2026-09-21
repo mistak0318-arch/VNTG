@@ -6,11 +6,19 @@ export interface ChangeDay {
   items: { hash: string; subject: string }[];
 }
 
-/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-21T22:11:25.902Z */
+/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-21T22:29:47.803Z */
 export const CHANGELOG: ChangeDay[] = [
   {
     "date": "2026-09-22",
     "items": [
+      {
+        "hash": "7a3501f",
+        "subject": "일정·이벤트를 하루 일곱 번 — 06·08·12·15·17·19·22시"
+      },
+      {
+        "hash": "1a4f9e7",
+        "subject": "변경 이력 다시 굽기"
+      },
       {
         "hash": "8471ae4",
         "subject": "일정·이벤트를 06:00 과 20:00 에, 이름 바꾼 그 방으로"
@@ -1687,14 +1695,6 @@ export const CHANGELOG: ChangeDay[] = [
       {
         "hash": "7e7db2e",
         "subject": "수량 비율 단추와 금액→수량 · 비밀번호 기억하기(세션 한정) · 주문 설정 탭"
-      },
-      {
-        "hash": "5e70d03",
-        "subject": "매수·매도는 높이가 아니라 폭이었다 — 줄을 반반으로"
-      },
-      {
-        "hash": "5fbfb97",
-        "subject": "매수·매도 단추를 크게, 색은 꽉 차게 — 잘못 누르면 제일 비싼 실수다"
       }
     ]
   }
