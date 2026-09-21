@@ -645,15 +645,45 @@ export async function readLog(limit = 200): Promise<OrderLogRow[]> {
   }
 }
 
+/**
+ * 그 **KST 날짜에 적힌 줄만** 읽는다 (2026-09-21).
+ *
+ * `at` 은 ISO(UTC)라 KST 하루는 UTC 두 날에 걸친다. 줄을 파싱하기 전에 **문자열로** 두 날짜를 훑어 거른 뒤
+ * 남은 것만 JSON.parse 한다 — 파일이 수십만 줄이어도 파싱은 오늘치뿐이다.
+ */
+async function readLogOn(dateKst: string): Promise<OrderLogRow[]> {
+  const t = Date.parse(`${dateKst}T00:00:00+09:00`);
+  const d0 = new Date(t).toISOString().slice(0, 10);
+  const d1 = new Date(t + 86_400_000).toISOString().slice(0, 10);
+  try {
+    const out: OrderLogRow[] = [];
+    for (const l of (await fs.readFile(LOG_FILE, "utf8")).split("\n")) {
+      if (!l || (!l.includes(`"at":"${d0}`) && !l.includes(`"at":"${d1}`))) continue;
+      try {
+        const r = JSON.parse(l) as OrderLogRow;
+        if (kstParts(new Date(r.at)).date === dateKst) out.push(r);
+      } catch {
+        /* 깨진 줄은 건너뛴다 */
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
 /** 오늘(KST) 나간 주문의 합과 건수 — 한도는 **기록**에서 센다. 메모리는 재시작에 지워지니까 */
 async function todayUsage(): Promise<{ krw: number; count: number }> {
   const { date } = kstParts();
   /*
-   * 꼬리 8000줄이 아니라 **파일 전체**를 본다 (2026-09-18 전수검증 B5). raw·watch·fill 이 섞이면
-   * 바쁜 날 아침 주문이 꼬리 밖으로 밀려 한도가 헐거워졌다. readLog 는 어차피 파일을 다 읽고
-   * 자르므로 비용은 같다.
+   * 꼬리 8000줄이 아니라 **오늘 줄 전부**를 본다 (2026-09-18 B5 — 바쁜 날 아침 주문이 꼬리 밖으로 밀려
+   * 한도가 헐거워졌다).
+   *
+   * ⚠️ 그때 `readLog(MAX_SAFE_INTEGER)` 로 바꿨는데 「비용은 같다」가 틀렸다 (2026-09-21 회귀 점검 🟡) —
+   * 예전엔 자른 뒤 **그만큼만** JSON.parse 했는데 이제 파일 전체를 파싱한다. 이 파일은 append 전용이라
+   * 자라기만 한다. **날짜 문자열로 먼저 거르고** 그 줄만 파싱한다 — 세는 값은 그대로, 비용만 줄어든다.
    */
-  const rows = await readLog(Number.MAX_SAFE_INTEGER);
+  const rows = await readLogOn(date);
   let krw = 0;
   let count = 0;
   for (const r of rows) {
@@ -1217,14 +1247,20 @@ export async function prepareOrder(
   if (!/^\d{6}$/.test(input.code)) reject("종목코드가 6자리가 아니다", input, ip);
   if (!Number.isInteger(input.qty) || input.qty <= 0 || input.qty > 100_000) reject("수량이 이상하다", input, ip);
   if (input.price !== null && (!Number.isInteger(input.price) || input.price <= 0)) reject("가격이 이상하다", input, ip);
-  /* 호가 단위 (2026-09-18 B14, 벤티지 선택 「거절 + 맞춘 값 제안」) — 틀리면 키움이 마지막에 거절하고 「5분 3회 거절」에도 셌다 */
-  if (input.price !== null && toTick(input.price) !== input.price) {
-    const lo = toTick(input.price);
-    reject(`호가 단위가 아니다 — ${lo.toLocaleString()} 또는 ${(lo + tickOf(input.price)).toLocaleString()} 으로 (단위 ${tickOf(input.price)}원)`, input, ip);
-  }
-  if (input.condPrice !== null && input.condPrice !== undefined && input.condPrice > 0 && toTick(input.condPrice) !== input.condPrice) {
-    const lo = toTick(input.condPrice);
-    reject(`발동가가 호가 단위가 아니다 — ${lo.toLocaleString()} 또는 ${(lo + tickOf(input.condPrice)).toLocaleString()} 으로`, input, ip);
+  /*
+   * 호가 단위 (2026-09-18 B14, 벤티지 선택 「거절 + 맞춘 값 제안」).
+   * **주식일 때만** 본다 — 표가 주식 것이라 ETF·ETN(전 구간 5원)에 대면 정상 값을 튕겨낸다
+   * (2026-09-21 회귀 점검 🟠). 종목 종류를 못 읽으면 **안 막는다** — 키움이 판정하게 둔다.
+   */
+  if (await tickChecked(input.code)) {
+    if (input.price !== null && toTick(input.price) !== input.price) {
+      const lo = toTick(input.price);
+      reject(`호가 단위가 아니다 — ${lo.toLocaleString()} 또는 ${(lo + tickOf(input.price)).toLocaleString()} 으로 (단위 ${tickOf(input.price)}원)`, input, ip);
+    }
+    if (input.condPrice !== null && input.condPrice !== undefined && input.condPrice > 0 && toTick(input.condPrice) !== input.condPrice) {
+      const lo = toTick(input.condPrice);
+      reject(`발동가가 호가 단위가 아니다 — ${lo.toLocaleString()} 또는 ${(lo + tickOf(input.condPrice)).toLocaleString()} 으로`, input, ip);
+    }
   }
   if (input.condPrice !== null && (!Number.isInteger(input.condPrice) || input.condPrice <= 0)) {
     reject("조건단가가 이상하다", input, ip);
@@ -1669,14 +1705,16 @@ export async function prepareModify(
   if (!Number.isInteger(input.qty) || input.qty <= 0) reject("정정 수량은 1주 이상", input, ip);
   if (input.remain > 0 && input.qty > input.remain) reject(`정정 수량 ${input.qty}주가 남은 ${input.remain}주를 넘는다`, input, ip);
   if (!Number.isFinite(input.price) || input.price <= 0) reject("정정 단가가 없다", input, ip);
-  /* 호가 단위 (2026-09-18 B14) — 새 주문과 같은 잣대 */
-  if (toTick(input.price) !== input.price) {
-    const lo = toTick(input.price);
-    reject(`정정 단가가 호가 단위가 아니다 — ${lo.toLocaleString()} 또는 ${(lo + tickOf(input.price)).toLocaleString()} 으로 (단위 ${tickOf(input.price)}원)`, input, ip);
-  }
-  if (input.condPrice !== null && input.condPrice > 0 && toTick(input.condPrice) !== input.condPrice) {
-    const lo = toTick(input.condPrice);
-    reject(`정정 발동가가 호가 단위가 아니다 — ${lo.toLocaleString()} 또는 ${(lo + tickOf(input.condPrice)).toLocaleString()} 으로`, input, ip);
+  /* 호가 단위 (2026-09-18 B14) — 새 주문과 같은 잣대. 주식일 때만 (2026-09-21 회귀 점검) */
+  if (await tickChecked(input.code)) {
+    if (toTick(input.price) !== input.price) {
+      const lo = toTick(input.price);
+      reject(`정정 단가가 호가 단위가 아니다 — ${lo.toLocaleString()} 또는 ${(lo + tickOf(input.price)).toLocaleString()} 으로 (단위 ${tickOf(input.price)}원)`, input, ip);
+    }
+    if (input.condPrice !== null && input.condPrice > 0 && toTick(input.condPrice) !== input.condPrice) {
+      const lo = toTick(input.condPrice);
+      reject(`정정 발동가가 호가 단위가 아니다 — ${lo.toLocaleString()} 또는 ${(lo + tickOf(input.condPrice)).toLocaleString()} 으로`, input, ip);
+    }
   }
   const g = await getGuard();
   /* 단가 울타리 — 새 주문과 같은 잣대. 0 을 하나 더 친 손가락은 정정에서도 잡는다 */
@@ -2545,10 +2583,34 @@ function watchTo(date: string): number {
   return afterMarketEra(date) ? MIN.afterClose : WATCH_TO_OLD;
 }
 
-/** 호가 단위 (KRX 2023-01) */
+/**
+ * 호가 단위 (KRX 2023-01) — **코스피·코스닥 「주식」 표**다.
+ *
+ * ⚠️ ETF·ETN 은 전 구간 5원이라 이 표와 다르다. 그래서 아래 `tickChecked` 가 **주식일 때만** 이 표로
+ * 주문서를 거른다 (2026-09-21 회귀 점검 🟠 — 9/18 에 넣은 B14 가 ETF 24,105원 같은 정상 값을
+ * 「호가 단위가 아니다」로 튕겨내고 있었다. 돈이 나가는 길에서 **우리가 먼저 막는 것**이 제일 나쁘다).
+ */
 function tickOf(p: number): number {
   return p < 2000 ? 1 : p < 5000 ? 5 : p < 20000 ? 10 : p < 50000 ? 50 : p < 200000 ? 100 : p < 500000 ? 500 : 1000;
 }
+/**
+ * 이 종목에 **주식 호가표를 들이대도 되나** (2026-09-21 회귀 점검).
+ *
+ * `marketName` 이 「거래소」일 때만 참이다. ETF·ETN 은 전 구간 5원이라 표가 다르고, 코스닥 상위 구간도
+ * 확인 전이다 — **모르면 안 막는다**가 이 자리의 규칙이다. 주문서에서 잘못 막으면 살 수 있는 것을 못 산다.
+ * 목록은 캐시라 조회가 안 는다(애프터 판정이 쓰는 그 길).
+ */
+async function tickChecked(code: string): Promise<boolean> {
+  try {
+    const oc = orderClient();
+    if (!oc) return false;
+    const entry = await getStockIndex(oc).then((m) => m.get(code));
+    return entry?.marketName === "거래소";
+  } catch {
+    return false;
+  }
+}
+
 function toTick(p: number): number {
   const t = tickOf(p);
   return Math.floor(p / t) * t;
