@@ -256,7 +256,7 @@ export function createMarketRouter(client: KiwoomClient): Router {
    * 「중요」를 고르지만 우리는 **네 포트폴리오 기준**으로 고를 수 있다.
    *
    * 비용: `ka10095` 는 `|` 로 여러 종목을 한 번에 준다 — 뉴스 한 쪽(30여 종목)이 **조회 1~2회**.
-   * 60초 캐시라 같은 목록을 다시 열어도 안 는다. 보유는 주문 쪽 계좌 캐시(2.5초)를 얹기만 한다.
+   * 30초 캐시라 같은 목록을 다시 열어도 안 는다. 보유는 주문 쪽 계좌 캐시(2.5초)를 얹기만 한다.
    */
   router.get("/quotes", async (req, res, next) => {
     try {
@@ -300,7 +300,7 @@ export function createMarketRouter(client: KiwoomClient): Router {
       for (const [code, q] of Object.entries(quotes)) {
         q.mine = held.has(code) ? "hold" : watched.has(code) ? "watch" : null;
       }
-      res.set("Cache-Control", "private, max-age=60");
+      res.set("Cache-Control", "private, max-age=30");
       res.json({ quotes });
     } catch (err) {
       next(err);

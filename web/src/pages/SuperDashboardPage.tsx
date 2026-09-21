@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   api,
   type SuperEntry,
@@ -743,7 +743,49 @@ export function SuperDashboardPage({
     void load();
   }, []);
 
-  const visible = showExited ? entries : entries.filter((e) => e.active !== false);
+  /*
+   * **현재가·당일이 최대 10분 묵던 것** (2026-09-21 — 벤티지: "슈퍼신호등 당일시세랑 해당종목 현재가랑 싱크가
+   * 맞지 않음").
+   *
+   * 서버가 두 칸을 **마켓 스냅샷**에서 붙여 주는데 그 캐시가 장중 10분이다(`marketSnapshot.INTRADAY_TTL_MS`).
+   * 두 칸끼리는 맞지만 **둘 다 같이 늙어서**, 종목을 눌러 상세로 들어가면 거기 실시간가와 눈에 띄게 어긋났다.
+   *
+   * 이 화면은 다른 목록 화면(시세분석·거래상위)과 달리 실시간 덮기가 아예 없었다. 그렇다고 실시간을 걸기도
+   * 애매하다 — 구독 정원(175)은 **관심종목 + 거래대금 상위**로 차 있어서 슈퍼 종목이 들 수도, 안 들 수도 있다.
+   * 줄마다 신선도가 다르면 오히려 못 믿는다. 그래서 **모든 줄에 고르게** 묶음 시세(ka10095 통합가, 서버 60초
+   * 캐시)를 30초마다 얹는다 — 조회는 50종목당 한 번이다.
+   */
+  const [live, setLive] = useState<Record<string, { price: number; changeRate: number }>>({});
+  useEffect(() => {
+    const codes = [...new Set(entries.filter((e) => e.active !== false).map((e) => e.code))].filter((c) => /^\d{6}$/.test(c));
+    if (codes.length === 0) return;
+    let alive = true;
+    const pull = () => {
+      if (document.visibilityState !== "visible") return; // 안 보는 동안은 쉰다
+      api
+        .marketQuotes(codes)
+        .then((r) => alive && setLive(r.quotes))
+        .catch(() => undefined);
+    };
+    pull();
+    const t = window.setInterval(pull, 30_000);
+    return () => {
+      alive = false;
+      window.clearInterval(t);
+    };
+  }, [entries]);
+
+  /* 얹기 — 값이 온 종목만 갈아끼운다. 안 온 종목은 스냅샷 값 그대로(빈 칸으로 만들지 않는다) */
+  const fresh = useMemo(
+    () =>
+      entries.map((e) => {
+        const q = live[e.code];
+        return q ? { ...e, price: q.price, changeRate: q.changeRate } : e;
+      }),
+    [entries, live],
+  );
+
+  const visible = showExited ? fresh : fresh.filter((e) => e.active !== false);
   /*
    * 기본 정렬 = **지금 점수 높은 순** (2026-08-27 사용자 지정 "점수높은순으로").
    * 점수는 일별 기록의 마지막(오늘 자)이 있으면 그걸, 없으면 편입 점수를 쓴다 —
