@@ -7,6 +7,7 @@ import { doneToday, markToday } from "./dayMark.js";
 import { loadThemes } from "./naverThemes.js";
 import { getCommonStockCodes } from "./stockListCache.js";
 import { MIN, afterMarketEra, dayFullySettled } from "./marketHours.js";
+import { isTradingDate, isTradingDay } from "./tradingDay.js";
 import { getKrxPrices, getMarketSnapshot } from "./marketSnapshot.js";
 
 /**
@@ -338,6 +339,18 @@ export async function captureRegularCloses(client: KiwoomClient): Promise<number
   const date = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
   if (!afterMarketEra(date)) return 0; // 9/13 까지는 일봉 한 바퀴가 곧 정규장 종가다
   /*
+   * **휴장일엔 안 찍는다** (2026-09-21 — 벤티지: "두산에너빌리티 종가가 왜 다 다른거야").
+   *
+   * 여태 요일을 안 봐서 **토·일에도 파일이 생겼다**. 그 시각 키움이 주는 현재가는 금요일의 마지막
+   * 체결가 — 9/14 부터는 그게 **애프터 종가**다. 그래서 `2026-09-19.json`·`2026-09-20.json` 에
+   * 두산에너빌리티가 85,700(금요일 애프터 종가)으로 들어갔다. 금요일 정규장 종가는 84,900 이다.
+   *
+   * 그 결과 월요일 종목상세의 「정규장 종가 · 전일 대비」가 **금요일 애프터 기준**으로 나왔다 —
+   * 85,300 이 +0.47% 가 아니라 −0.47% 로, 오른 날이 내린 날로 보였다. 월요일 아침 NXT 프리의
+   * 괴리율 기준값도 같은 파일을 본다.
+   */
+  if (!isTradingDay(new Date(`${date}T12:00:00+09:00`))) return 0;
+  /*
    * ⚠️ **KRX 가격으로 찍는다** (2026-09-14 고침). 처음엔 시황 스냅샷(통합 KRX+NXT)을 썼는데,
    * 15:30~16:00 엔 KRX 가 닫히고 NXT 만 돌아서 **통합 가격이 곧 NXT 의 그 시각 값**이었다.
    * 「정규장 종가」라고 적은 파일에 NXT 15시 40~50분 값이 들어간 셈이다. KRX 로만 받으면
@@ -417,9 +430,14 @@ export async function latestRegularCloses(onOrBefore: string): Promise<{ date: s
   } catch {
     return null;
   }
+  /*
+   * ⚠️ **거래일 파일만 본다** (2026-09-21). 위 주석의 「파일이 있는 날이 곧 장이 선 날」이라는 전제가
+   * 깨져 있었다 — 찍는 쪽이 요일을 안 봐서 주말 파일이 쌓였다. 찍는 쪽은 고쳤지만 **이미 생긴
+   * 주말 파일**(9/19·9/20 …)이 남아 있으므로 고르는 쪽에서도 거른다. 지우지 않고 건너뛴다.
+   */
   const dates = names
     .map((n) => n.replace(/\.json$/, ""))
-    .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= onOrBefore)
+    .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= onOrBefore && isTradingDate(d))
     .sort();
   const date = dates[dates.length - 1];
   if (!date) return null;
