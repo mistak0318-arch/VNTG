@@ -496,9 +496,19 @@ export async function runAfterClose(
   const sameDay = prevState?.day === day;
   await saveState({
     day,
-    startedAt: isWrap && sameDay && prevState ? prevState.startedAt : run.startedAt,
-    /* 마무리 회차는 정규 회차의 「끝났다」를 지우지 않는다 */
-    finishedAt: isWrap && sameDay && prevState ? prevState.finishedAt : null,
+    /*
+     * **부분 회차는 「그날」을 건드리지 않는다** (2026-09-21 회귀 점검 🔴).
+     *
+     * 예전엔 `isWrap` 만 봐서, 설정에서 **「①일봉만」·「②원장만」을 손으로 누르면**(routes/signal.ts 의
+     * 「손으로 눌렀다」) 그 부분 회차가 `finishedAt` 을 지금 시각으로 찍고 `failedSteps` 를 비웠다.
+     * 그러면 위 :452 가드(「오늘 끝났고 실패 없음」)가 **그날 15:55 정규 회차를 통째로 건너뛰었다** —
+     * 9/21 에 겪은 「조용한 건너뜀」과 같은 종류다. 시작할 때 `finishedAt: null` 로 지우는 것도 반대로
+     * 위험했다(정규 회차가 이미 끝난 날 ①을 누르면 그날이 「안 끝남」으로 되돌아간다).
+     *
+     * 규칙: **그날이 끝났는지는 정규 회차(only 없는 전체 회차)만 말한다.**
+     */
+    startedAt: partial && sameDay && prevState ? prevState.startedAt : run.startedAt,
+    finishedAt: partial && sameDay && prevState ? prevState.finishedAt : null,
     /* 부분 회차(재시도·마무리·손으로 고른 것)는 오늘 실패 목록을 이어 쓴다 — 새 회차만 비운다 */
     failedSteps: partial && sameDay && prevState ? prevState.failedSteps : [],
     retryTried: partial && sameDay && prevState ? prevState.retryTried : 0,
@@ -832,9 +842,9 @@ export async function runAfterClose(
     const carried = (state?.day === day ? state.failedSteps : []).filter((k) => !want(k));
     await saveState({
       day,
-      startedAt: isWrap && state?.day === day ? state.startedAt : run.startedAt,
-      /* 마무리 회차가 끝나도 「끝난 시각」은 정규 회차 것 — 그날이 끝났는지는 정규 회차가 말한다 */
-      finishedAt: isWrap && state?.day === day && state.finishedAt ? state.finishedAt : run.finishedAt,
+      startedAt: partial && state?.day === day ? state.startedAt : run.startedAt,
+      /* 부분 회차(마무리·재시도·손으로 고른 것)가 끝나도 「끝난 시각」은 정규 회차 것 (2026-09-21 회귀 점검 🔴) */
+      finishedAt: partial && state?.day === day ? (state.finishedAt ?? null) : run.finishedAt,
       failedSteps: [...new Set([...carried, ...failedNow])],
       retryTried: state?.day === day ? state.retryTried : 0,
     }).catch((e) => console.error("[afterClose] 상태 파일 못 씀 —", e instanceof Error ? e.message : e));
@@ -978,7 +988,13 @@ export function startAfterCloseScheduler(client: KiwoomClient): void {
      * (2026-09-10 전수 점검 F) **재시작 뒤** — 메모리(run·retry)가 비어 있으면 상태 파일에서 되살린다.
      * 오늘 끝났고 실패 없음 → 아무것도 안 한다. 실패 단계 있음 → 아래 ①이 그것만 다시 돌린다.
      */
-    if (!run && !retry) {
+    /*
+     * ⚠️ `!run && !retry` 였다 (2026-09-21 회귀 점검 🟠). A1 이 마무리 블록의 `return` 을 걷어낸 뒤로는,
+     * 20:10 마무리가 돈 날 `run` 에 **마무리 회차 결과**가 들어 있어 이 복구가 건너뛰어졌다. 그러면 아래 ①도
+     * `retry` 가 없어 건너뛰고 ②가 **두 시간짜리 정규 회차를 통째로 다시** 돌렸다(성공한 단계까지, 시작 알림도 다시).
+     * `retry` 만 보면 마무리 뒤에도 상태 파일에서 재시도 시계를 되살려 ①이 **실패한 단계만** 돌린다.
+     */
+    if (!retry) {
       const st = await loadState().catch(() => null);
       if (st?.day === day && st.finishedAt) {
         if (st.failedSteps.length === 0) return;
