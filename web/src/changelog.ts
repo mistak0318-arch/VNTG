@@ -6,11 +6,19 @@ export interface ChangeDay {
   items: { hash: string; subject: string }[];
 }
 
-/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-21T12:45:06.270Z */
+/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-21T12:50:22.345Z */
 export const CHANGELOG: ChangeDay[] = [
   {
     "date": "2026-09-21",
     "items": [
+      {
+        "hash": "c4f4ed8",
+        "subject": "월요일마다 「정규장 종가 · 전일 대비」가 뒤집히던 것 — 주말에도 종가 파일을 찍었다"
+      },
+      {
+        "hash": "79dd9a7",
+        "subject": "변경 이력 다시 굽기"
+      },
       {
         "hash": "21ff5a8",
         "subject": "「조용한 건너뜀」 훑기 기록 — 고친 여섯, 남긴 다섯 (S1~S11)"
@@ -1682,14 +1690,6 @@ export const CHANGELOG: ChangeDay[] = [
       {
         "hash": "7de0e92",
         "subject": "호가를 누르면 값이 들어간다 · PC 폭 상한 · 장운영구분(0s)은 켜서 적기만"
-      },
-      {
-        "hash": "508def3",
-        "subject": "스톱지정가 — 없다고 한 것이 있었다. 매매구분 둘에서 열여덟로"
-      },
-      {
-        "hash": "55dd309",
-        "subject": "사이드바 숨기기 — 시스에게 말해도, [ ] 세 번 연타로도. 설정에서 키를 바꾼다"
       }
     ]
   }
