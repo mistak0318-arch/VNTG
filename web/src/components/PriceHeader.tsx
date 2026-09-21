@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import { api, fmtAbsNum, fmtNum, type ExchangeQuote, type MarkWhy, type RawRecord } from "../api";
 import { PeriodReturns, type LastSession } from "./PeriodReturns";
+import { MiniCandle } from "./MiniCandle";
 import { afterMarketEra, krPhase, type KrPhase } from "../marketSession";
 
 /**
@@ -425,6 +426,25 @@ export function PriceHeader({
         </div>
         <div className={`ph-price ${rolled ? (fluRt > 0 ? "positive" : fluRt < 0 ? "negative" : "") : preOpen && !hasCur ? "" : sign}`}>
           {fmtAbsNum(mainPrice)}
+          {/*
+           * **큰 숫자 옆에 당일 봉** (2026-09-22 — 벤티지: "종목 상세 앞에 그 종목 가격 있지, 거기에도
+           * 당일 봉 그려줄래? 한눈에 볼수 있게").
+           *
+           * 조회가 안 는다 — 이 시트가 이미 시·고·저·전일종가를 다 들고 있다(아래 `ph-grid` 가 그 값을
+           * 표로 그린다). 같은 값을 그림 하나로 겹쳐 주는 것뿐이다. 「+1.77% 인데 고가에서 밀린 건가,
+           * 저가에서 올라온 건가」가 숫자 세 줄을 읽지 않아도 보인다.
+           */}
+          {(() => {
+            const n = (v: unknown): number => Math.abs(Number(String(v ?? "").replace(/[+,\s]/g, ""))) || 0;
+            const o = rolled ? n(last?.open) : n(krx?.open) || n(fillOk ? fill(info.open_pric, last?.open) : info.open_pric);
+            const h = rolled ? n(last?.high) : n(krx?.high) || n(fillOk ? fill(info.high_pric, last?.high) : info.high_pric);
+            const l = rolled ? n(last?.low) : n(krx?.low) || n(fillOk ? fill(info.low_pric, last?.low) : info.low_pric);
+            const c = n(mainPrice);
+            /* 전일 종가 — 기준가가 있으면 그것(권리락 날은 어제 종가와 다르다) */
+            const pc = n(info.base_pric) || (rolled ? n(last?.base) : 0);
+            if (!(o > 0 && h > 0 && l > 0 && c > 0)) return null;
+            return <MiniCandle d={{ o, h, l, c, pc }} size="lg" />;
+          })()}
         </div>
         {/* 통합 값이 있으면 프리장에도 등락을 적는다(NXT 체결 기준). 없을 때만 생략 */}
         {!(preOpen && !hasCur) && (

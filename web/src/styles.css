@@ -19614,3 +19614,7 @@ tr.gv-strong td:first-child { color: var(--text); }
 .daycandle.dcd-down .dcd-wick { stroke: var(--blue); }
 .daycandle.dcd-down .dcd-body { fill: var(--blue); }
 .dcd-none { color: var(--muted); display: block; text-align: center; }
+
+/* 종목 상세 큰 숫자 옆의 당일 봉 (2026-09-22) — 숫자와 같은 줄, 가운데 맞춤 */
+.ph-price .daycandle { display: inline-block; vertical-align: middle; margin-left: 12px; }
+.daycandle-lg .dcd-wick { stroke-width: 1.6; }

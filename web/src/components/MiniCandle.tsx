@@ -22,10 +22,17 @@ export interface MiniCandleData {
   pc: number;
 }
 
-const W = 11;
-const H = 26;
+/** 표 칸용(sm)과 종목 상세의 큰 숫자 옆(lg) — 같은 그림, 크기만 다르다 (2026-09-22) */
+const SIZES = { sm: { w: 11, h: 26 }, lg: { w: 20, h: 46 } } as const;
 
-export function MiniCandle({ d }: { d: MiniCandleData | null | undefined }): React.ReactElement {
+export function MiniCandle({
+  d,
+  size = "sm",
+}: {
+  d: MiniCandleData | null | undefined;
+  size?: keyof typeof SIZES;
+}): React.ReactElement {
+  const { w: W, h: H } = SIZES[size];
   if (!d || !(d.h > 0) || !(d.l > 0) || d.h < d.l) return <span className="dcd-none">-</span>;
   const span = d.h - d.l;
   /* 고·저가 같은 날(상한가 직행·거래 한 틱) — 가운데 가로줄 하나 */
@@ -36,12 +43,12 @@ export function MiniCandle({ d }: { d: MiniCandleData | null | undefined }): Rea
   const bodyTop = Math.min(y(d.o), y(d.c));
   const bodyBot = Math.max(y(d.o), y(d.c));
   /* 몸통이 1px 보다 얇으면 안 보인다 — 도지도 선으로 보이게 최소 높이를 준다 */
-  const bodyH = Math.max(1.4, bodyBot - bodyTop);
+  const bodyH = Math.max(size === "lg" ? 2 : 1.4, bodyBot - bodyTop);
   const pcIn = d.pc > 0 && d.pc >= d.l && d.pc <= d.h && !flat;
   const range = d.l > 0 ? ((d.h - d.l) / d.l) * 100 : 0;
   return (
     <svg
-      className={`daycandle ${cls}`}
+      className={`daycandle daycandle-${size} ${cls}`}
       width={W}
       height={H}
       viewBox={`0 0 ${W} ${H}`}
@@ -50,7 +57,7 @@ export function MiniCandle({ d }: { d: MiniCandleData | null | undefined }): Rea
       <title>{`시 ${d.o.toLocaleString()} · 고 ${d.h.toLocaleString()} · 저 ${d.l.toLocaleString()} · 현 ${d.c.toLocaleString()}\n일중 변동폭 ${range.toFixed(1)}%`}</title>
       {pcIn && <line className="dcd-prev" x1={0} x2={W} y1={y(d.pc)} y2={y(d.pc)} />}
       {!flat && <line className="dcd-wick" x1={W / 2} x2={W / 2} y1={y(d.h)} y2={y(d.l)} />}
-      <rect className="dcd-body" x={2.5} y={flat ? H / 2 - 0.7 : bodyTop} width={W - 5} height={flat ? 1.4 : bodyH} />
+      <rect className="dcd-body" x={W * 0.23} y={flat ? H / 2 - 0.7 : bodyTop} width={W * 0.54} height={flat ? 1.4 : bodyH} />
     </svg>
   );
 }
