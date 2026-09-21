@@ -6039,6 +6039,42 @@ button.nav-group-toggle {
 .candle-tip .up { color: var(--red); }
 .candle-tip .down { color: var(--blue); }
 .candle-tip .ct-dot { width: 7px; height: 2px; border-radius: 1px; display: inline-block; }
+/*
+ * 폰·좁은 칸 (2026-09-21 — 벤티지: "모바일에서는 아무것도 안 보이네 아주").
+ *
+ * 세로로 열세 줄짜리 상자가 350px 차트를 통째로 덮었다. **두 칸으로 눕혀** 높이를 반으로 줄이고,
+ * 차트 **아래**(거래량 막대 자리)에 붙여 정작 보려는 봉을 비운다. 배경은 불투명으로 — 반투명은
+ * 넓은 화면에서 「뒤에 뭐가 있나」를 알려 주려던 것인데, 좁은 화면에서는 글자를 못 읽게 만들 뿐이다.
+ * 자리(left·top·bottom)는 JS 가 넣는다 — 인라인이라 여기서 겹쳐 쓰지 않는다.
+ */
+@media (max-width: 720px) {
+  .candle-tip {
+    /* display 는 JS 가 grid 로 켠다 — 여기서 건드리면 숨김/켬이 어긋난다 */
+    grid-template-columns: 1fr 1fr;
+    column-gap: 10px;
+    row-gap: 1px;
+    max-height: 58%;
+    overflow: hidden;
+    background: var(--panel);
+    backdrop-filter: none;
+    box-shadow: 0 -4px 14px rgba(0, 0, 0, 0.3);
+  }
+  .candle-tip .ct-name,
+  .candle-tip .ct-date,
+  .candle-tip .ct-sub { grid-column: 1 / -1; }
+  .candle-tip .ct-date { margin-bottom: 2px; }
+  .candle-tip .ct-sub { margin-top: 4px; padding-top: 3px; }
+  /*
+   * 한 칸이 ~145px 다. 라벨·값·이격도 셋을 넣어야 하니 폭을 아껴 쓴다 —
+   * 넓게 잡았더니 긴 숫자가 칸을 밀어 **이격도의 % 가 잘렸다**(실측 2026-09-21).
+   * 라벨은 줄바꿈 금지(「거래대금」이 두 줄로 깨지던 것), 값 칸은 `minmax(0,…)` 로 줄어들 수 있게.
+   */
+  .candle-tip { font-size: 0.7rem; column-gap: 8px; }
+  .candle-tip .ct-row { grid-template-columns: 44px minmax(0, 1fr) 46px; column-gap: 3px; line-height: 1.35; }
+  .candle-tip .ct-row > span { white-space: nowrap; }
+  /* 거래량·거래대금은 숫자가 길다 — 두 칸에 욱여넣지 않고 한 줄을 다 쓴다 */
+  .candle-tip .ct-wide { grid-column: 1 / -1; grid-template-columns: 52px minmax(0, 1fr) 58px; }
+}
 
 /* ===== 미국 ↔ 국내 테마 연동 =====
    왼쪽 미국 / 오른쪽 국내를 나란히. 연결은 가설이므로 단정적으로 보이지 않게 둔다 */

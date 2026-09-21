@@ -999,14 +999,21 @@ export function CandleChart({
           );
         })() +
         (pf.tip.includes("volume")
-          ? `<div class="ct-row"><span>거래량</span><b>${won(cur.volume)}</b><i>${volRate}</i></div>` +
+          ? /* `ct-wide` — 숫자가 길어 좁은 화면 두 칸 격자에선 한 줄을 다 쓴다 (2026-09-21) */
+            `<div class="ct-row ct-wide"><span>거래량</span><b>${won(cur.volume)}</b><i>${volRate}</i></div>` +
             (cur.value !== undefined && cur.value > 0
-              ? `<div class="ct-row"><span>거래대금</span><b>${valueEok(cur.value)}</b><i>${valueRate()}</i></div>`
+              ? `<div class="ct-row ct-wide"><span>거래대금</span><b>${valueEok(cur.value)}</b><i>${valueRate()}</i></div>`
               : "")
           : "") +
         (maRows ? `<div class="ct-sub">가격 이동평균</div>${maRows}` : "");
 
-      tip.style.display = "block";
+      /* 좁은 화면은 두 칸 격자(아래 참고) — 켜는 순간 어떤 배치인지 JS 가 정한다. CSS 에 인라인 감지 같은 꼼수를 두지 않는다 */
+      /*
+       * CSS 미디어쿼리(≤720px)와 **같은 문턱**을 써야 한다 — 한쪽만 걸리면 두 칸 격자인데 위 구석에 붙거나,
+       * 아래에 눕혔는데 한 칸으로 길어진다. 창이 넓어도 차트 칸이 좁으면(카드 안) 같이 눕힌다.
+       */
+      const narrow = window.innerWidth <= 720 || el.clientWidth < 520;
+      tip.style.display = narrow ? "grid" : "block";
       /*
        * ⚠️ **커서를 따라다니지 않는다.**
        *
@@ -1018,10 +1025,29 @@ export function CandleChart({
        * 봉을 보면 왼쪽에 뜨므로 보려는 자리는 언제나 비어 있다. 상자가 안 움직이니
        * 눈이 따라다니지 않아도 되는 것도 덤이다.
        */
-      const w = tip.offsetWidth;
-      const left = param.point.x < el.clientWidth / 2 ? el.clientWidth - w - 8 : 8;
-      tip.style.left = `${Math.max(4, left)}px`;
-      tip.style.top = "8px";
+      /*
+       * **좁은 화면에서는 구석이 없다** (2026-09-21 — 벤티지: "차트에서 봉 눌러서 나오는 거 모바일에서는
+       * 아무것도 안 보이네 아주").
+       *
+       * 폰 차트는 폭 350px 남짓인데 말풍선은 OHLC·내 매매·거래량·이동평균까지 열세 줄이라, 어느 구석에
+       * 붙여도 차트를 통째로 덮었다. 게다가 배경이 반투명이라 뒤의 봉이 비쳐 글자까지 읽기 어려웠다.
+       *
+       * 좁을 때는 **아래에 가로로 눕힌다** — CSS 가 두 칸 격자로 바꿔 높이를 반으로 줄이고(아래 미디어
+       * 쿼리), 자리는 거래량 막대가 있는 바닥이라 정작 보려는 봉은 안 가린다. 배경도 불투명으로 바꾼다.
+       */
+      if (narrow) {
+        tip.style.left = "4px";
+        tip.style.right = "4px";
+        tip.style.top = "auto";
+        tip.style.bottom = "6px";
+      } else {
+        tip.style.right = "auto";
+        tip.style.bottom = "auto";
+        const w = tip.offsetWidth;
+        const left = param.point.x < el.clientWidth / 2 ? el.clientWidth - w - 8 : 8;
+        tip.style.left = `${Math.max(4, left)}px`;
+        tip.style.top = "8px";
+      }
     };
     chart.subscribeCrosshairMove(onMove);
 
