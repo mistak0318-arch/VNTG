@@ -1,6 +1,7 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { equityOf, loadAccount, markToMarket, saveAccount, sell, today } from "./cisAccount.js";
 import { ACCOUNT_IDS, profileOf, styleOf, type AccountId } from "./cisAccounts.js";
+import { noteWhyNot } from "./cisWhyNot.js";
 import { stampLast } from "./cisVerify.js";
 import { getCisConfig, rulesFor } from "./cisConfig.js";
 import { exitCalls, sellBasis, trailStops } from "./cisTrader.js";
@@ -309,6 +310,20 @@ async function buyScan(client: KiwoomClient, id: AccountId, everyMin: number): P
     : `스캔(${modeOfSlot(slot) === "open" ? "시가" : modeOfSlot(slot) === "intra" ? "장중" : "종가"}배팅) — 시장 ${r.gate.label} ${r.gate.score}점 · 체에 걸림 ${r.sieved.length}${r.sieved.length > 0 ? ` [${top(r.sieved, 3)}]` : ""} · 자리 조건 미달 ${gateBad.length}${gateBad.length > 0 ? ` [${top(gateBad, 3)}]` : ""} · 통과 ${r.candidates.length} · 계획 ${r.plans.length} · 샀다 ${r.actions.length}` +
       (r.aiError ? ` · AI 오류: ${r.aiError}` : "");
   await addIntraday(id, { kind: "scan", text }).catch(() => undefined);
+  /*
+   * **사유별로도 센다** (2026-09-21). 위 한 줄짜리 글은 상위 3개 이름뿐이라 「이번 달에 뭐 때문에
+   * 제일 많이 안 샀나」를 물을 수가 없었다. 세기만 하고 판단은 안 건드린다 — `cisWhyNot.ts` 머리 참고.
+   */
+  void noteWhyNot(id, {
+    gateOk: r.gate.ok,
+    gateReason: r.gate.reason,
+    sieved: r.sieved.map((x) => x.reason),
+    gateBad: gateBad.map((x) => x.reason),
+    skipped: r.skipped.map((x) => x.reason),
+    passed: r.candidates.length,
+    planned: r.plans.length,
+    bought: r.actions.length,
+  });
   if (r.actions.length === 0) return;
 
   for (const act of r.actions) {

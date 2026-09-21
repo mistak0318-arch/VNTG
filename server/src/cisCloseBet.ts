@@ -6,6 +6,7 @@ import { evaluateSignal } from "./signalLight.js";
 import { getMarketSnapshot } from "./marketSnapshot.js";
 import { marketGate, planBuys, type Candidate, type CisRules, type ExitCall, type MarketGate } from "./cisTrader.js";
 import { buy, equityOf, type CisAccount } from "./cisAccount.js";
+import { noteWhyNot } from "./cisWhyNot.js";
 import { stampLast } from "./cisVerify.js";
 import { screenCandidates, type ScreenNote } from "./cisAi.js";
 import { isSafeAsset, profileOf, rejectReason, type AccountId } from "./cisAccounts.js";
@@ -461,6 +462,16 @@ export async function closeBetRound(
   }
   progress.done("ai", `${planned.plans.length}건 계획`);
 
+  /* 종배 저녁도 사유별로 센다 — 세기만 한다 (2026-09-21, `cisWhyNot.ts` 머리 참고) */
+  void noteWhyNot(account, {
+    gateOk: gate.ok,
+    gateReason: gate.reason,
+    sieved: sieved.map((x) => x.reason),
+    skipped: planned.skipped.map((x) => x.reason),
+    passed: afterVeto.length,
+    planned: planned.plans.length,
+    bought: actions.length,
+  });
   return { gate, macro, candidates: afterVeto, plans: planned.plans, actions, gateNotes, sieved, screenNotes, aiError };
 }
 

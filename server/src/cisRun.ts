@@ -159,6 +159,11 @@ export async function buyRound(
   gateNotes: { name: string; ok: boolean; reason: string }[];
   /** 신조 ① 의 체에 걸린 것 — 「왜 안 봤나」가 일지에 남아야 되새김이 된다 */
   sieved: { name: string; reason: string }[];
+  /**
+   * 계좌 쪽에서 막힌 것 — 자리 없음·이미 보유·여력 부족 (2026-09-21).
+   * 여태 `planBuys` 가 돌려주는데 **아무 데도 안 쓰고 버렸다.** 「왜 안 샀나」의 마지막 한 칸이라 내보낸다.
+   */
+  skipped: { name: string; reason: string }[];
   screenNotes: ScreenNote[];
   aiError?: string;
 }> {
@@ -178,7 +183,7 @@ export async function buyRound(
   if (!gate.ok) {
     progress.skip("scan", "시장 문이 닫혔다");
     progress.skip("signal");
-    return { gate, candidates, plans: [], actions, gateNotes, sieved, screenNotes };
+    return { gate, candidates, plans: [], actions, gateNotes, sieved, skipped: [], screenNotes };
   }
 
   progress.start("scan");
@@ -275,7 +280,7 @@ export async function buyRound(
     }
   }
 
-  return { gate, candidates, plans: planned.plans, actions, gateNotes, sieved, screenNotes, aiError };
+  return { gate, candidates, plans: planned.plans, actions, gateNotes, sieved, skipped: planned.skipped, screenNotes, aiError };
 }
 
 /** 결과 — 화면이 「방금 뭘 했나」를 그대로 보여 준다 */

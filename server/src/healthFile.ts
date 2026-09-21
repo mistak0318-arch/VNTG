@@ -10,6 +10,8 @@ import { peekRealtime, subscribedCount } from "./realtimeHub.js";
 import { hantooRealtimeStatus } from "./hantooRealtime.js";
 import { afterCloseStatus, afterCloseStateSummary } from "./afterClose.js";
 import { tradingDayStatus } from "./tradingDay.js";
+import { cisWhyNotSnapshot } from "./cisWhyNot.js";
+import { getCisConfig } from "./cisConfig.js";
 import { streamStats } from "./routes/realtime.js";
 
 /**
@@ -135,6 +137,16 @@ async function writeOnceInner(): Promise<void> {
      * 안 남기고 그날이 빈다 — 「일본 증시 휴장」 한 줄로 저녁이 다 날아간 날이 있었다. 밖에서 바로 보이게.
      */
     거래일: tradingDayStatus(),
+    /*
+     * **항해일지가 오늘 왜 안 샀나** (2026-09-21 — 벤티지: "얘는 매매도 안하고 돈도 못벌고 이상해서").
+     * 사유와 개수뿐 — 종목·금액은 안 싣는다. 켜져 있는지(`enabled`)도 같이 보여야 「안 돈 것」과 구분된다.
+     */
+    항해일지: {
+      ...(await getCisConfig()
+        .then((c) => ({ 켜짐: c.enabled, 자동: c.auto, 매수루프분: c.buyScanMin }))
+        .catch(() => ({ 켜짐: null }))),
+      ...cisWhyNotSnapshot(),
+    },
     저장소: health,
     /* 키움 REST 토큰버킷에서 기다린 것 — 개수·ms 뿐 (2026-09-16). 크면 15:40~16:10 겹침이 그만큼이다 */
     키움조회대기: KiwoomClient.rateLimitStats(),
