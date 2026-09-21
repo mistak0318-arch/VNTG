@@ -128,6 +128,8 @@ export async function runLiveAlerts(
   const day = kstDay();
   const preview = opts.send === false;
   const out: LiveAlert[] = [];
+  /** 이번 회차에 `sent` 에 넣은 키 — 못 보내면 이것들만 되돌린다 (2026-09-21) */
+  const sentKeys: string[] = [];
   await loadSent();
   let dirty = false;
 
@@ -151,6 +153,7 @@ export async function runLiveAlerts(
        */
       const key = `${day}:vi:${v.code}:${v.firedAt || v.at}`;
       if (sent.has(key)) continue;
+      sentKeys.push(key); // 못 보내면 되돌릴 키 (2026-09-21 회귀 점검)
       /*
        * **걸릴 수 없는 값은 VI 가 아니다** (2026-09-16 — 벤티지: "포스코홀딩스 13프로 상방 VI 걸리지도 않았는데").
        *
@@ -255,6 +258,7 @@ export async function runLiveAlerts(
       // 한 번 뛰면 그 근처에서 오르내린다. 종목당 하루 한 번이면 충분하다
       const key = `${day}:str:${code}`;
       if (sent.has(key)) continue;
+      sentKeys.push(key); // 못 보내면 되돌릴 키 (2026-09-21 회귀 점검)
       if (!preview) {
         sent.add(key);
         dirty = true;
@@ -316,8 +320,14 @@ export async function runLiveAlerts(
    * 막힌 회차의 알림은 영영 안 왔다(키가 이미 「보냈다」로 남아서). 알림종은 dedupeKey 로 따로 막으니 다시 보내도
    * 종이 두 번 울리지 않는다. 저장은 실패해도 다음 회차가 다시 잰다.
    */
-  if (!ok) {
-    for (const a of out) sent.delete(`${a.code}:${a.kind}:${a.kind === "vi" ? a.detail.slice(0, 16) : day}`);
+  /*
+   * ⚠️ **9/18 의 A11 은 한 건도 못 지우고 있었다** (2026-09-21 회귀 점검 🟠).
+   * 저장하는 키는 `${day}:vi:…` · `${day}:str:…` 인데 지우는 키를 `${code}:${kind}:…` 로 새로 조립했다 —
+   * 형식이 달라 `delete` 가 늘 빗나갔고 `saveSent()` 만 헛돌았다. 「고쳤다」고 믿고 있던 자리다.
+   * 이제 **저장할 때 쓴 키를 그대로 들고 있다가** 그것으로 지운다.
+   */
+  if (!ok && sentKeys.length > 0) {
+    for (const k of sentKeys) sent.delete(k);
     await saveSent().catch(() => undefined);
   }
   return { alerts: out, sent: ok, live: true };
