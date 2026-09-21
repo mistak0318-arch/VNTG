@@ -63,14 +63,23 @@ export async function sampleIntradayFlow(client: KiwoomClient): Promise<void> {
   const d = new Date(Date.now() + 9 * 3600_000);
   const minute = d.getUTCHours() * 60 + d.getUTCMinutes();
   if (minute < 9 * 60 || minute > 15 * 60 + 40) return;
-  const flow = (await getSection("flow", client)).data as MarketFlow | null;
+  /*
+   * `force` 로 **지금 값**을 받는다 (2026-09-21 회귀 점검 🟡). flow 섹션 TTL 이 60초라 2분 주기에서는 늘 만료
+   * 상태인데, `getSection` 은 만료면 **옛 값을 주고 뒤에서 갱신**한다 — 그래서 찍히는 점이 늘 한 회차(2분) 늦었다.
+   * 어차피 만료라 갱신 조회는 나가고 있었으니 호출 수는 그대로고, 값만 제 시각 것이 된다.
+   */
+  const flow = (await getSection("flow", client, { force: true })).data as MarketFlow | null;
   if (!flow) return;
   const date = d.toISOString().slice(0, 10).replace(/-/g, "");
   const t = `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
   const f = await loadSamples(date);
   let changed = false;
   /* K200 선물(03)은 네이버 새 API(오늘 누적, 억원) — 같은 박자로 한 점 */
-  const fut = await futuresFlow(1).catch(() => []);
+  /*
+   * 선물은 **5분에 한 번만** (2026-09-21 회귀 점검 🟡). 2분마다 부르면 네이버 호출이 하루 200회가 넘는다 —
+   * 응답이 100바이트라도 차단 위험은 횟수에 붙는다. 곡선은 5분 간격이면 충분히 읽힌다.
+   */
+  const fut = d.getUTCMinutes() % 5 === 0 ? await futuresFlow(1).catch(() => []) : [];
   const futToday = fut.length > 0 && fut[fut.length - 1].date.replace(/-/g, "") === date ? fut[fut.length - 1] : null;
   const srcs: [FlowMarket, { individual: number; foreign: number; institution: number }][] = [["01", flow.kospi], ["02", flow.kosdaq]];
   if (futToday) srcs.push(["03", futToday]);

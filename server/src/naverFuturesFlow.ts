@@ -46,7 +46,7 @@ export interface FuturesFlowDay {
 const STORE = join(dirname(fileURLToPath(import.meta.url)), "..", "data", "futuresFlowDays.json");
 let cache: { at: number; days: FuturesFlowDay[] } = { at: 0, days: [] };
 let loaded = false;
-const TTL = 2 * 60_000; // 장중 곡선 표본(2분)과 같은 박자 — 응답이 100바이트라 부담이 없다
+const TTL = 5 * 60_000; // 표본이 5분에 한 번 찍으므로 같은 박자 (2026-09-21 회귀 점검 — 2분이면 하루 200회가 넘었다)
 
 function num(s: unknown): number {
   const n = Number(String(s ?? "").replace(/[,+\s]/g, ""));
