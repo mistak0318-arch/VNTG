@@ -580,8 +580,15 @@ export async function buildCloses(client: KiwoomClient, opts: { force?: boolean 
     }
 
     await flush();
-    /* (2026-09-18 전수검증 A4) 받을 종목이 있었는데 하나도 못 받았다 — 성공이 아니다 */
-    if (tried > 0 && okCount === 0) throw new Error(`일봉 전종목 실패 — ${tried}종목 중 0종목 (키움 응답 없음)`);
+    /*
+     * (2026-09-18 A4) 받을 종목이 있었는데 하나도 못 받았다 — 성공이 아니다.
+     *
+     * ⚠️ 문턱을 뒀다 (2026-09-21 회귀 점검 🟡). `tried` 는 **이번에 시도한 것만** 센다(이미 받은 종목은 앞에서
+     * `continue`). 그래서 **이어받기 회차**에서 남은 서너 종목이 상폐·거래정지라 빈 배열로 오면 `0/3` 이 되어,
+     * 하루치가 다 찼는데도 일봉 단계가 ❌ 로 찍히고 재시도 두 번을 헛되이 태웠다.
+     * 「키움이 통째로 죽었다」를 잡자는 것이므로 표본이 충분할 때만 판정한다.
+     */
+    if (tried >= 50 && okCount === 0) throw new Error(`일봉 전종목 실패 — ${tried}종목 중 0종목 (키움 응답 없음)`);
     return cache!;
   })().finally(() => {
     running = null;

@@ -864,8 +864,11 @@ async function flipAlerts(rows: AccountRow[]): Promise<void> {
     const label = r.verdict === "in" ? "돈 들어옴" : "돈 빠짐";
     const title = `💧 ${r.name} ${label} (${r.account})`;
     const body = `${hhmm} · ${r.rate === null ? "" : `${r.rate > 0 ? "+" : ""}${r.rate.toFixed(2)}% · `}${r.why || (prev === "quiet" ? "조용하다가 바뀜" : "반대로 뒤집힘")}`;
-    /* (2026-09-18 전수검증 A21) 카운트는 **알림종에 실제로 들어간 뒤** 올린다 — 실패한 회차가 하루 2번을 갉아먹지 않게 */
-    let sent = false;
+    /*
+     * (2026-09-18 A21) 카운트는 알림종에 들어간 뒤 올렸는데, 알림함 **저장이 실패하면 카운트가 안 올라
+     * 하루 2회 상한이 통째로 풀렸다**(텔레그램은 상한과 무관하게 5분마다 계속 나간다). 2026-09-21 회귀 점검:
+     * **보내려고 시도했으면** 올린다 — 상한의 뜻은 「몇 번 울렸나」가 아니라 「몇 번 시도했나」다.
+     */
     await pushNotice({
       source: "moneyFlow",
       kind: "stock",
@@ -877,13 +880,9 @@ async function flipAlerts(rows: AccountRow[]): Promise<void> {
       link: stockLink(r.code, r.name),
       dedupeKey: `moneyFlow:${r.code}:${r.verdict}:${date}`,
       dedupeHours: 3,
-    })
-      .then(() => {
-        sent = true;
-      })
-      .catch(() => undefined);
+    }).catch(() => undefined);
     await sendTelegram(`<b>${title}</b>\n${body.replace(/&/g, "&amp;").replace(/</g, "&lt;")}`, "signal").catch(() => undefined);
-    if (sent) st.count[r.code] = n + 1;
+    st.count[r.code] = n + 1;
   }
   try {
     await mkdir(DATA_DIR, { recursive: true });
@@ -1024,11 +1023,18 @@ export async function moneyNow(client: KiwoomClient, opts: { fresh?: boolean } =
     void job.catch(() => undefined);
     return { ...cache, stale: true };
   }
+  /*
+   * **기다리더라도 상한이 있어야 한다** (2026-09-21 회귀 점검 🟡). `compute` 에 전체 타임아웃이 없어서,
+   * 한 다리(잔고·잠정치)가 매달리면 HTTP 요청도 같이 매달렸다 — 아침 첫 열기가 수십 초 붙들렸다.
+   * 40초에서 끊고, 옛 값이 있으면 그것을 「늦음」으로 준다.
+   */
+  const capped = <T,>(p: Promise<T>, ms: number): Promise<T> =>
+    Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error("계산이 너무 오래 걸립니다")), ms))]);
   if (cache) {
     const old = cache;
-    return job.catch(() => ({ ...old, stale: true, errors: [...old.errors, `계산 실패 — ${Math.round((Date.now() - old.at) / 60_000)}분 전 값`] }));
+    return capped(job, 40_000).catch(() => ({ ...old, stale: true, errors: [...old.errors, `계산 실패 — ${Math.round((Date.now() - old.at) / 60_000)}분 전 값`] }));
   }
-  return job;
+  return capped(job, 40_000);
 }
 
 /* ═══════════════ 텔레그램 브리핑 글 ═══════════════ */
