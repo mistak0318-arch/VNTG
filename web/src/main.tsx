@@ -24,12 +24,16 @@ import "./keywordFlow.css";
  * 그래서 받아서 채운 다음에 그린다. 서버를 못 읽어도 `loadPrefs` 는 그냥 돌아오므로
  * 이 기기 값으로 평소처럼 뜬다.
  */
+/*
+ * **가드를 제일 먼저 씌운다** (2026-09-21 회귀 점검). `loadPrefs()` 안(`prefs.ts`)에서 `/api/settings/ui` 를
+ * 부르는데, 가드가 `.then()` 안에 있으면 **그 첫 요청이 가드를 안 지난다** — 아침 Access 만료가 실제로
+ * 터지는 바로 그 요청이다.
+ */
+installApiGuard();
+
 void loadPrefs().then(() => {
   // 다른 기기가 배포한 기기별 설정(화면설정 등)이 있으면 렌더 전에 적용 — 도장이 중복을 막는다
   applyPushedPrefs();
-/* 인증 만료·HTML 응답을 입구에서 잡는다 (2026-09-21) — 렌더 전에 씌워야 첫 요청부터 걸린다 */
-installApiGuard();
-
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
       <AppearanceProvider>

@@ -111,6 +111,7 @@ export function installApiGuard(): void {
       mark(true);
       throw new Error("로그인이 풀렸습니다 — 새로고침하면 다시 들어갑니다");
     }
-    throw new Error(`서버가 JSON 대신 HTML 을 보냈습니다 (${res.status})`);
+    /* 어느 주소인지 없으면 쫓을 수가 없다 (2026-09-21 회귀 점검) */
+    throw new Error(`서버가 JSON 대신 HTML 을 보냈습니다 (${res.status} ${pathOf(input)})`);
   };
 }
