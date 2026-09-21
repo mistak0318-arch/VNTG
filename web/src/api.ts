@@ -1899,12 +1899,14 @@ export const api = {
     limit = 100,
     /** 명세가 고를 수 있게 열어 둔 파라미터 (`RankResult.spec.choices`) */
     chosen?: Record<string, string>,
+    /** 당일 봉(시·고·저)도 받을까 — 켤 때만 ka10095 가 나간다 (2026-09-22) */
+    candle = false,
   ) => {
     const extra = Object.entries(chosen ?? {})
       .map(([k, v]) => `&${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
       .join("");
     return getJson<RankResult>(
-      `/api/rank/${key}?market=${market}&exchange=${exchange}&limit=${limit}${extra}`,
+      `/api/rank/${key}?market=${market}&exchange=${exchange}&limit=${limit}${extra}${candle ? "&candle=1" : ""}`,
     );
   },
   sectorFlow: (subject = "foreign", window = 5) =>
@@ -3752,6 +3754,8 @@ export interface RankResult {
     /** 통합(NXT 최종) 가격 — KRX 로 덮기 전 원값. KRX 와 같으면 null */
     nxtPrice?: number | null;
     nxtRate?: number | null;
+    /** 당일 봉 — 시·고·저·현재가·전일종가 (`candle=1` 로 물었을 때만, 2026-09-22) */
+    cd?: { o: number; h: number; l: number; c: number; pc: number } | null;
     /** 회전율(%) — 거래량 ÷ 상장주식수. 「그 종목 치고 얼마나 돌았나」 */
     turn: number | null;
     /** 코스피 / 코스닥 */

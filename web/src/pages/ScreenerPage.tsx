@@ -1,4 +1,4 @@
-import { PAGE_SIZES, PAGE_SIZE_DEFAULT } from "../components/Pager";
+﻿import { PAGE_SIZES, PAGE_SIZE_DEFAULT } from "../components/Pager";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { removePref, setPref } from "../prefs";
 import { api, fmtNum, type FlowSum, type RankResult, type RankSpecGroup } from "../api";
@@ -6,6 +6,7 @@ import { SuperMark } from "../useSuperMarks";
 import { SameNetTradeRankingPage } from "./SameNetTradeRankingPage";
 import { ContinuousTradePage } from "./ContinuousTradePage";
 import { TopTradersTable } from "../components/TopTradersTable";
+import { MiniCandle } from "../components/MiniCandle";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { useViNow, useViToday } from "../useViNow";
 import { ViMark, ViTodayMark } from "../components/ViMark";
@@ -431,6 +432,12 @@ export function ScreenerPage({
   const font = useTableFont("vntg.screener.font");
   /* 신호등은 **켤 때만** — 목록을 여는 것만으로 백 종목을 평가하면 안 된다 */
   const [sigOn, setSigOn] = useState(false);
+  /*
+   * 당일 봉 (2026-09-22 — 벤티지: "등락률 옆에 봉 차트 보여줄 수 있어? 한눈에 당일 흐름 봉으로").
+   * 순위 TR 이 시·고·저를 안 줘서 `ka10095` 를 따로 부른다(100줄이면 조회 두 번) — **켤 때만** 나간다.
+   * 기본은 켜짐. 끄면 조회도 같이 멎는다.
+   */
+  const [candleOn, setCandleOn] = useState(() => localStorage.getItem("vntg.screener.candle") !== "0");
   const [editTabs, setEditTabs] = useState(false);
   /** 열 순서 편집 중 — 켜면 머리 칸에 ◀▶ 가 붙는다 */
   const [editCols, setEditCols] = useState(false);
@@ -495,12 +502,12 @@ export function ScreenerPage({
       if (!quiet) setLoading(true);
       setError(null);
       api
-        .rank(rankKey, market, exchange, fetchLimit, chosen)
+        .rank(rankKey, market, exchange, fetchLimit, chosen, candleOn)
         .then((r) => setData(r))
         .catch((e: Error) => setError(e.message))
         .finally(() => setLoading(false));
     },
-    [rankKey, market, exchange, fetchLimit, chosen],
+    [rankKey, market, exchange, fetchLimit, chosen, candleOn],
   );
 
   useEffect(() => {
@@ -595,6 +602,8 @@ export function ScreenerPage({
    * 표 아래 「어림값」 줄이 그걸 말한다.
    */
   const hasTvExtra = hasTvCol && !cols.some((c) => c.key === "trde_prica");
+  /* 봉 칸 — 켜 뒀고 실제로 값이 온 줄이 있을 때만 (2026-09-22) */
+  const hasCandle = candleOn && all.some((r) => r.cd != null);
   /* 원장이 있는 줄이 하나라도 있어야 수급 칸을 그린다 — 전부 null 이면 빈 칸만 늘어난다 */
   const hasFlow = all.some((r) => Object.values(r.flow ?? {}).some((f) => (f?.days ?? 0) > 0));
   /** 수급 주체 — 접힘이면 외국인·주포 둘, 펼치면 사이에 투신·연기금·사모 */
@@ -658,6 +667,7 @@ export function ScreenerPage({
     190 +
     (sigOn ? 40 : 0) +
     cols.filter((c) => c.key !== "stk_nm").length * 84 +
+    (hasCandle ? 34 : 0) +
     (hasTvExtra ? 84 : 0) +
     (hasTurn ? 60 : 0) +
     (hasCap ? 84 : 0) +
@@ -1063,6 +1073,19 @@ export function ScreenerPage({
           >
             🚦 신호등 {sigOn ? "끄기" : "켜기"}
           </button>
+          {/* 당일 봉 — 켤 때만 시·고·저를 받는다(100줄이면 조회 두 번). 끄면 조회도 멎는다 */}
+          <button
+            className={`filter-btn ${candleOn ? "active" : ""}`}
+            onClick={() =>
+              setCandleOn((v) => {
+                localStorage.setItem("vntg.screener.candle", v ? "0" : "1");
+                return !v;
+              })
+            }
+            title="등락률 옆에 당일 봉(시·고·저·현재가). 켤 때만 시세를 더 받습니다 — 100줄이면 조회 두 번"
+          >
+            📊 봉 {candleOn ? "끄기" : "켜기"}
+          </button>
           {/*
             받을 건수. 늘리면 연속조회가 그만큼 더 나가므로 **기본은 예전과 같은 100** 이다.
             안 건드리면 부하도 예전 그대로다.
@@ -1438,6 +1461,7 @@ export function ScreenerPage({
                       )}
                     />
                   ))}
+                  {hasCandle && <col style={{ width: 34 }} />}
                   {hasTvExtra && <col style={cw.styleOf("tv")} />}
                   {hasTurn && <col style={cw.styleOf("turn")} />}
                   {hasCap && <col style={cw.styleOf("cap")} />}
@@ -1526,6 +1550,18 @@ export function ScreenerPage({
                         }
                       />
                     ))}
+                    {/* 당일 봉 — 정렬은 일중 변동폭(고-저)으로. 「오늘 많이 흔들린 것」이 위로 */}
+                    {hasCandle && (
+                      <SortableTh
+                        columnKey="cd"
+                        label="봉"
+                        accessor={(r: (typeof rows)[number]) =>
+                          r.cd && r.cd.l > 0 ? ((r.cd.h - r.cd.l) / r.cd.l) * 100 : -Infinity
+                        }
+                        sort={sort}
+                        className="num-narrow"
+                      />
+                    )}
                     {/* 걸러 보는 기준이면 표에도 있어야 한다 */}
                     {hasTvExtra && (
                       <SortableTh
@@ -1813,6 +1849,11 @@ export function ScreenerPage({
                             </td>
                           );
                         })}
+                      {hasCandle && (
+                        <td className="dcd-cell">
+                          <MiniCandle d={r.cd} />
+                        </td>
+                      )}
                       {hasTvExtra && (
                         <td className="num" title={r.tvEst ? "어림값 — 거래량 × 현재가" : undefined}>
                           {r.tv === null ? "-" : `${r.tvEst ? "≈" : ""}${eok(r.tv)}`}

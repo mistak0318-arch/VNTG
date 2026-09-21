@@ -19599,3 +19599,18 @@ tr.gv-strong td:first-child { color: var(--text); }
 .mnw-bucket.hot .mnw-h { color: var(--muted); }
 .mnw-bucket.hot .mnw-row { opacity: 0.75; }
 .mnw-cross { margin-bottom: 10px; padding: 6px 8px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border)); }
+
+
+/* ===== 당일 봉 한 개 (2026-09-22) =====
+   벤티지: "등락률 옆에 봉 차트 보여줄 수 있어? 한눈에 당일 흐름 봉으로 알수 있게끔"
+   색은 **전일 종가 대비**다 — 옆 칸 등락률과 같은 기준이라야 같은 줄에서 색과 숫자가 안 어긋난다. */
+.daycandle { display: block; margin: 0 auto; overflow: visible; }
+.daycandle .dcd-wick { stroke-width: 1; }
+.daycandle .dcd-body { stroke: none; }
+/* 전일 종가 — 갭이 얼마나 떴나를 이 선과의 거리로 본다 */
+.daycandle .dcd-prev { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 2; opacity: 0.55; }
+.daycandle.dcd-up .dcd-wick { stroke: var(--red); }
+.daycandle.dcd-up .dcd-body { fill: var(--red); }
+.daycandle.dcd-down .dcd-wick { stroke: var(--blue); }
+.daycandle.dcd-down .dcd-body { fill: var(--blue); }
+.dcd-none { color: var(--muted); display: block; text-align: center; }

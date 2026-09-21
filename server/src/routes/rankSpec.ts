@@ -33,6 +33,57 @@ function lastFile(key: string): string {
   return join(LAST_DIR, `${key.replace(/[^A-Za-z0-9_.-]/g, "_")}.json`);
 }
 
+/* ── 당일 봉 (2026-09-22) ─────────────────────────────────────────────── */
+
+/** 한 종목의 오늘 봉 — 시·고·저·현재가·전일종가 */
+export interface DayCandle {
+  o: number;
+  h: number;
+  l: number;
+  c: number;
+  /** 전일 종가 — 봉을 어디에 놓을지(위/아래)와 색을 정한다 */
+  pc: number;
+}
+
+/**
+ * **`ka10095` 로 시·고·저를 받는다** — 한 번에 여러 종목(`|`).
+ *
+ * 순위 TR 은 이 값을 안 준다(ka10032 실측: 칸 13개뿐). 50종목씩 끊어 부르고 10초 캐시를 둔다 —
+ * 화면이 자동 새로고침으로 자주 물어도 조회가 그만큼 늘지 않게. 100줄이면 조회 두 번이다.
+ */
+const candleCache = new Map<string, { at: number; v: Map<string, DayCandle> }>();
+
+async function candles(client: KiwoomClient, codes: string[]): Promise<Map<string, DayCandle>> {
+  const want = [...new Set(codes.filter((c) => /^[0-9A-Z]{6}$/i.test(c)))];
+  const key = want.slice().sort().join(",");
+  const hit = candleCache.get(key);
+  if (hit && Date.now() - hit.at < 10_000) return hit.v;
+  const out = new Map<string, DayCandle>();
+  const abs = (v: unknown): number => Math.abs(Number(String(v ?? "").replace(/[+,\s]/g, "")) || 0);
+  for (let i = 0; i < want.length; i += 50) {
+    const part = want.slice(i, i + 50);
+    const { data } = await client.request<Record<string, unknown>>("/api/dostk/stkinfo", "ka10095", {
+      stk_cd: part.map((c) => `${c}_AL`).join("|"),
+    });
+    for (const r of (data.atn_stk_infr ?? []) as Record<string, unknown>[]) {
+      const code = String(r.stk_cd ?? "").replace(/_(AL|NX)$/i, "");
+      const o = abs(r.open_pric);
+      const h = abs(r.high_pric);
+      const l = abs(r.low_pric);
+      const c = abs(r.cur_prc);
+      const pc = abs(r.base_pric);
+      /* 하나라도 0 이면 봉을 못 그린다 — 안 그리는 편이 거짓 그림보다 낫다 */
+      if (code && o > 0 && h > 0 && l > 0 && c > 0) out.set(code, { o, h, l, c, pc: pc > 0 ? pc : o });
+    }
+  }
+  candleCache.set(key, { at: Date.now(), v: out });
+  if (candleCache.size > 30) {
+    const oldest = [...candleCache.entries()].sort((a, b) => a[1].at - b[1].at)[0];
+    if (oldest) candleCache.delete(oldest[0]);
+  }
+  return out;
+}
+
 /** 줄의 대부분이 거래대금 0·등락률 0 — 새 날의 빈 껍데기 */
 function looksReset(rows: { tv: number | null; flu_rt?: unknown }[]): boolean {
   if (rows.length < 5) return false;
@@ -1045,6 +1096,19 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
         }
       } else if (!spec.noMarket && outRows.length >= 5) {
         void saveLast(lastKey, outRows);
+      }
+      /*
+       * **당일 봉** (2026-09-22 — 벤티지: "등락률 옆에 봉 차트 보여줄 수 있어? 한눈에 당일 흐름 봉으로
+       * 알수 있게끔"). 등락률 숫자만으로는 **어떻게 그 숫자가 됐는지**가 안 보인다 — 위로 갔다 내려온
+       * +3% 와 쭉 오른 +3% 는 완전히 다른 종목이다.
+       *
+       * 순위 TR 은 시·고·저를 안 준다(ka10032 실측: 칸 13개, 현재가·전일대비·등락률·거래량·거래대금뿐).
+       * `ka10095` 가 준다 — 한 번에 여러 종목(`|`)이라 100줄이면 조회 두 번이다.
+       * **화면이 `candle=1` 로 물을 때만** 부른다 — 칸을 꺼 두면 조회가 안 나간다.
+       */
+      if (String(req.query.candle ?? "") === "1" && outRows.length > 0) {
+        const cd = await candles(client, outRows.map((r) => String(r.code ?? ""))).catch(() => null);
+        if (cd) for (const r of outRows) r.cd = cd.get(String(r.code ?? "")) ?? null;
       }
       /*
        * 줄 단위로 메웠으면 그것도 「어제 값」이다 — 절반이 넘을 때만 알린다 (2026-09-22).
