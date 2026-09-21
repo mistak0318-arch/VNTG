@@ -34,21 +34,51 @@ const KRX_HOLIDAYS = new Set([
 
 /** 한투 달력에서 읽은 휴장일 — 동기 판정을 위해 메모리에 든다 */
 const hantooHolidays = new Set<string>();
+/** 그 날을 휴장으로 판정한 줄의 제목 — health.json 이 「왜 닫혔나」를 보이게 (2026-09-21) */
+const holidayWhy = new Map<string, string>();
 let loaded = false;
 let loading: Promise<void> | null = null;
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
+/**
+ * **이 줄이 「국내 증시」 휴장인가** (2026-09-21 — 벤티지: "이거 지금 아무것도 안 하고 있는 것 같은데").
+ *
+ * 예전엔 `kind === "holiday"` 면 무조건 휴장으로 셌다. 그런데 캘린더에는 **다른 나라 증시 휴장도 적는다** —
+ * 2026-09-21 의 「🇯🇵 일본 증시 휴장 (경로의 날)」 한 줄에 **국내 스케줄러가 통째로 멈췄다.** 15:55 정규 회차,
+ * 20:05 수급애프터, 20:10 마무리가 그날 조용히 빠졌다. 9/23 에도 일본 휴장이 적혀 있어 그날 또 멈출 참이었다.
+ *
+ * 줄에는 나라 칸이 없다(`id·date·title·kind·memo`). 그래서 **출처로 가린다**:
+ *   · `source: "hantoo:holiday"` — 한투 영업일 조회(CTCA0903R). **국내 휴장일의 진짜 출처**다
+ *   · `id` 가 `seed_` — 씨앗(신정·근로자의날·연말). 전부 국내다
+ *   · 손으로 넣은 줄은 제목에 **한국·국내·KRX·코스피·코스닥**이 있을 때만
+ * 그 밖의 손 줄(일본·중국·홍콩·미국)은 **화면에만 보이고 판정에는 안 든다.**
+ *
+ * 규칙은 「모르면 연다」다 — 잘못 열면 그날 값이 한 번 헛돌고 말지만, 잘못 닫으면 **그날이 통째로 빈다.**
+ */
+const DOMESTIC_TITLE = /한국|국내|KRX|코스피|코스닥/;
+function domesticHoliday(r: { id?: string; title?: string; source?: string; kind?: string }): boolean {
+  if (r?.source === HOLIDAY_SOURCE) return true;
+  if (r?.kind !== "holiday") return false;
+  if (typeof r.id === "string" && r.id.startsWith("seed_")) return true;
+  return DOMESTIC_TITLE.test(String(r.title ?? ""));
+}
+
 async function loadHantooHolidays(): Promise<void> {
   try {
     const raw = await readFile(CALENDAR_FILE, "utf8");
-    const rows = JSON.parse(raw) as { date?: string; source?: string; kind?: string }[];
+    const rows = JSON.parse(raw) as { id?: string; date?: string; title?: string; source?: string; kind?: string }[];
     const next = new Set<string>();
+    const why = new Map<string, string>();
     for (const r of Array.isArray(rows) ? rows : []) {
-      /* 한투 휴장일 + 씨앗·손으로 넣은 kind:"holiday" 도 휴장이다 (신정·근로자의날·연말 씨앗) */
-      if ((r?.source === HOLIDAY_SOURCE || r?.kind === "holiday") && typeof r.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.date)) next.add(r.date);
+      if (!r || typeof r.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(r.date)) continue;
+      if (!domesticHoliday(r)) continue;
+      next.add(r.date);
+      if (!why.has(r.date)) why.set(r.date, String(r.title ?? "휴장"));
     }
     hantooHolidays.clear();
+    holidayWhy.clear();
     for (const d of next) hantooHolidays.add(d);
+    for (const [d, t] of why) holidayWhy.set(d, t);
     loaded = true;
   } catch {
     /* 파일이 없으면 하드코딩 표만으로 간다 */
@@ -87,6 +117,21 @@ export function isTradingDate(date: string): boolean {
 /** 오늘(또는 준 시각의 KST 날짜)이 거래일인가 — 동기 */
 export function isTradingDay(date: Date = new Date()): boolean {
   return isTradingDate(ymd(date));
+}
+
+/**
+ * **오늘을 뭐라고 봤나** — health.json 한 칸 (2026-09-21).
+ *
+ * 스케줄러 열셋이 이 판정 하나에 매달려 있는데, 거짓이 되면 **아무 자국도 안 남기고** 그날이 통째로 빈다.
+ * 9/21 에 「일본 증시 휴장」 한 줄로 저녁이 다 날아간 뒤에도, 밖에서 볼 수 있는 것은 「안 돌았다」뿐이었다.
+ * 날짜·참거짓·이유만 싣는다(종목·계좌는 없다).
+ */
+export function tradingDayStatus(): { date: string; trading: boolean; 이유: string; 달력읽음: boolean } {
+  const date = ymd(new Date());
+  const trading = isTradingDate(date);
+  const wd = new Date(`${date}T12:00:00+09:00`).getDay();
+  const 이유 = trading ? "거래일" : wd === 0 || wd === 6 ? "주말" : KRX_HOLIDAYS.has(date) ? "KRX 휴장표" : (holidayWhy.get(date) ?? "달력 휴장");
+  return { date, trading, 이유, 달력읽음: loaded };
 }
 
 /** `before` 를 **포함하지 않는** 직전 거래일 — YYYY-MM-DD */

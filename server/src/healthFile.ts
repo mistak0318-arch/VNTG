@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { peekRealtime, subscribedCount } from "./realtimeHub.js";
 import { hantooRealtimeStatus } from "./hantooRealtime.js";
 import { afterCloseStatus, afterCloseStateSummary } from "./afterClose.js";
+import { tradingDayStatus } from "./tradingDay.js";
 import { streamStats } from "./routes/realtime.js";
 
 /**
@@ -129,6 +130,11 @@ async function writeOnceInner(): Promise<void> {
       /* 첫 토큰이 심볼(tr_key)이라 뗀다 — 오류코드·메시지만 남긴다. 이 파일엔 종목이 안 실린다 */
       rejects: us.rejects.slice(0, 3).map((l) => l.split(" ").slice(1).join(" ")),
     },
+    /*
+     * **오늘을 거래일로 보나** (2026-09-21). 스케줄러 열셋이 이 한 줄에 매달려 있는데, 거짓이면 아무 자국도
+     * 안 남기고 그날이 빈다 — 「일본 증시 휴장」 한 줄로 저녁이 다 날아간 날이 있었다. 밖에서 바로 보이게.
+     */
+    거래일: tradingDayStatus(),
     저장소: health,
     /* 키움 REST 토큰버킷에서 기다린 것 — 개수·ms 뿐 (2026-09-16). 크면 15:40~16:10 겹침이 그만큼이다 */
     키움조회대기: KiwoomClient.rateLimitStats(),
