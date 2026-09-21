@@ -85,7 +85,18 @@ export async function hasOnce(key: string): Promise<boolean> {
 export async function once(key: string): Promise<boolean> {
   const m = await load();
   if (m[key]) return false;
-  m[key] = "1";
+  /*
+   * ⚠️ **"1" 이 아니라 오늘 날짜를 적는다** (2026-09-21 — 벤티지: "시그널 채널에 이거 왜이렇게 반복적으로 오는거야?").
+   *
+   * 위 `load()` 의 청소 규칙은 「열쇠 끝에 날짜가 있으면 사흘, 없으면 **값이 오늘일 때만** 남긴다」다.
+   * 그런데 여기서 "1" 을 적어 두니, 열쇠가 `YYYY-MM-DD` 로 안 끝나는 경우 **다음 재시작의 첫 `load()`
+   * 에서 곧바로 지워졌다.** 목표주가 알림 열쇠가 네이버 `writeDate`(`20260921`, 대시 없음)로 끝나서
+   * 그랬다 — 9/21 에 네 번 배포하니 같은 알림이 **네 번** 갔다.
+   *
+   * 오늘 날짜를 적으면 날짜 없는 열쇠도 **그날 안에는** 재시작을 견디고, 날이 바뀌면 청소된다.
+   * 열쇠 끝에 날짜가 있는 것은 예전처럼 사흘 간다.
+   */
+  m[key] = today();
   await save();
   return true;
 }

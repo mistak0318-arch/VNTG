@@ -88,7 +88,17 @@ export async function runNaverAlerts(): Promise<{ econ: number; goal: number }> 
       for (const g of changes) {
         const why = mine.get(g.code);
         if (!why) continue;
-        const key = `goal:${g.code}:${g.broker}:${g.date.slice(0, 10)}`;
+        /*
+         * 열쇠는 **`YYYY-MM-DD` 로 끝나야 한다** (2026-09-21). 네이버 `writeDate` 는 `20260921` 처럼
+         * 대시가 없어서 `dayMark` 의 「날짜로 끝나면 사흘 보관」 규칙에 안 걸렸다. 맞춰 준다.
+         */
+        const gd = g.date.replace(/[.\/]/g, "-");
+        const gDay = /^\d{4}-\d{2}-\d{2}/.test(gd)
+          ? gd.slice(0, 10)
+          : /^\d{8}$/.test(g.date)
+            ? `${g.date.slice(0, 4)}-${g.date.slice(4, 6)}-${g.date.slice(6, 8)}`
+            : day;
+        const key = `goal:${g.code}:${g.broker}:${gDay}`;
         /* 위 ①과 같은 이유 — 보낸 뒤에 찍는다 (2026-09-21) */
         if (await hasOnce(key)) continue;
         const arrow = g.dir === "up" ? "▲" : "▼";
