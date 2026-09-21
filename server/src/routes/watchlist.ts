@@ -59,6 +59,24 @@ export function createWatchlistRouter(client: KiwoomClient): Router {
         const price = Math.abs(num(r.cur_prc));
         if (code && price > 0) quotes[code] = { price, changeRate: num(r.flu_rt) };
       }
+      /*
+       * **개장 전엔 등락률이 0 으로 온다** (2026-09-22 — 벤티지가 07:58 관심종목 화면을 찍어 보냈다:
+       * 「당일」이 70종목 전부 0.00%). ka10095 도 새 날이 시작되기 전에는 현재가=전일 종가·등락률 0 이다.
+       *
+       * 시황 스냅샷은 다음 개장까지 **어제 종가와 어제 등락률**을 들고 있으므로 그것으로 메운다.
+       * **정확히 0 일 때만** 바꾼다 — 진짜 보합은 스냅샷도 0 이라 안 건드리고, 장중에는 같은 값이다.
+       * 스냅샷은 40초 캐시라 조회가 안 는다. 같은 처방을 `rankSpec`·`ranking` 에도 넣었다.
+       */
+      const snap = await getMarketSnapshot(client).catch(() => null);
+      if (snap) {
+        for (const [code, q] of Object.entries(quotes)) {
+          const s = snap.byCode.get(code);
+          if (s && s.changeRate !== 0 && q.changeRate === 0) {
+            q.price = Math.abs(s.price);
+            q.changeRate = s.changeRate;
+          }
+        }
+      }
       res.json({ quotes });
     } catch (err) {
       next(err);
