@@ -6,11 +6,19 @@ export interface ChangeDay {
   items: { hash: string; subject: string }[];
 }
 
-/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-21T22:56:15.954Z */
+/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-21T23:00:01.245Z */
 export const CHANGELOG: ChangeDay[] = [
   {
     "date": "2026-09-22",
     "items": [
+      {
+        "hash": "9ea41a1",
+        "subject": "관심종목 「당일」도 개장 전엔 전부 0.00% 였다 — 같은 처방"
+      },
+      {
+        "hash": "d8a0f9e",
+        "subject": "변경 이력 다시 굽기"
+      },
       {
         "hash": "be22120",
         "subject": "개장 전에 등락률이 전부 0.00% 로 보이던 것 — 스냅샷의 어제 값으로 메운다"
@@ -1687,14 +1695,6 @@ export const CHANGELOG: ChangeDay[] = [
       {
         "hash": "b1fab21",
         "subject": "주문이 안 나가고 창도 안 닫히던 것 — 폼 안에 폼이 있었다"
-      },
-      {
-        "hash": "56f9f63",
-        "subject": "주문은 등록된 기기에서만 — 새 기기는 메일 확인 · 접근 로그 · 이상 낌새 알림"
-      },
-      {
-        "hash": "ca85064",
-        "subject": "호가창이 화면마다 달랐던 진짜 이유 — 실시간과 REST 가 서로 반대 차례를 냈다"
       }
     ]
   }
