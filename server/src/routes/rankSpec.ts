@@ -916,7 +916,13 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
        * 거래량도 안 주는 조회(조회순위)는 거래대금을 못 낸다 — 시황 스냅샷의 어림값
        * (거래량 × 현재가, 40초 캐시)으로 메운다. 어림값이므로 `tvEst` 그대로 참이다.
        */
-      const snap = spec.noMarket ? await getMarketSnapshot(client).catch(() => null) : null;
+      /*
+       * 스냅샷은 **모든 명세가** 받는다 (2026-09-22). 예전엔 조회순위(`noMarket`)만 거래대금을 메우려고
+       * 받았는데, 아래 「새 날 0.00%」 메우기가 이 값을 쓴다. 40초 캐시라 조회가 안 는다.
+       */
+      const snap = await getMarketSnapshot(client).catch(() => null);
+      /** 어제 값으로 메운 줄 수 — 절반이 넘으면 화면에 「어제 값」이라고 알린다 */
+      let filledFromSnap = 0;
       const drawn = rows.slice(0, limit).map((r) => {
           const code = bare(r.stk_cd);
           const k = krxOf.get(code);
@@ -958,6 +964,29 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
             const pre = toNum(r.pred_pre);
             if (cur !== null && pre !== null && Math.abs(cur) - pre !== 0) {
               mapped.flu_rt = Math.round((pre / (Math.abs(cur) - pre)) * 10000) / 100;
+            }
+          }
+          /*
+           * **새 날 아침엔 등락률이 0 으로 온다** (2026-09-22 — 벤티지: "실시간 조회순위가 들어가니까
+           * 전부 다 다시 0.00 이렇게 뜨네 … 모든 곳에 전날 데이터 들고 있어야 내가 다른 데 데이터도
+           * 계속 볼수 있겠지?").
+           *
+           * 키움 TR 은 장이 시작되기 전에는 **현재가 = 전일 종가 · 등락률 0** 으로 답한다. 거래대금
+           * 상위 같은 탭은 「어제 마지막 응답 파일」(`rankLast`)이 살려 주는데, 그 보정은 `looksReset`
+           * (거래대금 0 **이면서** 등락률 0)에 걸려야 하고 `noMarket` 명세는 아예 빠져 있었다.
+           * 조회순위는 거래대금을 스냅샷으로 메우니 0 이 아니라 **구조적으로 그 판정에 안 걸린다.**
+           *
+           * 그래서 줄 단위로 메운다 — **등락률이 0 인데 스냅샷은 0 이 아니면** 스냅샷의 어제 종가·
+           * 등락률로 바꾼다. 스냅샷은 다음 개장까지 어제 값을 들고 있고(`marketSnapshot` 의 `traded`),
+           * 장중에는 같은 값이라 바뀌는 것이 없다. 진짜 보합(0.00%)은 스냅샷도 0 이라 안 건드린다.
+           */
+          if (snap) {
+            const s = snap.byCode.get(code);
+            /* **정확히 0 일 때만** — 위에서 전일대비로 되짚은 값(`null` 이던 것)은 그대로 둔다 */
+            if (s && s.changeRate !== 0 && toNum(mapped.flu_rt) === 0) {
+              mapped.cur_prc = Math.abs(s.price);
+              mapped.flu_rt = s.changeRate;
+              filledFromSnap += 1;
             }
           }
           /*
@@ -1016,6 +1045,13 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
         }
       } else if (!spec.noMarket && outRows.length >= 5) {
         void saveLast(lastKey, outRows);
+      }
+      /*
+       * 줄 단위로 메웠으면 그것도 「어제 값」이다 — 절반이 넘을 때만 알린다 (2026-09-22).
+       * 파일 되살리기(`rankLast`)가 이미 말을 걸었으면 덧붙이지 않는다.
+       */
+      if (!staleNote && outRows.length > 0 && filledFromSnap > outRows.length / 2) {
+        staleNote = `⚠️ 키움이 아직 새 날 등락률을 안 줍니다(전부 0.00%). 현재가·등락률은 **어제 마감 값**입니다 — 09시 개장하면 오늘 값으로 바뀝니다. `;
       }
       res.json({
         spec: {
