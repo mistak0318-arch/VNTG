@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { useTabActive } from "../tabActive";
 import {
   api,
   type SuperEntry,
@@ -756,12 +757,19 @@ export function SuperDashboardPage({
    * 캐시)를 30초마다 얹는다 — 조회는 50종목당 한 번이다.
    */
   const [live, setLive] = useState<Record<string, { price: number; changeRate: number }>>({});
+  const tabActive = useTabActive();
   useEffect(() => {
     const codes = [...new Set(entries.filter((e) => e.active !== false).map((e) => e.code))].filter((c) => /^\d{6}$/.test(c));
     if (codes.length === 0) return;
     let alive = true;
     const pull = () => {
-      if (document.visibilityState !== "visible") return; // 안 보는 동안은 쉰다
+      /*
+       * ⚠️ `document.visibilityState` 로는 **모자란다** (2026-09-21 회귀 점검). 이 앱은 열린 인앱 탭을
+       * 언마운트하지 않으므로, 슈퍼신호등을 한 번 열어 두면 다른 화면을 보는 내내 30초마다 키움을 때렸다.
+       * 브라우저 탭이 앞에 있는 한 `visibilityState` 는 계속 "visible" 이다 — 인앱 탭 얘기가 아니다.
+       * 다른 폴러(useSection·useRealtime)와 같은 손잡이(`useTabActive`)를 쓴다.
+       */
+      if (!tabActive || document.visibilityState !== "visible") return;
       api
         .marketQuotes(codes)
         .then((r) => alive && setLive(r.quotes))
@@ -773,14 +781,21 @@ export function SuperDashboardPage({
       alive = false;
       window.clearInterval(t);
     };
-  }, [entries]);
+  }, [entries, tabActive]);
 
   /* 얹기 — 값이 온 종목만 갈아끼운다. 안 온 종목은 스냅샷 값 그대로(빈 칸으로 만들지 않는다) */
   const fresh = useMemo(
     () =>
       entries.map((e) => {
         const q = live[e.code];
-        return q ? { ...e, price: q.price, changeRate: q.changeRate } : e;
+        if (!q) return e;
+        /*
+         * **「편입 후」도 같이 고쳐야 한다** (2026-09-21 회귀 점검). 현재가·당일만 새 값으로 갈면
+         * 편입 대비 수익률은 서버가 **같은 스냅샷 가격**으로 만든 10분 묵은 값이라, 고치려던 어긋남이
+         * 옆 칸으로 옮겨 갈 뿐이다. 같은 가격에서 다시 낸다.
+         */
+        const sinceAdded = e.addedPrice > 0 ? ((q.price - e.addedPrice) / e.addedPrice) * 100 : e.sinceAdded;
+        return { ...e, price: q.price, changeRate: q.changeRate, sinceAdded };
       }),
     [entries, live],
   );
