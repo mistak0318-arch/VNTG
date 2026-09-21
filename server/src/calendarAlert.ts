@@ -58,20 +58,32 @@ export interface CalendarAlertConfig {
   telegram: boolean;
 }
 
+/**
+ * 시각·갈래의 **판 번호** (2026-09-22).
+ *
+ * 저장 파일(`data/calendarAlert.json`)이 기본값을 덮으므로, 기본값만 고치면 이미 돌던 서버는
+ * 옛 시각 그대로다. 판이 오르면 **시각과 갈래를 한 번** 새 기본값으로 옮긴다 — 그 뒤에 벤티지가
+ * 화면에서 바꾼 것은 그대로 지킨다(판 번호가 같으면 안 건드린다).
+ */
+const SCHED_VER = 2;
+
 export const DEFAULT_CONFIG: CalendarAlertConfig = {
   enabled: true,
   dayBefore: true,
-  /* 18시 — 장이 끝나고 내일을 준비하는 시각 */
-  dayBeforeHour: 18,
-  sameDay: true,
-  /* 8시 — 개장 한 시간 전. 장전 브리핑을 보는 시간대다 */
-  sameDayHour: 8,
   /*
-   * 기본은 **시장에 영향이 큰 것만.** 개인 일정(personal)과 휴장일(holiday)은
-   * 빼 둔다 — 개인 일정까지 텔레그램으로 오면 시끄럽고, 휴장일은 그날 아침에
-   * 알려 봐야 할 게 없다(전날 알림은 뜻이 있어서 갈래를 켜면 그것도 온다).
+   * 20시 — **장마감(애프터 20:00) 직후.** 벤티지: "오전 6시랑 장마감 8시에 일정이랑 이벤트 관련
+   * 메시지 좀 보내줄래?" (예전엔 18시였다 — 애프터마켓이 생기기 전 「장 끝나고」의 뜻이었다)
    */
-  kinds: ["weekly", "market", "indicator", "meeting", "earnings", "deriv", "bond", "conference", "event"],
+  dayBeforeHour: 20,
+  sameDay: true,
+  /* 6시 — 아침에 눈 뜨자마자. 개장 세 시간 전이라 준비할 시간이 있다 (예전엔 8시) */
+  sameDayHour: 6,
+  /*
+   * **개인 일정도 넣는다** (2026-09-22 — "네이버랑 **내 캘린더** 참고해서"). 구독 캘린더(ICS)로
+   * 들어온 내 일정이 `personal` 이다. 휴장일(holiday)은 빼 둔다 — 그날 아침에 알려 봐야 할 게 없고,
+   * 전날 판에서는 「내일 휴장」이 뜻이 있지만 증시 일정(market)에 이미 잡힌다.
+   */
+  kinds: ["weekly", "market", "indicator", "meeting", "earnings", "deriv", "bond", "conference", "event", "personal"],
   telegram: true,
 };
 
@@ -79,6 +91,8 @@ interface Store {
   config: CalendarAlertConfig;
   /** 보낸 것 — `일정id:when` */
   sent: string[];
+  /** 시각·갈래 기본값의 판 번호 — 오르면 한 번 옮긴다 (2026-09-22) */
+  schedVer?: number;
 }
 
 const EMPTY: Store = { config: DEFAULT_CONFIG, sent: [] };
@@ -86,12 +100,17 @@ const EMPTY: Store = { config: DEFAULT_CONFIG, sent: [] };
 async function load(): Promise<Store> {
   try {
     const raw = JSON.parse(await readFile(FILE, "utf-8")) as Partial<Store>;
-    return {
-      config: { ...DEFAULT_CONFIG, ...(raw.config ?? {}) },
-      sent: Array.isArray(raw.sent) ? raw.sent : [],
-    };
+    const config = { ...DEFAULT_CONFIG, ...(raw.config ?? {}) };
+    const ver = typeof raw.schedVer === "number" ? raw.schedVer : 1;
+    if (ver < SCHED_VER) {
+      /* 한 번만 — 저장된 옛 시각(18시·8시)을 새 기본값으로 옮긴다. 아래 `save` 가 판 번호를 박는다 */
+      config.dayBeforeHour = DEFAULT_CONFIG.dayBeforeHour;
+      config.sameDayHour = DEFAULT_CONFIG.sameDayHour;
+      config.kinds = DEFAULT_CONFIG.kinds;
+    }
+    return { config, sent: Array.isArray(raw.sent) ? raw.sent : [], schedVer: SCHED_VER };
   } catch {
-    return { ...EMPTY, sent: [] };
+    return { ...EMPTY, sent: [], schedVer: SCHED_VER };
   }
 }
 
@@ -179,22 +198,33 @@ export async function runCalendarAlert(force = false): Promise<CalendarAlertRun>
       when: "before",
       on: s.config.dayBefore && (force || hour === s.config.dayBeforeHour),
       date: tomorrow,
-      head: "📅 <b>내일 일정</b>",
+      head: `🌙 <b>내일 일정·이벤트</b> <i>(${tomorrow.slice(5)})</i>`,
     },
     {
       when: "today",
       on: s.config.sameDay && (force || hour === s.config.sameDayHour),
       date: today,
-      head: "📅 <b>오늘 일정</b>",
+      head: `🌅 <b>오늘 일정·이벤트</b> <i>(${today.slice(5)})</i>`,
     },
   ];
 
   for (const r of rounds) {
     if (!r.on) continue;
     const rows = all.filter((e) => e.date === r.date && want(e) && !seen.has(`${e.id}:${r.when}`));
-    if (rows.length === 0) continue;
+    /*
+     * **일정이 없는 날도 한 줄은 보낸다** (2026-09-22 — 벤티지: "우리 키워드 채널에는 왜 아무것도 안와?").
+     *
+     * 예전엔 0건이면 그냥 넘어갔다. 그런데 그러면 **「오늘은 일정이 없다」와 「알림이 고장 났다」가
+     * 화면에서 똑같이 보인다.** 실제로 그 방이 한 달 동안 조용했는데 아무도 고장인 줄 몰랐다.
+     * 하루 한 줄은 「살아 있다」는 신호이기도 하다.
+     *
+     * 단, 이미 그날 것을 보낸 뒤(전부 `seen`)라면 조용히 넘어간다 — 5분 틱마다 「없음」이 가면 안 된다.
+     */
+    const noneKey = `none:${r.when}:${r.date}`;
+    const already = all.some((e) => e.date === r.date && want(e) && seen.has(`${e.id}:${r.when}`));
+    if (rows.length === 0 && (already || seen.has(noneKey))) continue;
 
-    const body = rows.map(line).join("\n");
+    const body = rows.length > 0 ? rows.map(line).join("\n") : "적힌 일정이 없습니다.";
     /*
      * 알림 센터와 텔레그램 **둘 다**. 텔레그램은 자리를 비운 사이에 오고 알림
      * 센터는 화면에 남는다 — 서로를 대신하지 못한다(마감 뒤 정리와 같은 이유).
@@ -211,7 +241,7 @@ export async function runCalendarAlert(force = false): Promise<CalendarAlertRun>
       source: "calendar",
       kind: "market",
       level: "info",
-      title: `${r.when === "before" ? "내일" : "오늘"} 일정 ${rows.length}건`,
+      title: rows.length > 0 ? `${r.when === "before" ? "내일" : "오늘"} 일정 ${rows.length}건` : `${r.when === "before" ? "내일" : "오늘"} 일정 없음`,
       body,
       link: "#/calendar",
       dedupeKey: `calendar:${r.when}:${r.date}`,
@@ -219,7 +249,8 @@ export async function runCalendarAlert(force = false): Promise<CalendarAlertRun>
     }).catch(() => undefined);
 
     if (s.config.telegram) {
-      const r2 = await sendTelegram(`${r.head}\n\n${body}`).catch(() => ({ ok: false, error: "던짐" }));
+      /* 「일정/이벤트」 방으로 (2026-09-22) — 전용 키가 없으면 이름만 바꾼 옛 키워드 방으로 간다 */
+      const r2 = await sendTelegram(`${r.head}\n\n${body}`, "calendar").catch(() => ({ ok: false, error: "던짐" }));
       if (!r2.ok) {
         console.warn(`[calendar] ${r.when} 일정 ${rows.length}건 텔레그램 실패 — 도장 안 찍는다. 다음 틱에 다시 (${r2.error ?? ""})`);
         continue;
@@ -229,6 +260,11 @@ export async function runCalendarAlert(force = false): Promise<CalendarAlertRun>
     for (const e of rows) {
       s.sent.push(`${e.id}:${r.when}`);
       seen.add(`${e.id}:${r.when}`);
+    }
+    /* 「없음」도 도장을 찍는다 — 안 그러면 5분 틱마다 「없습니다」가 간다 */
+    if (rows.length === 0) {
+      s.sent.push(noneKey);
+      seen.add(noneKey);
     }
     out.sent.push({ when: r.when, events: rows.map((e) => e.title) });
   }

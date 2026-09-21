@@ -26,6 +26,7 @@ export type TelegramChannel =
   | "channel"
   | "disclosure"
   | "keyword"
+  | "calendar"
   /** 슈퍼신호등 편입·이탈 (2026-08-26) — 하루 한 번 15:45 실행이 보낸다 */
   | "super"
   /** 밤사이 버즈 레이더 (2026-08-27) — 채널 언급 급증 감지가 보낸다 */
@@ -49,6 +50,13 @@ const CHANNEL_ENV: Record<TelegramChannel, string> = {
   channel: "TELEGRAM_CHAT_ID_CHANNEL",
   disclosure: "TELEGRAM_CHAT_ID_DISCLOSURE",
   keyword: "TELEGRAM_CHAT_ID_KEYWORD",
+  /*
+   * **일정/이벤트 방** (2026-09-22 — 벤티지: "키워드 채널을 일정 이벤트로 이름 바꿧어 … 오전 6시랑
+   * 장마감 8시에 일정이랑 이벤트 관련 메시지 좀 보내줄래?").
+   * 쓰던 키워드 방을 그대로 쓰므로, 전용 키가 비어 있으면 아래 `LEGACY_ENV` 가 `_KEYWORD` 를 받는다 —
+   * .env 를 안 고쳐도 바로 그 방으로 간다. 나중에 방을 가르고 싶으면 전용 키를 넣거나 화면에서 재배정한다.
+   */
+  calendar: "TELEGRAM_CHAT_ID_CALENDAR",
   super: "TELEGRAM_CHAT_ID_SUPER",
   /*
    * 버즈 방 키를 **BUZZ** 로 바로잡았다 (2026-09-16 밤). 예전 키 이름이 `SUPERSIGNAL` 이라 벤티지가 「_SUPER 가
@@ -69,7 +77,11 @@ const CHANNEL_ENV: Record<TelegramChannel, string> = {
  * 「이 갈래만 잠깐 저 방으로」 같은 조정을 화면이 담당한다.
  */
 /** 옛 키 이름 — 새 이름이 비어 있으면 이걸 본다 */
-const LEGACY_ENV: Partial<Record<TelegramChannel, string>> = { buzz: "TELEGRAM_CHAT_ID_SUPERSIGNAL" };
+const LEGACY_ENV: Partial<Record<TelegramChannel, string>> = {
+  buzz: "TELEGRAM_CHAT_ID_SUPERSIGNAL",
+  /* 일정/이벤트 방 = 이름만 바꾼 옛 키워드 방 (2026-09-22) */
+  calendar: "TELEGRAM_CHAT_ID_KEYWORD",
+};
 function envChatId(channel: TelegramChannel): string {
   const legacy = LEGACY_ENV[channel];
   return process.env[CHANNEL_ENV[channel]]?.trim() || (legacy ? process.env[legacy]?.trim() : "") || "";
@@ -142,6 +154,7 @@ export function telegramEnvRooms(): { key: string; label: string; chatId: string
     channel: "채널수집 방",
     disclosure: "공시 방",
     keyword: "키워드 방",
+    calendar: "일정·이벤트 방",
     super: "슈퍼신호등 방",
     buzz: "버즈 레이더 방",
     order: "주문·체결 방",
