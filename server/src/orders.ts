@@ -2938,6 +2938,8 @@ async function livePrices(main: KiwoomClient, codes: string[]): Promise<Map<stri
  * 3초마다. 정규장 밖이면 만료만 정리한다. 안이면 값을 읽어 조건에 닿은 것을 **한 번** 낸다.
  */
 let lastWatchTick = 0;
+/** 마지막으로 틱이 터진 까닭 — 심장박동 경보에 같이 싣는다 (2026-09-21) */
+let watchLastError: { at: string; msg: string } | null = null;
 let lastDualDay = "";
 /** 판 종목의 매도 감시 청소를 마지막으로 돈 때 — 1분에 한 번 (2026-09-08) */
 let lastHoldSweep = 0;
@@ -2950,14 +2952,27 @@ async function runAutoWatch(main: KiwoomClient): Promise<void> {
 
 async function runAutoWatchLocked(main: KiwoomClient): Promise<void> {
   const rows = await readWatches();
-  /* 심장박동은 **파일을 읽은 뒤**에 — 읽기가 매 틱 실패하는데 「살아 있음」이면 거짓말이다 (2차 검진 🔴A-3) */
-  lastWatchTick = Date.now();
+  /*
+   * 심장박동은 **한 바퀴를 다 돈 뒤**에 찍는다 (2026-09-21 「조용한 건너뜀」 훑기 🔴).
+   *
+   * 예전엔 파일을 읽은 직후에 찍었다(2차 검진 🔴A-3 — 읽기가 실패하는데 「살아 있음」이면 거짓말이니까).
+   * 그런데 **정작 중요한 일은 그 아래**다: 시세를 받아(`livePrices`) 조건에 닿은 것을 내는 부분.
+   * 거기서 던지면 바깥이 `.catch(() => undefined)` 로 삼키는데 도장은 이미 찍힌 뒤라,
+   * **손절 발동이 매 틱 죽어도 90초 경보가 영영 안 울렸다.** 조용한 것 중에 제일 비싼 자리다.
+   *
+   * 이제 「살아 있음」은 **한 바퀴를 탈 없이 마쳤을 때만**이다. 볼 것이 없어 일찍 물러나는 것도
+   * 한 바퀴를 마친 것이니 같이 찍는다.
+   */
   const waiting = rows.filter((r) => r.status === "waiting");
   /*
    * 살아 있는 줄이 하나도 없으면 볼 것이 없다. **`fired` 도 살아 있는 것으로 친다** —
    * 예전엔 `waiting` 만 보고 물러서서, 체결을 기다리다 멈춘 줄이 영영 청소되지 않았다.
    */
-  if (waiting.length === 0 && !rows.some((r) => r.status === "fired")) return;
+  if (waiting.length === 0 && !rows.some((r) => r.status === "fired")) {
+    lastWatchTick = Date.now();
+    watchLastError = null;
+    return;
+  }
   const { date, minute } = kstParts();
   const tag = orderIsMock() ? "[모의]" : "[실전]";
   watchFiring = true;
@@ -3061,6 +3076,18 @@ async function runAutoWatchLocked(main: KiwoomClient): Promise<void> {
       }
     }
     if (changed) await writeWatches(rows);
+    /* 여기까지 왔으면 한 바퀴를 다 돈 것이다 — 심장박동은 이 자리에서만 찍는다 (위 주석) */
+    lastWatchTick = Date.now();
+    watchLastError = null;
+  } catch (e) {
+    /*
+     * 바깥은 `.catch(() => undefined)` 라 던져도 조용하다. **까닭만은 남긴다** — 90초 경보가
+     * 울릴 때 「왜」가 같이 가야 사람이 볼 수 있다 (2026-09-21).
+     */
+    const msg = e instanceof Error ? e.message : String(e);
+    watchLastError = { at: new Date().toISOString(), msg: msg.slice(0, 160) };
+    console.error("[orders] 자동감시 틱 실패 —", msg);
+    throw e;
   } finally {
     watchFiring = false;
   }
@@ -3874,7 +3901,9 @@ export function startOrderHeartbeat(main: KiwoomClient): void {
       const rows = await readWatches().catch(() => [] as AutoWatch[]);
       if (rows.some((r) => r.status === "waiting") && Date.now() - lastDeadAlert > 600_000) {
         lastDeadAlert = Date.now();
-        void sendTelegram(`🚨 <b>자동감시 루프가 ${Math.round((Date.now() - lastWatchTick) / 1000)}초 동안 안 돌았다</b> — 기다리는 감시가 있다. 서버를 확인하라`, "order").catch(() => undefined);
+        /* 까닭을 같이 싣는다 — 「안 돌았다」만으로는 서버에 들어가 봐야 안다 (2026-09-21) */
+        const why = watchLastError ? `\n마지막 오류 ${watchLastError.at.slice(11, 19)} — ${watchLastError.msg.replace(/&/g, "&amp;").replace(/</g, "&lt;")}` : "";
+        void sendTelegram(`🚨 <b>자동감시 루프가 ${Math.round((Date.now() - lastWatchTick) / 1000)}초 동안 안 돌았다</b> — 기다리는 감시가 있다. 서버를 확인하라${why}`, "order").catch(() => undefined);
       }
     }
     /* ② 08:55 아침 인사 — 오늘 살아 있는 것들 */

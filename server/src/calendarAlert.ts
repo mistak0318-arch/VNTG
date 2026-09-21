@@ -199,6 +199,14 @@ export async function runCalendarAlert(force = false): Promise<CalendarAlertRun>
      * 알림 센터와 텔레그램 **둘 다**. 텔레그램은 자리를 비운 사이에 오고 알림
      * 센터는 화면에 남는다 — 서로를 대신하지 못한다(마감 뒤 정리와 같은 이유).
      */
+    /*
+     * **도장은 하나라도 닿은 뒤에** (2026-09-21 「조용한 건너뜀」 훑기 🟠).
+     *
+     * 예전엔 둘 다 `.catch(() => undefined)` 로 삼키고 **무조건** 보냄표를 찍었다. 텔레그램이 죽은
+     * 시각(429·망 끊김)에 걸리면 그 일정 알림은 **영영 안 왔다** — 다시 시도할 근거가 지워지니까.
+     * 오늘 `liveAlerts` 에서 고친 것과 같은 병이다. 둘 중 **하나라도 닿았으면** 찍고, 둘 다 실패하면
+     * 안 찍는다(다음 틱이 다시 해 본다). 두 번 가는 것은 `dedupeKey` 가 막는다.
+     */
     await pushNotice({
       source: "calendar",
       kind: "market",
@@ -211,7 +219,11 @@ export async function runCalendarAlert(force = false): Promise<CalendarAlertRun>
     }).catch(() => undefined);
 
     if (s.config.telegram) {
-      await sendTelegram(`${r.head}\n\n${body}`).catch(() => undefined);
+      const r2 = await sendTelegram(`${r.head}\n\n${body}`).catch(() => ({ ok: false, error: "던짐" }));
+      if (!r2.ok) {
+        console.warn(`[calendar] ${r.when} 일정 ${rows.length}건 텔레그램 실패 — 도장 안 찍는다. 다음 틱에 다시 (${r2.error ?? ""})`);
+        continue;
+      }
     }
 
     for (const e of rows) {
