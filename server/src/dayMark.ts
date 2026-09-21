@@ -71,6 +71,16 @@ export async function markToday(key: string): Promise<void> {
   await save();
 }
 
+/**
+ * 열쇠가 **이미 있나** — 적지 않고 보기만 한다 (2026-09-21).
+ *
+ * `once` 는 읽으면서 적는다. 그래서 「보내기 전에」 부르면 발송이 실패해도 열쇠가 소모돼 그 알림은
+ * 영영 안 간다(「조용한 건너뜀」 훑기 🟠). 먼저 이것으로 보고, **보낸 뒤에** `once` 로 찍는 순서를 쓴다.
+ */
+export async function hasOnce(key: string): Promise<boolean> {
+  return Boolean((await load())[key]);
+}
+
 /** 열쇠 하나짜리 — 처음이면 true(그리고 적는다), 이미 있으면 false. 열쇠 끝에 날짜를 붙여 두면 사흘 뒤 걷힌다 */
 export async function once(key: string): Promise<boolean> {
   const m = await load();

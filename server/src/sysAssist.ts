@@ -1655,9 +1655,19 @@ export function startSysScheduler(client: KiwoomClient): void {
     }
     try {
       const r = await recapToday(client);
-      recapSentDay = day;
-      await markToday("sysRecap");
-      if (r.stocks.length === 0) return;
+      /*
+       * **도장은 알림이 들어간 뒤에** (2026-09-21 「조용한 건너뜀」 훑기 🟡).
+       *
+       * 위 주석은 「성공한 뒤에 찍는다」라고 적혀 있는데 **코드는 그 반대였다** — `markToday` 가
+       * `pushNotice` 앞에 있어서, 알림 push 가 던지면 그날 되짚기는 영영 안 왔다. 게다가 바깥이
+       * `catch {}` 라 아무 자국도 안 남았다. 이제 순서를 주석과 맞춘다 — 실패하면 창(15:50~16:30)
+       * 안의 다음 분이 다시 해 본다. 두 번 가는 것은 `dedupeKey` 가 막는다.
+       */
+      if (r.stocks.length === 0) {
+        recapSentDay = day;
+        await markToday("sysRecap");
+        return;
+      }
       await pushNotice({
         source: "sys",
         kind: "stock",
@@ -1668,8 +1678,11 @@ export function startSysScheduler(client: KiwoomClient): void {
         dedupeKey: `sys:recap:${day}`,
         dedupeHours: 20,
       });
-    } catch {
-      /* 되짚기가 실패해도 다음 날 다시 */
+      recapSentDay = day;
+      await markToday("sysRecap");
+    } catch (e) {
+      /* 창 안이면 다음 분에 다시. 까닭은 남긴다 — 예전엔 `catch {}` 라 완전 무음이었다 (2026-09-21) */
+      console.warn("[sys] 되짚기 실패 — 다음 분에 다시:", e instanceof Error ? e.message : e);
     }
   }, 60_000);
   console.log("[sys] 되짚기 스케줄러 시작 (평일 15:50)");

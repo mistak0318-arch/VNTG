@@ -1,4 +1,4 @@
-import { once } from "./dayMark.js";
+import { hasOnce, once } from "./dayMark.js";
 import { marketCalendar, researchBoard } from "./naverMarket.js";
 import { pushNotice, stockLink } from "./notifyCenter.js";
 import { sendTelegram, stockNameHtml } from "./telegram.js";
@@ -37,14 +37,25 @@ export async function runNaverAlerts(): Promise<{ econ: number; goal: number }> 
       const at = hh * 60 + mm;
       /* 30분 전부터 25분 전 사이 한 번 — 1분 틱이라 창이 5분이면 놓치지 않는다 */
       if (minute < at - LEAD_MIN || minute > at - LEAD_MIN + 5) continue;
-      if (!(await once(`econ:${e.title}:${e.time}:${day}`))) continue;
+      /*
+       * **보낸 뒤에 찍는다** (2026-09-21 「조용한 건너뜀」 훑기 🟠). `once` 는 읽으면서 적는 함수라
+       * 보내기 전에 부르면 발송이 실패해도 열쇠가 소모돼 그 경고는 영영 안 갔다. 먼저 `hasOnce` 로 보고,
+       * 텔레그램이 닿은 뒤에 찍는다 — 실패하면 창(5분) 안의 다음 분이 다시 해 본다.
+       */
+      const econKey = `econ:${e.title}:${e.time}:${day}`;
+      if (await hasOnce(econKey)) continue;
       const nat = e.nation === "USA" ? "미국" : e.nation === "KOR" ? "한국" : (e.nation ?? "");
       const info = e.info
         .filter((i) => i.value && i.value !== "-")
         .map((i) => `${i.label} ${i.value}`)
         .join(" · ");
       const title = `${e.time} ${nat} ${e.title} — 30분 뒤 발표`;
-      await sendTelegram(`📊 <b>${title}</b>\n영향력 ${e.impact}${info ? ` · ${info}` : ""}\n발표 직후 지수·환율이 먼저 움직입니다 — 그 시각에 주문을 걸어 두지 않는 편이 낫습니다.`, "signal").catch(() => undefined);
+      const rEcon = await sendTelegram(`📊 <b>${title}</b>\n영향력 ${e.impact}${info ? ` · ${info}` : ""}\n발표 직후 지수·환율이 먼저 움직입니다 — 그 시각에 주문을 걸어 두지 않는 편이 낫습니다.`, "signal").catch(() => ({ ok: false, error: "던짐" }));
+      if (!rEcon.ok) {
+        console.warn(`[naverAlerts] 지표 경고 발송 실패 — 열쇠 안 찍는다. 다음 분에 다시 (${title} · ${rEcon.error ?? ""})`);
+        continue;
+      }
+      await once(econKey);
       await pushNotice({
         source: "econ",
         kind: "market",
@@ -57,8 +68,12 @@ export async function runNaverAlerts(): Promise<{ econ: number; goal: number }> 
       }).catch(() => undefined);
       out.econ += 1;
     }
-  } catch {
-    /* 캘린더를 못 받으면 이번 분은 넘긴다 */
+  } catch (e) {
+    /*
+     * 캘린더를 못 받으면 이번 분은 넘긴다. **까닭은 남긴다** (2026-09-21) — 예전엔 `catch {}` 라,
+     * 네이버가 하루 종일 막혀도 「오늘은 지표가 없었나 보다」와 구분이 안 됐다.
+     */
+    console.warn("[naverAlerts] 경제지표 캘린더 못 받음 —", e instanceof Error ? e.message : e);
   }
 
   /* ── ② 목표주가 변경 ∩ 내 종목 ── */
@@ -74,12 +89,18 @@ export async function runNaverAlerts(): Promise<{ econ: number; goal: number }> 
         const why = mine.get(g.code);
         if (!why) continue;
         const key = `goal:${g.code}:${g.broker}:${g.date.slice(0, 10)}`;
-        if (!(await once(key))) continue;
+        /* 위 ①과 같은 이유 — 보낸 뒤에 찍는다 (2026-09-21) */
+        if (await hasOnce(key)) continue;
         const arrow = g.dir === "up" ? "▲" : "▼";
         const rate = g.diffRate === null ? "" : ` (${g.diffRate > 0 ? "+" : ""}${g.diffRate.toFixed(1)}%)`;
         const px = g.goal === null ? "" : ` → ${g.goal.toLocaleString("ko-KR")}`;
         const title = `${g.name} 목표주가 ${arrow}${px}${rate} · ${g.broker}`;
-        await sendTelegram(`📑 <b>${stockNameHtml(g.code, g.name)}</b> 목표주가 ${arrow}${g.prevGoal !== null ? ` ${g.prevGoal.toLocaleString("ko-KR")}` : ""}${px}${rate}\n${g.broker} · ${g.title}\n(${why} — 애널리스트 의견이지 매매 근거가 아닙니다. 왜 고쳤는지가 본론)`, "signal").catch(() => undefined);
+        const rGoal = await sendTelegram(`📑 <b>${stockNameHtml(g.code, g.name)}</b> 목표주가 ${arrow}${g.prevGoal !== null ? ` ${g.prevGoal.toLocaleString("ko-KR")}` : ""}${px}${rate}\n${g.broker} · ${g.title}\n(${why} — 애널리스트 의견이지 매매 근거가 아닙니다. 왜 고쳤는지가 본론)`, "signal").catch(() => ({ ok: false, error: "던짐" }));
+        if (!rGoal.ok) {
+          console.warn(`[naverAlerts] 목표주가 발송 실패 — 열쇠 안 찍는다. 다음 분에 다시 (${g.name} · ${rGoal.error ?? ""})`);
+          continue;
+        }
+        await once(key);
         await pushNotice({
           source: "research",
           kind: "stock",
@@ -95,8 +116,9 @@ export async function runNaverAlerts(): Promise<{ econ: number; goal: number }> 
         out.goal += 1;
       }
     }
-  } catch {
-    /* 리서치를 못 받으면 이번 분은 넘긴다 */
+  } catch (e) {
+    /* 위와 같은 이유 — 조용히 죽지 않게 까닭을 남긴다 (2026-09-21) */
+    console.warn("[naverAlerts] 리서치 보드 못 받음 —", e instanceof Error ? e.message : e);
   }
   return out;
 }

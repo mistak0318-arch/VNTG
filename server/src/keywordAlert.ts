@@ -332,7 +332,18 @@ export async function runKeywordScan(
        * 급한 게 묻힌다. TELEGRAM_CHAT_ID_KEYWORD 가 없으면 예전처럼 기본 방으로 간다.
        */
       const ch = h.words.some((w) => superNames.has(w)) ? ("super" as const) : ("keyword" as const);
-      await sendTelegram(toMessage(h), ch).catch(() => undefined);
+      /*
+       * **보낸 뒤에 찍는다** (2026-09-21 「조용한 건너뜀」 훑기 🟠).
+       *
+       * `sendTelegram` 은 실패해도 안 던지고 `{ok:false}` 를 준다. 결과를 안 보고 이벤트 로그와 보냄표를
+       * 찍어서, 텔레그램이 죽은 동안 걸린 낱말은 **영영 안 오는데 타임라인에는 「보냈다」로 남았다.**
+       * 실패하면 둘 다 안 찍는다 — 다음 스캔이 다시 해 본다.
+       */
+      const r = await sendTelegram(toMessage(h), ch).catch(() => ({ ok: false, error: "던짐" }));
+      if (!r.ok) {
+        console.warn(`[keyword] 발송 실패 — 보냄표 안 찍는다. 다음 스캔에 다시 (${h.words.join("·")} · ${r.error ?? ""})`);
+        continue;
+      }
       /*
        * 이벤트 로그 — **보낸 것만** 적는다(미리보기는 안 적는다. dedup 도 안 거친
        * 것이라 적으면 같은 사건이 스캔마다 쌓인다). 브리핑 타임라인이 읽는다.
@@ -349,7 +360,7 @@ export async function runKeywordScan(
       });
       store.sent.push(h.key);
       sentCount += 1;
-      await new Promise((r) => setTimeout(r, 400));
+      await new Promise((r2) => setTimeout(r2, 400));
     }
     store.lastRunAt = new Date().toISOString();
     await write(store);

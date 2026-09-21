@@ -196,10 +196,22 @@ export async function runDisclosureScan(
       const ch = h.event.stockCode
         ? await superRoute(h.event.stockCode, "disclosure").catch(() => "disclosure" as const)
         : ("disclosure" as const);
-      await sendTelegram(toMessage(h.event, h.reason), ch).catch(() => undefined);
+      /*
+       * **보낸 뒤에 찍는다** (2026-09-21 「조용한 건너뜀」 훑기 🟠).
+       *
+       * `sendTelegram` 은 실패해도 던지지 않고 `{ok:false}` 를 준다. 그런데 결과를 안 보고 접수번호를
+       * 보냄표에 넣어 버려서, 텔레그램이 죽은 동안(429·망) 온 공시는 **영영 안 왔다** — 다시 보낼 근거가
+       * 지워지니까. 게다가 로그에는 「N건 발송」이라고 **성공처럼** 찍혔다. 실패하면 안 찍는다 —
+       * 다음 회차(10분)가 다시 해 본다.
+       */
+      const r = await sendTelegram(toMessage(h.event, h.reason), ch).catch(() => ({ ok: false, error: "던짐" }));
+      if (!r.ok) {
+        console.warn(`[disclosure] 발송 실패 — 보냄표 안 찍는다. 다음 회차에 다시 (${h.event.title?.slice(0, 40) ?? ""} · ${r.error ?? ""})`);
+        continue;
+      }
       store.sent.push(h.event.url.split("rcpNo=")[1] ?? h.event.url);
       sentCount += 1;
-      await new Promise((r) => setTimeout(r, 400));
+      await new Promise((r2) => setTimeout(r2, 400));
     }
     /*
      * ## **알림 센터에도 남긴다** (2026-09-02)
