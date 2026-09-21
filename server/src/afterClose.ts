@@ -453,17 +453,22 @@ export async function runAfterClose(
     return run ?? { day, startedAt: prevState.startedAt, finishedAt: prevState.finishedAt, running: false, steps: [] };
   }
   /*
-   * 재시작해도 오늘 몫은 한 번이다 — 메모리가 아니라 이력을 본다.
+   * ⛔ **걷어냈다** (2026-09-21 — 오늘 15:55 정규 회차가 통째로 안 돌았다).
    *
-   * ⚠️ **상태 파일 판정 뒤로 옮겼다** (2026-09-16 점검). 이게 앞에 있어서, 원장이 파이프라인
-   * 바깥에서 한 번 돌기만 하면(설정 화면에서 「②번만」 누른 날 — 파이프라인이 그러라고 만든
-   * 기능이다) **그날 정규 회차가 통째로 조용히 건너뛰어졌다.** 원장 이력은 「원장이 돌았나」이지
-   * 「파이프라인이 돌았나」가 아니다. 그래서 **오늘 회차 기록이 아예 없을 때만** 이력으로 본다
-   * (파이프라인 도중 재시작을 막는 것이 원래 목적이었고, 그건 이걸로도 된다).
+   * 여기 있던 가드: `!force && prevState?.day !== day && alreadyDone(day)` → 원장 수집 이력에 오늘
+   * 「done」이 있으면 회차를 건너뛴다. 9/16 에 「파이프라인 도중 재시작을 막으려고」 넣은 것이다.
+   *
+   * 그런데 **상태 파일은 회차를 시작할 때 오늘 날짜로 쓰인다**(아래 saveState). 그러니 도중에 재시작하면
+   * `prevState.day === day` 라 이 가드는 **애초에 발동하지 않는다** — 막으려던 일을 못 막는다.
+   * 반대로 `prevState.day !== day` 인 때는 **새 날의 첫 회차**뿐이고, 그건 반드시 돌아야 하는 자리다.
+   * 즉 이 줄은 **돌아야 할 때만 막았다.**
+   *
+   * 실제로 오늘(9/21 월) 그 일이 났다: `putCollectRun({status:"done"})` 은 수집이 한 바퀴 끝나기만 하면
+   * 찍히는데, 장중에 한 바퀴가 끝나 있었다. 그래서 15:55 회차가 조용히 건너뛰어져 18:40 까지
+   * 원장·마크·신호등이 **9/18 것 그대로**였다. 조용히 건너뛰는 것이 이 도구에서 가장 비싼 실패다.
+   *
+   * 도중 재시작은 `run?.running`(메모리)과 위의 「오늘 끝났고 실패 없음」 판정이 맡는다.
    */
-  if (!force && prevState?.day !== day && (await alreadyDone(day))) {
-    return run ?? { day, startedAt: "", running: false, steps: [] };
-  }
   const isRetry = /^재시도/.test(reason ?? "");
   /*
    * **마무리 회차인가** (2026-09-16 점검). 정규 회차의 상태(끝난 시각·실패 단계)를 **덮으면 안 된다**:
@@ -939,7 +944,8 @@ export function startAfterCloseScheduler(client: KiwoomClient): void {
        * 정규 회차가 오늘 아직 안 돌았으면 그것부터(마무리는 ②원장을 전제로 한다) — 마무리는 다음 틱에.
        */
       const st0 = await loadState().catch(() => null);
-      const regularPending = !(st0?.day === day && st0.finishedAt) && !(st0?.day !== day && (await alreadyDone(day)));
+      /* 정규 회차가 오늘 아직 안 끝났나 — 위와 같은 이유로 수집 이력(alreadyDone)은 안 본다 (2026-09-21) */
+      const regularPending = !(st0?.day === day && st0.finishedAt);
       /*
        * 「오늘 마무리가 끝났나」는 **파일 도장**으로 본다 (2026-09-16 밤). 이력 파일로 보다가 그 파일이 깨진 로컬에서
        * 다 성공한 뒤에도 30분마다 또 돌았다(시작 텔레그램이 세 번). 도장은 세 단계가 다 ✅ 일 때만 찍는다.
