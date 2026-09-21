@@ -2,6 +2,7 @@ import { Router } from "express";
 import { getHistory, getTotals, getUsage } from "../apiUsage.js";
 import { summarize } from "../summarize.js";
 import { getMenuPrefs, saveMenuPrefs } from "../menuPrefs.js";
+import { alertHealth } from "../alertHealth.js";
 import { getBoardPrefs, saveBoardPrefs } from "../boardPrefs.js";
 import { getUiPrefs, patchUiPrefs } from "../uiPrefs.js";
 import { getCardOrder, saveCardOrder } from "../cardOrder.js";
@@ -51,93 +52,8 @@ export function createSettingsRouter(): Router {
    */
   router.get("/alert-health", async (_req, res, next) => {
     try {
-      const [{ getAlertConfig }, { getChannelConfig, withinWindow }, keyword, disclosure, rooms, tg, reader] =
-        await Promise.all([
-          import("../alertRules.js"),
-          import("../channelConfig.js"),
-          import("../keywordAlert.js"),
-          import("../disclosureAlert.js"),
-          import("../telegramArchive.js"),
-          import("../telegram.js"),
-          import("../telegramReader.js"),
-        ]);
-      const [alertCfg, chCfg, kwCfg, dcCfg, roomList] = await Promise.all([
-        getAlertConfig().catch(() => null),
-        getChannelConfig().catch(() => null),
-        keyword.getConfig().catch(() => null),
-        disclosure.getConfig().catch(() => null),
-        rooms.roomsSummary().catch(() => []),
-      ]);
-      const lastOf = (ch: string): string | null =>
-        roomList.find((r: { channel: string }) => r.channel === ch)?.lastAt ?? null;
-      const dedicated = (ch: string) => tg.hasDedicatedChannel(ch as never);
-
-      res.json({
-        readerConfigured: reader.isReaderConfigured(),
-        botConfigured: tg.isTelegramConfigured(),
-        senders: [
-          {
-            key: "signal",
-            label: "관심종목 시그널",
-            enabled: alertCfg?.enabled ?? null,
-            room: dedicated("signal"),
-            lastSent: lastOf("signal"),
-          },
-          {
-            key: "keyword",
-            label: "키워드 알림",
-            enabled: kwCfg?.enabled ?? null,
-            needsReader: true,
-            room: dedicated("keyword"),
-            lastSent: lastOf("keyword"),
-          },
-          {
-            key: "disclosure",
-            label: "공시 알림",
-            enabled: dcCfg?.enabled ?? null,
-            room: dedicated("disclosure"),
-            lastSent: lastOf("disclosure"),
-          },
-          {
-            key: "channel",
-            label: "채널 선별 자동발송",
-            enabled: chCfg?.pickAuto?.enabled ?? null,
-            needsReader: true,
-            inWindow: chCfg?.pickAuto ? withinWindow(chCfg.pickAuto) : null,
-            room: dedicated("channel"),
-            lastSent: lastOf("channel"),
-          },
-          {
-            key: "super",
-            label: "슈퍼신호등",
-            enabled: true, // 스케줄러 고정(15:45) — 끄는 스위치가 없다
-            room: dedicated("super"),
-            lastSent: lastOf("super"),
-          },
-          {
-            key: "buzz",
-            label: "버즈 레이더",
-            enabled: true, // 30분 주기 고정. 기준선 3일 뒤부터 발송
-            needsReader: true,
-            room: dedicated("buzz"),
-            lastSent: lastOf("buzz"),
-          },
-          {
-            key: "order",
-            label: "주문·체결",
-            enabled: (process.env.ORDERS_ENABLED ?? "").trim() === "1",
-            room: dedicated("order"),
-            lastSent: lastOf("order"),
-          },
-          {
-            key: "report",
-            label: "데일리 리포트",
-            enabled: true, // 판별 on/off 는 리포트 일정에서
-            room: dedicated("report"),
-            lastSent: lastOf("report"),
-          },
-        ],
-      });
+      /* 본체는 `alertHealth.ts` 에 — health.json 도 같은 것을 본다 (2026-09-22). 복사해 두면 언젠가 갈린다 */
+      res.json(await alertHealth());
     } catch (err) {
       next(err);
     }

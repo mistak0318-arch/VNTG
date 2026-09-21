@@ -1,4 +1,4 @@
-import { afterProbeSnapshot } from "./afterProbe.js";
+﻿import { afterProbeSnapshot } from "./afterProbe.js";
 import { closeBetScanHealth } from "./closeBetScan.js";
 import { KiwoomClient } from "./kiwoomClient.js";
 import { flowAfterSnapshot } from "./flowAfterProbe.js";
@@ -11,6 +11,7 @@ import { hantooRealtimeStatus } from "./hantooRealtime.js";
 import { afterCloseStatus, afterCloseStateSummary } from "./afterClose.js";
 import { tradingDayStatus } from "./tradingDay.js";
 import { cisWhyNotSnapshot } from "./cisWhyNot.js";
+import { alertHealthLines } from "./alertHealth.js";
 import { getCisConfig } from "./cisConfig.js";
 import { streamStats } from "./routes/realtime.js";
 
@@ -137,6 +138,11 @@ async function writeOnceInner(): Promise<void> {
      * 안 남기고 그날이 빈다 — 「일본 증시 휴장」 한 줄로 저녁이 다 날아간 날이 있었다. 밖에서 바로 보이게.
      */
     거래일: tradingDayStatus(),
+    /*
+     * **알림 갈래가 켜져 있나** (2026-09-22). 키워드 알림이 한 달 동안 안 왔는데 원인이 「벤티지가
+     * 꺼 놓은 것」이었다 — 밖에서 「꺼짐」과 「고장」이 구분이 안 돼 코드를 한참 뒤졌다. 상태만 싣는다.
+     */
+    알림: await alertHealthLines(),
     /*
      * **항해일지가 오늘 왜 안 샀나** (2026-09-21 — 벤티지: "얘는 매매도 안하고 돈도 못벌고 이상해서").
      * 사유와 개수뿐 — 종목·금액은 안 싣는다. 켜져 있는지(`enabled`)도 같이 보여야 「안 돈 것」과 구분된다.
