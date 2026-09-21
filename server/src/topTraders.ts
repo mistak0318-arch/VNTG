@@ -1,4 +1,5 @@
-import type { KiwoomClient } from "./kiwoomClient.js";
+﻿import type { KiwoomClient } from "./kiwoomClient.js";
+import { getMarketSnapshot } from "./marketSnapshot.js";
 
 /**
  * 수익률 상위 고객 매매동향 (`ka04196`).
@@ -59,6 +60,13 @@ function abs(v: unknown): number {
 
 export async function topTraders(client: KiwoomClient): Promise<TopTraderRow[]> {
   const { data } = await client.request<{ result_list?: Raw[] }>(RKINFO, "ka04196", {});
+  /*
+   * **개장 전엔 등락률이 0 으로 온다** (2026-09-22 — 벤티지: "수익률 상위 고객 부분은 등락률 오지도 않네").
+   * 수익률 칸(+459%)은 제 값이 나오는데 등락률만 전부 `0.00%` 였다 — ka04196 도 새 날이 시작되기 전에는
+   * 현재가=전일 종가·등락률 0 이다. 시황 스냅샷이 다음 개장까지 어제 값을 들고 있으므로 그것으로 메운다.
+   * **정확히 0 일 때만** 바꾼다 — 진짜 보합은 스냅샷도 0 이고, 장중에는 같은 값이다.
+   */
+  const snap = await getMarketSnapshot(client).catch(() => null);
   return (data.result_list ?? [])
     .map((r) => ({
       rank: abs(r.rank),
@@ -74,5 +82,9 @@ export async function topTraders(client: KiwoomClient): Promise<TopTraderRow[]> 
       avgBuyPrice: abs(r.avg_pur_pric),
       profitRate: signed(r.prft_rt),
     }))
+    .map((r) => {
+      const s = snap?.byCode.get(r.code);
+      return s && s.changeRate !== 0 && r.changeRate === 0 ? { ...r, price: Math.abs(s.price), changeRate: s.changeRate } : r;
+    })
     .filter((r) => r.code && r.name);
 }

@@ -226,6 +226,11 @@ function cell(value: unknown, type?: string): { text: string; cls: string } {
   const sign = n > 0 ? "positive" : n < 0 ? "negative" : "";
   /* 등락률은 이 표의 주인공 — 색에 더해 굵게. 온 표가 빨갛던 시절엔 이게 파묻혔다 */
   if (type === "pct") return { text: `${n > 0 ? "+" : ""}${n.toFixed(2)}%`, cls: `scr-rate ${sign}` };
+  /*
+   * 늘 양수인 비율 — 체결강도·매수비율·집중률·한도소진율·신용비율 (2026-09-22).
+   * `pct` 를 쓰면 **전부 `+118.00%` 빨강**이 되어 등락률과 구분이 안 간다. % 만 붙이고 색은 안 칠한다.
+   */
+  if (type === "ratio") return { text: `${n.toFixed(n >= 100 ? 0 : 1)}%`, cls: "" };
   // 가격은 부호로 색을 칠하지 않는다 (음수 표기는 하락을 뜻하는 키움 관행이라 헷갈린다)
   if (type === "price") return { text: fmtNum(Math.abs(n)), cls: "" };
   /*

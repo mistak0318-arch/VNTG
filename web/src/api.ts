@@ -3713,7 +3713,8 @@ export interface RankResult {
   spec: {
     key: string;
     label: string;
-    columns: { key: string; label: string; type?: "text" | "price" | "num" | "pct" | "signed" }[];
+    /** `ratio` = 늘 양수인 비율(체결강도·신용비율 등) — % 는 붙이되 부호·색은 안 붙인다 (2026-09-22) */
+    columns: { key: string; label: string; type?: "text" | "price" | "num" | "pct" | "signed" | "ratio" }[];
     exchange: boolean;
     /**
      * **화면에서 고를 수 있는 파라미터** (2026-09-01).

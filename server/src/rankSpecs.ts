@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 시세분석 — 키움 순위 조회 레지스트리.
  *
  * 키움 HTS의 [0194] 순위분석에는 수십 개 목록이 있는데, 그때마다 라우트와 화면을
@@ -14,7 +14,13 @@
  * 예전엔 `num` 전부를 부호로 칠해서 거래대금·거래량·순위까지 죄다 빨갰다 —
  * 표가 온통 빨가니 정작 등락률이 안 보였다. 이제 `num` 은 무색이다.
  */
-export type ColType = "text" | "price" | "num" | "pct" | "signed";
+/*
+ * `ratio` (2026-09-22) — **늘 양수인 비율.** 체결강도·매수비율·집중률·한도소진율·신용비율처럼
+ * 0 아래로 안 내려가는 값이다. 여태 `pct` 를 쓰는 바람에 **여덟 칸이 늘 `+118.00%` 빨강**이었다 —
+ * 등락률과 똑같이 보이니 「오른 것」으로 읽힌다. `%` 는 붙이되 **부호와 색은 안 붙인다.**
+ * 2026-08-25 에 `num`→`signed` 를 가른 것과 같은 종류의, 빠져 있던 조각이다.
+ */
+export type ColType = "text" | "price" | "num" | "pct" | "signed" | "ratio";
 
 export interface RankColumn {
   key: string;
@@ -165,7 +171,7 @@ export const RANK_SPECS: RankSpec[] = [
       ...STOCK,
       { key: "now_trde_qty", label: "거래량", type: "num" },
       { key: "buy_req", label: "매수잔량", type: "num" },
-      { key: "cntr_str", label: "체결강도", type: "pct" },
+      { key: "cntr_str", label: "체결강도", type: "ratio" },
     ],
     note: "거래소를 NXT로 바꾸면 완전히 다른 종목이 나옵니다 — 통합은 사실상 KRX 기준입니다.",
   },
@@ -306,7 +312,7 @@ export const RANK_SPECS: RankSpec[] = [
       ...STOCK,
       { key: "open_pric_pre", label: "시가대비", type: "signed" },
       { key: "now_trde_qty", label: "거래량", type: "num" },
-      { key: "cntr_str", label: "체결강도", type: "pct" },
+      { key: "cntr_str", label: "체결강도", type: "ratio" },
     ],
     note:
       "전일 종가가 아니라 **오늘 시가**를 기준으로 얼마나 움직였는지입니다. 갭 뜨고 밀리는 종목(시가 대비 하위)과 " +
@@ -349,7 +355,7 @@ export const RANK_SPECS: RankSpec[] = [
       { key: "tot_buy_req", label: "총매수잔량", type: "num" },
       { key: "tot_sel_req", label: "총매도잔량", type: "num" },
       { key: "netprps_req", label: "순잔량", type: "signed" },
-      { key: "buy_rt", label: "매수비율", type: "pct" },
+      { key: "buy_rt", label: "매수비율", type: "ratio" },
     ],
   },
 
@@ -483,7 +489,7 @@ export const RANK_SPECS: RankSpec[] = [
       { key: "pric_strt", label: "매물대 시작", type: "price" },
       { key: "pric_end", label: "매물대 끝", type: "price" },
       { key: "prps_qty", label: "매물량", type: "num" },
-      { key: "prps_rt", label: "집중률", type: "pct" },
+      { key: "prps_rt", label: "집중률", type: "ratio" },
     ],
     note:
       "최근 50일 거래를 10구간으로 나눴을 때 한 구간에 거래의 N% 이상이 몰린 종목입니다. 현재가가 그 구간 안이면 " +
@@ -543,11 +549,11 @@ export const RANK_SPECS: RankSpec[] = [
     columns: [
       { key: "stk_nm", label: "종목명", type: "text" },
       { key: "cur_prc", label: "현재가", type: "price" },
-      { key: "dm1", label: "1일", type: "num" },
-      { key: "dm2", label: "2일", type: "num" },
-      { key: "dm3", label: "3일", type: "num" },
-      { key: "tot", label: "합계", type: "num" },
-      { key: "limit_exh_rt", label: "한도소진율", type: "pct" },
+      { key: "dm1", label: "1일", type: "signed" },
+      { key: "dm2", label: "2일", type: "signed" },
+      { key: "dm3", label: "3일", type: "signed" },
+      { key: "tot", label: "합계", type: "signed" },
+      { key: "limit_exh_rt", label: "한도소진율", type: "ratio" },
     ],
     note: "하루치는 노이즈지만 며칠 연속인지는 신호입니다.",
   },
@@ -579,8 +585,8 @@ export const RANK_SPECS: RankSpec[] = [
       { key: "rank", label: "순위", type: "num" },
       { key: "stk_nm", label: "종목명", type: "text" },
       { key: "cur_prc", label: "현재가", type: "price" },
-      { key: "base_limit_exh_rt", label: "기준소진율", type: "pct" },
-      { key: "limit_exh_rt", label: "현재소진율", type: "pct" },
+      { key: "base_limit_exh_rt", label: "기준소진율", type: "ratio" },
+      { key: "limit_exh_rt", label: "현재소진율", type: "ratio" },
       { key: "exh_rt_incrs", label: "증가", type: "pct" },
     ],
     note: "외국인이 살 수 있는 한도를 얼마나 채웠는지입니다. 급증하면 집중 매수가 있었다는 뜻입니다.",
@@ -717,7 +723,7 @@ export const RANK_SPECS: RankSpec[] = [
     listKey: "crd_rt_upper",
     columns: [
       ...STOCK,
-      { key: "crd_rt", label: "신용비율", type: "pct" },
+      { key: "crd_rt", label: "신용비율", type: "ratio" },
       { key: "now_trde_qty", label: "거래량", type: "num" },
     ],
     note: "신용비율이 높을수록 반대매매가 나올 여지가 큽니다 — 하락장에서 낙폭이 커지는 자리입니다.",

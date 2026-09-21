@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import { cumulativeRank } from "../cumulativeRank.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { COMMON_PARAMS, findSpec, specGroups, type RankSpec } from "../rankSpecs.js";
@@ -280,14 +280,23 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
         spec: {
           key: "cumulative",
           label: `누적등락률 상위 (${days}일)`,
+          /*
+           * ⚠️ 등락률 칸은 **`pct`** 다 (2026-09-22 — 벤티지: "누적 등락률 표기 방식이 좀 이상하네.
+           * 글자마다 색깔도 없고 옳은 건지 아닌 건지 구분이 잘 안 가는데").
+           *
+           * 여태 전부 `num` 이라 `11.178` 처럼 **부호도 % 도 색도 없이** 소수 셋째 자리까지 나왔다.
+           * 오른 것과 내린 것이 같은 흰 글자라 표를 읽을 수가 없었다. `pct` 는 `+11.18%` 로 줄이고
+           * 빨강/파랑을 칠하며 굵게 쓴다(`web/src/pages/ScreenerPage.tsx` 의 `cell()`).
+           * 현재가는 `price` — 부호로 색을 칠하지 않는다(키움의 음수 표기 관행과 헷갈리지 않게).
+           */
           columns: [
-            { key: "cur_prc", label: "현재가", type: "num" },
-            { key: "todayRate", label: "오늘", type: "num" },
-            { key: "r3", label: "3일", type: "num" },
-            { key: "cumRate", label: `${days}일 누적`, type: "num" },
-            { key: "r10", label: "10일", type: "num" },
-            { key: "r20", label: "20일", type: "num" },
-            { key: "r60", label: "60일", type: "num" },
+            { key: "cur_prc", label: "현재가", type: "price" },
+            { key: "todayRate", label: "오늘", type: "pct" },
+            { key: "r3", label: "3일", type: "pct" },
+            { key: "cumRate", label: `${days}일 누적`, type: "pct" },
+            { key: "r10", label: "10일", type: "pct" },
+            { key: "r20", label: "20일", type: "pct" },
+            { key: "r60", label: "60일", type: "pct" },
             { key: "trde_prica", label: "거래대금", type: "num" },
           ],
           exchange: false,
@@ -325,6 +334,13 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
               cur_prc: x.price,
               flu_rt: x.todayRate,
               trde_prica: x.tradeValue,
+              /*
+               * **거래대금은 억원으로** (2026-09-22). `extras` 를 `now_trde_qty:"0"` 으로 부르니 `tv` 가
+               * null 이 되고, 화면은 `tv` 가 있을 때만 억/조로 줄인다 — 그래서 이 탭만 백만원 원값
+               * (`13,702,300`)으로 찍혔다. 거래대금 상위는 같은 값을 「13.7조」로 보여 준다.
+               * 우리가 이미 들고 있는 값(백만원)을 억원으로 바꿔 얹으면 같은 눈이 된다.
+               */
+              tv: x.tradeValue > 0 ? Math.round(x.tradeValue / 100) : null,
             };
           }));
         })(),
@@ -526,6 +542,18 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
         .sort((a, b) => b.absGap - a.absGap)
         .slice(0, limit)
         .map((x, i) => ({ ...x, rank: i + 1 }));
+      /*
+       * **등락률 칸도 개장 전엔 0 이다** (2026-09-22). `gap`(장외 괴리)은 제 값이 나오는데 전일 대비
+       * 등락률만 0 이라, 위쪽 「상승 N · 하락 N」 요약이 전부 보합으로 세어지고 등락률 필터도 헛돌았다.
+       * 다른 탭과 같은 처방 — 정확히 0 일 때만 스냅샷의 어제 값으로.
+       */
+      const snapGap = await getMarketSnapshot(client).catch(() => null);
+      if (snapGap) {
+        for (const x of rows) {
+          const s = snapGap.byCode.get(x.code);
+          if (s && s.changeRate !== 0 && toNum(x.flu_rt) === 0) x.flu_rt = s.changeRate;
+        }
+      }
 
       res.json({
         spec: { ...spec, note: `${PHASE_LABEL[phase]} · 기준 ${found.date} 정규장 종가. ` + spec.note },
@@ -670,7 +698,7 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
             { key: "rank", label: "순위", type: "num" },
             { key: "cur_prc", label: "현재가", type: "num" },
             { key: "flu_rt", label: "등락률", type: "num" },
-            { key: "netEok", label: `${span}일 순매수(억)`, type: "num" },
+            { key: "netEok", label: `${span}일 순매수(억)`, type: "signed" },
           ],
           exchange: false,
           /*
@@ -720,12 +748,19 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
         .map((r, i) => {
           const ex = extras({ cur_prc: String(r.price ?? 0), now_trde_qty: "0", stk_cd: r.code }, index.get(r.code));
           if (ex.tv === null && snap) ex.tv = snap.byCode.get(r.code)?.tradeValue ?? null;
+          /*
+           * **개장 전엔 표본의 등락률이 전부 0 이다** (2026-09-22). 표본은 07시부터 쌓이는데 그 값이
+           * 조회순위 TR 의 `base_comp_chgr` 원값이라, 새 날이 시작되기 전에는 전 줄이 `0.00%` 였다.
+           * 다른 탭과 같은 처방 — 정확히 0 일 때만 스냅샷의 어제 값으로.
+           */
+          const s = snap?.byCode.get(r.code);
+          const fill = s && s.changeRate !== 0 && (r.rate ?? 0) === 0;
           return {
             code: r.code,
             name: r.name,
             rank: i + 1,
-            cur_prc: r.price,
-            flu_rt: r.rate,
+            cur_prc: fill ? Math.abs(s.price) : r.price,
+            flu_rt: fill ? s.changeRate : r.rate,
             hits: r.hits,
             share: samples > 0 ? Math.round((r.hits / samples) * 100) : null,
             bestRank: r.bestRank,
@@ -746,7 +781,7 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
             { key: "cur_prc", label: "현재가", type: "price" },
             { key: "flu_rt", label: "등락률", type: "pct" },
             { key: "hits", label: "등장", type: "num" },
-            { key: "share", label: "점유", type: "num" },
+            { key: "share", label: "점유", type: "ratio" },
             { key: "bestRank", label: "최고", type: "num" },
             { key: "lastRank", label: "지금", type: "num" },
           ],
