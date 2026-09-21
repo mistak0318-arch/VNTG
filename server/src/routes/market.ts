@@ -72,6 +72,9 @@ function daysAgoYyyymmdd(days: number): string {
   return `${d.getFullYear()}${m}${day}`;
 }
 
+/** `/quotes` 서버 캐시 — 같은 종목 묶음은 30초에 한 번만 키움까지 간다 (2026-09-21) */
+const quotesCache = new Map<string, { at: number; quotes: Record<string, { price: number; changeRate: number; mine: "hold" | "watch" | null }> }>();
+
 export function createMarketRouter(client: KiwoomClient): Router {
   const router = Router();
 
@@ -256,7 +259,11 @@ export function createMarketRouter(client: KiwoomClient): Router {
    * 「중요」를 고르지만 우리는 **네 포트폴리오 기준**으로 고를 수 있다.
    *
    * 비용: `ka10095` 는 `|` 로 여러 종목을 한 번에 준다 — 뉴스 한 쪽(30여 종목)이 **조회 1~2회**.
-   * 30초 캐시라 같은 목록을 다시 열어도 안 는다. 보유는 주문 쪽 계좌 캐시(2.5초)를 얹기만 한다.
+   * 보유는 주문 쪽 계좌 캐시(2.5초)를 얹기만 한다.
+   *
+   * ⚠️ 캐시는 **서버에 둔다** (2026-09-21 회귀 점검). 처음엔 `Cache-Control` 헤더만 달아 놓고 주석에
+   * 「30초 캐시」라 적었는데, 그건 브라우저에게 주는 힌트일 뿐이라 창이 여럿이거나 앱이 무시하면
+   * 매 호출이 그대로 키움까지 갔다. 같은 종목 묶음은 30초 동안 한 번만 받는다.
    */
   router.get("/quotes", async (req, res, next) => {
     try {
@@ -270,6 +277,13 @@ export function createMarketRouter(client: KiwoomClient): Router {
       ].slice(0, 80);
       if (codes.length === 0) {
         res.json({ quotes: {} });
+        return;
+      }
+      const key = codes.slice().sort().join(",");
+      const hit = quotesCache.get(key);
+      if (hit && Date.now() - hit.at < 30_000) {
+        res.set("Cache-Control", "private, max-age=30");
+        res.json({ quotes: hit.quotes });
         return;
       }
       const quotes: Record<string, { price: number; changeRate: number; mine: "hold" | "watch" | null }> = {};
@@ -299,6 +313,12 @@ export function createMarketRouter(client: KiwoomClient): Router {
       const watched = new Set(watch.map((w) => w.code));
       for (const [code, q] of Object.entries(quotes)) {
         q.mine = held.has(code) ? "hold" : watched.has(code) ? "watch" : null;
+      }
+      quotesCache.set(key, { at: Date.now(), quotes });
+      /* 파일이 아니라 메모리라 무한정 두면 안 된다 — 오래된 것부터 버린다 */
+      if (quotesCache.size > 40) {
+        const oldest = [...quotesCache.entries()].sort((a, b) => a[1].at - b[1].at)[0];
+        if (oldest) quotesCache.delete(oldest[0]);
       }
       res.set("Cache-Control", "private, max-age=30");
       res.json({ quotes });

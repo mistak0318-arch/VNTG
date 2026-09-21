@@ -55,8 +55,25 @@ function krxTrading(now = new Date()): boolean {
   return krxAfterMarket(date, minute);
 }
 
+/**
+ * **덮을 값이 있는 시간인가** (2026-09-21 회귀 점검 🟡).
+ *
+ * 「KRX 체결이 없으면 덮는다」로만 두니 **밤새·주말에도** 계좌 화면이 20초마다 ka10095 를 불렀다 —
+ * 그 시간엔 통합가가 KRX 종가와 같아 **한 글자도 안 바뀐다**(순수 낭비). 값이 실제로 갈리는 창은
+ * **NXT 만 도는 두 구간**뿐이다: 08:00~09:00(프리) · 15:30~16:00(정규 마감 뒤 공백).
+ * 그 밖에서는 그냥 키움 잔고를 그대로 준다.
+ */
+function nxtOnlyWindow(now = new Date()): boolean {
+  const d = new Date(now.getTime() + 9 * 3600_000);
+  const date = d.toISOString().slice(0, 10);
+  const minute = d.getUTCHours() * 60 + d.getUTCMinutes();
+  if (!isTradingDay(new Date(`${date}T12:00:00+09:00`))) return false;
+  if (minute >= MIN.nxtPreOpen && minute < MIN.regularOpen) return true;
+  return minute > MIN.regularClose && minute < MIN.afterOpen;
+}
+
 async function overlayNxtPrices(client: KiwoomClient, data: Record<string, unknown>): Promise<Record<string, unknown>> {
-  if (krxTrading()) return data;
+  if (krxTrading() || !nxtOnlyWindow()) return data;
   const list = Array.isArray(data.acnt_evlt_remn_indv_tot) ? (data.acnt_evlt_remn_indv_tot as Record<string, unknown>[]) : [];
   if (list.length === 0) return data;
   /*
