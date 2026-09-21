@@ -1,5 +1,5 @@
 ﻿import { PAGE_SIZES, PAGE_SIZE_DEFAULT } from "../components/Pager";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { removePref, setPref } from "../prefs";
 import { api, fmtNum, type FlowSum, type RankResult, type RankSpecGroup } from "../api";
 import { SuperMark } from "../useSuperMarks";
@@ -1429,6 +1429,35 @@ export function ScreenerPage({
               const shownCols = inlineRank
                 ? orderedCols.filter((c) => !RANK_COLS.has(c.key))
                 : orderedCols;
+              /*
+               * **봉은 등락률 바로 옆** (2026-09-22 — 벤티지: "기초 설정에서 봉을 등락률 바로 옆에 놔줘").
+               * 칸 순서를 끌어 옮겨도 등락률을 따라다닌다. 등락률 칸이 없는 조회(수익률 상위고객 등)에서는
+               * 예전처럼 맨 뒤에 붙인다.
+               */
+              const candleAfter = shownCols.some((c) => c.key === "flu_rt") ? "flu_rt" : null;
+              const candleTh = (
+                <SortableTh
+                  key="cd"
+                  columnKey="cd"
+                  label="봉"
+                  /* 정렬은 일중 변동폭(고−저) — 「오늘 많이 흔들린 것」이 위로 */
+                  accessor={(r: (typeof rows)[number]) => (r.cd && r.cd.l > 0 ? ((r.cd.h - r.cd.l) / r.cd.l) * 100 : -Infinity)}
+                  sort={sort}
+                  className="num-narrow"
+                />
+              );
+              /** 셀 배열에 봉 칸을 끼워 넣는다 — 안쪽 `return` 들을 안 건드리려고 뒤에서 자른다 */
+              const spliceCandle = (cells: React.ReactNode[], r: (typeof rows)[number]): React.ReactNode[] => {
+                if (!hasCandle) return cells;
+                const td = (
+                  <td key="cd" className="dcd-cell">
+                    <MiniCandle d={r.cd} />
+                  </td>
+                );
+                const i = candleAfter === null ? -1 : shownCols.findIndex((c) => c.key === candleAfter);
+                if (i < 0) return [...cells, td];
+                return [...cells.slice(0, i + 1), td, ...cells.slice(i + 1)];
+              };
               const tableOf = (part: typeof drawn, rankOff = 0) => (
               <>
               {/*
@@ -1447,6 +1476,7 @@ export function ScreenerPage({
                   {/* 종목명은 넓게, 순위 칸은 좁게 — 폭을 정한 표에서 안 정한 칸의 기본값 */}
                   <col style={cw.styleOf("stk_nm", 190)} />
                   {shownCols.map((c) => (
+                    <Fragment key={`cg_${c.key}`}>
                     <col
                       key={c.key}
                       style={cw.styleOf(
@@ -1460,8 +1490,11 @@ export function ScreenerPage({
                         RANK_COLS.has(c.key) ? 48 : c.key === "cur_prc" || c.key === "flu_rt" || c.type === "price" ? 96 : 84,
                       )}
                     />
+                    {/* 봉은 **등락률 바로 옆**에 (2026-09-22 벤티지 지시) — 칸 순서를 바꿔도 따라다닌다 */}
+                    {hasCandle && c.key === candleAfter && <col style={{ width: 34 }} />}
+                    </Fragment>
                   ))}
-                  {hasCandle && <col style={{ width: 34 }} />}
+                  {hasCandle && candleAfter === null && <col style={{ width: 34 }} />}
                   {hasTvExtra && <col style={cw.styleOf("tv")} />}
                   {hasTurn && <col style={cw.styleOf("turn")} />}
                   {hasCap && <col style={cw.styleOf("cap")} />}
@@ -1501,8 +1534,8 @@ export function ScreenerPage({
                       <ColumnGrip cw={cw} k="stk_nm" />
                     </th>
                     {shownCols.map((c) => (
+                      <Fragment key={`th_${c.key}`}>
                       <SortableTh
-                        key={c.key}
                         columnKey={c.key}
                         label={c.label}
                         /* 끌어서 열 자리 옮기기 — 화살표(칸 순서 모드)와 같은 저장으로 떨어진다 */
@@ -1549,19 +1582,11 @@ export function ScreenerPage({
                           </>
                         }
                       />
+                      {/* 봉은 **등락률 바로 옆** (2026-09-22 벤티지 지시) — 칸 순서를 바꿔도 따라다닌다 */}
+                      {hasCandle && c.key === candleAfter && candleTh}
+                      </Fragment>
                     ))}
-                    {/* 당일 봉 — 정렬은 일중 변동폭(고-저)으로. 「오늘 많이 흔들린 것」이 위로 */}
-                    {hasCandle && (
-                      <SortableTh
-                        columnKey="cd"
-                        label="봉"
-                        accessor={(r: (typeof rows)[number]) =>
-                          r.cd && r.cd.l > 0 ? ((r.cd.h - r.cd.l) / r.cd.l) * 100 : -Infinity
-                        }
-                        sort={sort}
-                        className="num-narrow"
-                      />
-                    )}
+                    {hasCandle && candleAfter === null && candleTh}
                     {/* 걸러 보는 기준이면 표에도 있어야 한다 */}
                     {hasTvExtra && (
                       <SortableTh
@@ -1759,7 +1784,8 @@ export function ScreenerPage({
                         {/* 뉴스·텔레그램 24시간 수 — 누르면 팝업에서 읽는다 */}
                         {buzz.badge(r.code, r.name)}
                       </td>
-                      {shownCols.map((c) => {
+                      {spliceCandle(
+                        shownCols.map((c) => {
                           const v = cell(r[c.key], c.type);
                           /*
                            * 거래대금은 **어디서 돌았는지**까지 보여준다.
@@ -1848,11 +1874,8 @@ export function ScreenerPage({
                               {qtyLike && Number.isFinite(qn) ? shortQty(qn) : v.text}
                             </td>
                           );
-                        })}
-                      {hasCandle && (
-                        <td className="dcd-cell">
-                          <MiniCandle d={r.cd} />
-                        </td>
+                        }),
+                        r,
                       )}
                       {hasTvExtra && (
                         <td className="num" title={r.tvEst ? "어림값 — 거래량 × 현재가" : undefined}>

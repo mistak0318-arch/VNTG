@@ -6,11 +6,19 @@ export interface ChangeDay {
   items: { hash: string; subject: string }[];
 }
 
-/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-21T23:00:01.245Z */
+/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-21T23:35:57.589Z */
 export const CHANGELOG: ChangeDay[] = [
   {
     "date": "2026-09-22",
     "items": [
+      {
+        "hash": "6ca0dd3",
+        "subject": "시세분석에 당일 봉 — 등락률 숫자만으로는 「어떻게 그 숫자가 됐는지」가 안 보인다"
+      },
+      {
+        "hash": "ed91f41",
+        "subject": "변경 이력 다시 굽기"
+      },
       {
         "hash": "9ea41a1",
         "subject": "관심종목 「당일」도 개장 전엔 전부 0.00% 였다 — 같은 처방"
@@ -1687,14 +1695,6 @@ export const CHANGELOG: ChangeDay[] = [
       {
         "hash": "e95accc",
         "subject": "모의투자는 KRX 만 받는다 — 통합·NXT 를 잠근다 (RC9000)"
-      },
-      {
-        "hash": "01072e2",
-        "subject": "주문 화면을 엑셀 모드에 마저 담근다 — 빨강·파랑을 빼고 선택 칸으로"
-      },
-      {
-        "hash": "b1fab21",
-        "subject": "주문이 안 나가고 창도 안 닫히던 것 — 폼 안에 폼이 있었다"
       }
     ]
   }
