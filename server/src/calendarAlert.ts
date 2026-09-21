@@ -44,18 +44,22 @@ const FILE = join(DATA_DIR, "calendarAlert.json");
 
 export interface CalendarAlertConfig {
   enabled: boolean;
-  /** 전날 저녁에 알릴까 — 준비할 시간을 준다 */
-  dayBefore: boolean;
-  /** 전날 알림을 몇 시에 (KST) */
-  dayBeforeHour: number;
-  /** 당일 아침에 알릴까 — 전날 알림은 자고 나면 흐려진다 */
-  sameDay: boolean;
-  /** 당일 알림을 몇 시에 (KST) */
-  sameDayHour: number;
+  /** 몇 시에 보낼까 (KST 0~23) — 오름차순, 중복 없음 */
+  hours: number[];
+  /** 이 시각 판만 **내일** 것을 보낸다. 나머지는 「오늘 남은 것」 */
+  tomorrowHour: number;
   /** 어느 갈래를 알릴까 — 비면 전부 */
   kinds: EventKind[];
   /** 텔레그램으로도 보낼까 (알림 센터에는 늘 남는다) */
   telegram: boolean;
+}
+
+/** 옛 판(두 회차) 설정 — 읽어서 `hours` 로 옮기기만 한다 */
+interface LegacyConfig {
+  dayBefore?: boolean;
+  dayBeforeHour?: number;
+  sameDay?: boolean;
+  sameDayHour?: number;
 }
 
 /**
@@ -65,19 +69,17 @@ export interface CalendarAlertConfig {
  * 옛 시각 그대로다. 판이 오르면 **시각과 갈래를 한 번** 새 기본값으로 옮긴다 — 그 뒤에 벤티지가
  * 화면에서 바꾼 것은 그대로 지킨다(판 번호가 같으면 안 건드린다).
  */
-const SCHED_VER = 2;
+const SCHED_VER = 3;
 
 export const DEFAULT_CONFIG: CalendarAlertConfig = {
   enabled: true,
-  dayBefore: true,
   /*
-   * 20시 — **장마감(애프터 20:00) 직후.** 벤티지: "오전 6시랑 장마감 8시에 일정이랑 이벤트 관련
-   * 메시지 좀 보내줄래?" (예전엔 18시였다 — 애프터마켓이 생기기 전 「장 끝나고」의 뜻이었다)
+   * **하루 일곱 번** (2026-09-22 — 벤티지가 시각을 그대로 골랐다):
+   *   06 기상 · 08 개장 전 · 12 점심 · 15 마감 전 · 17 마감 뒤 · 19 저녁 · 22 자기 전
    */
-  dayBeforeHour: 20,
-  sameDay: true,
-  /* 6시 — 아침에 눈 뜨자마자. 개장 세 시간 전이라 준비할 시간이 있다 (예전엔 8시) */
-  sameDayHour: 6,
+  hours: [6, 8, 12, 15, 17, 19, 22],
+  /* 22시 판만 **내일** 것 — 자기 전에 내일을 본다. 나머지 여섯은 「오늘 남은 것」 */
+  tomorrowHour: 22,
   /*
    * **개인 일정도 넣는다** (2026-09-22 — "네이버랑 **내 캘린더** 참고해서"). 구독 캘린더(ICS)로
    * 들어온 내 일정이 `personal` 이다. 휴장일(holiday)은 빼 둔다 — 그날 아침에 알려 봐야 할 게 없고,
@@ -103,11 +105,20 @@ async function load(): Promise<Store> {
     const config = { ...DEFAULT_CONFIG, ...(raw.config ?? {}) };
     const ver = typeof raw.schedVer === "number" ? raw.schedVer : 1;
     if (ver < SCHED_VER) {
-      /* 한 번만 — 저장된 옛 시각(18시·8시)을 새 기본값으로 옮긴다. 아래 `save` 가 판 번호를 박는다 */
-      config.dayBeforeHour = DEFAULT_CONFIG.dayBeforeHour;
-      config.sameDayHour = DEFAULT_CONFIG.sameDayHour;
+      /*
+       * 한 번만 — 옛 두 회차 설정(18시 내일 · 8시 오늘)을 새 `hours` 판으로 옮긴다.
+       * 아래 `save` 가 판 번호를 박으므로 그 뒤 화면에서 바꾼 것은 그대로 지킨다.
+       */
+      config.hours = DEFAULT_CONFIG.hours;
+      config.tomorrowHour = DEFAULT_CONFIG.tomorrowHour;
       config.kinds = DEFAULT_CONFIG.kinds;
     }
+    /* 옛 필드는 버린다 — 타입에 없으니 남아 있어도 안 읽히지만 저장 파일을 깨끗이 둔다 */
+    delete (config as unknown as LegacyConfig).dayBefore;
+    delete (config as unknown as LegacyConfig).dayBeforeHour;
+    delete (config as unknown as LegacyConfig).sameDay;
+    delete (config as unknown as LegacyConfig).sameDayHour;
+    config.hours = [...new Set(config.hours.filter((h) => Number.isInteger(h) && h >= 0 && h <= 23))].sort((a, b) => a - b);
     return { config, sent: Array.isArray(raw.sent) ? raw.sent : [], schedVer: SCHED_VER };
   } catch {
     return { ...EMPTY, sent: [], schedVer: SCHED_VER };
@@ -135,10 +146,14 @@ export async function saveCalendarAlertConfig(
   };
   s.config = {
     enabled: typeof patch.enabled === "boolean" ? patch.enabled : s.config.enabled,
-    dayBefore: typeof patch.dayBefore === "boolean" ? patch.dayBefore : s.config.dayBefore,
-    dayBeforeHour: num(patch.dayBeforeHour, 0, 23, s.config.dayBeforeHour),
-    sameDay: typeof patch.sameDay === "boolean" ? patch.sameDay : s.config.sameDay,
-    sameDayHour: num(patch.sameDayHour, 0, 23, s.config.sameDayHour),
+    /* 0~23 정수만, 중복 없이, 오름차순. 빈 목록은 안 받는다(그러면 영영 안 온다) */
+    hours: Array.isArray(patch.hours)
+      ? (() => {
+          const v = [...new Set(patch.hours.map((h) => Math.round(Number(h))).filter((h) => Number.isInteger(h) && h >= 0 && h <= 23))].sort((a, b) => a - b);
+          return v.length > 0 ? v : s.config.hours;
+        })()
+      : s.config.hours,
+    tomorrowHour: num(patch.tomorrowHour, 0, 23, s.config.tomorrowHour),
     /* 아는 갈래만 받는다 — 화면이 딴 값을 보내도 저장이 오염되지 않게 */
     kinds: Array.isArray(patch.kinds)
       ? patch.kinds.filter((k) => EVENT_KINDS.some((x) => x.key === k))
@@ -193,38 +208,62 @@ export async function runCalendarAlert(force = false): Promise<CalendarAlertRun>
   out.checked = all.length;
 
   const seen = new Set(s.sent);
-  const rounds: { when: "before" | "today"; on: boolean; date: string; head: string }[] = [
-    {
-      when: "before",
-      on: s.config.dayBefore && (force || hour === s.config.dayBeforeHour),
-      date: tomorrow,
-      head: `🌙 <b>내일 일정·이벤트</b> <i>(${tomorrow.slice(5)})</i>`,
-    },
-    {
-      when: "today",
-      on: s.config.sameDay && (force || hour === s.config.sameDayHour),
-      date: today,
-      head: `🌅 <b>오늘 일정·이벤트</b> <i>(${today.slice(5)})</i>`,
-    },
-  ];
+  /*
+   * **하루 일곱 번** (2026-09-22 — 벤티지: "오전 6시, 오전 8시, 12시, 오후 3시, 오후 5시, 오후 7시,
+   * 오후 10시 이렇게 해줘"). 기상 · 개장 전 · 점심 · 마감 전 · 마감 후 · 저녁 · 자기 전이다.
+   *
+   * 판이 일곱이므로 **같은 일정을 일곱 번 보내면 안 된다.** 그래서 회차마다 무엇을 담을지가 다르다:
+   *
+   *   · 마지막 판(기본 22시) — **내일** 일정 전부. 자기 전에 내일을 본다
+   *   · 그 밖 — **오늘 남은** 일정만. 시각이 지난 것은 뺀다(종일 일정은 늘 넣는다).
+   *     그래서 12시 판과 19시 판의 내용이 저절로 다르다
+   *
+   * 중복 막기도 「일정 하나당 한 번」이 아니라 **「그날 그 시각 판을 보냈나」** 로 센다 —
+   * 아니면 두 번째 판부터 늘 빈 목록이 된다.
+   */
+  const hours = s.config.hours.length > 0 ? s.config.hours : DEFAULT_CONFIG.hours;
+  const lastHour = s.config.tomorrowHour;
+  const fired = force ? hours.slice(-1) : hours.filter((h) => h === hour);
+  /** 지금 시각(HH:MM) — 「남은 일정」을 가르는 잣대 */
+  const nowHm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+
+  const rounds = fired.map((h) => {
+    const forTomorrow = h === lastHour;
+    return {
+      h,
+      when: (forTomorrow ? "before" : "today") as "before" | "today",
+      date: forTomorrow ? tomorrow : today,
+      forTomorrow,
+      head: forTomorrow
+        ? `🌙 <b>내일 일정·이벤트</b> <i>(${tomorrow.slice(5)})</i>`
+        : `📅 <b>오늘 남은 일정·이벤트</b> <i>(${today.slice(5)} ${String(h).padStart(2, "0")}시 판)</i>`,
+    };
+  });
 
   for (const r of rounds) {
-    if (!r.on) continue;
-    const rows = all.filter((e) => e.date === r.date && want(e) && !seen.has(`${e.id}:${r.when}`));
     /*
-     * **일정이 없는 날도 한 줄은 보낸다** (2026-09-22 — 벤티지: "우리 키워드 채널에는 왜 아무것도 안와?").
-     *
-     * 예전엔 0건이면 그냥 넘어갔다. 그런데 그러면 **「오늘은 일정이 없다」와 「알림이 고장 났다」가
-     * 화면에서 똑같이 보인다.** 실제로 그 방이 한 달 동안 조용했는데 아무도 고장인 줄 몰랐다.
-     * 하루 한 줄은 「살아 있다」는 신호이기도 하다.
-     *
-     * 단, 이미 그날 것을 보낸 뒤(전부 `seen`)라면 조용히 넘어간다 — 5분 틱마다 「없음」이 가면 안 된다.
+     * 한 회차는 **하루에 한 번**. 5분 틱이라 같은 시각에 열두 번 들어오므로 도장이 필요하다.
+     * 일정이 없는 날도 **한 줄은 보낸다** — 예전엔 0건이면 넘어갔는데, 그러면 「일정이 없다」와
+     * 「알림이 고장 났다」가 똑같이 보인다(그 방이 한 달 조용했는데 고장인 줄 몰랐다).
      */
-    const noneKey = `none:${r.when}:${r.date}`;
-    const already = all.some((e) => e.date === r.date && want(e) && seen.has(`${e.id}:${r.when}`));
-    if (rows.length === 0 && (already || seen.has(noneKey))) continue;
+    const slotKey = `slot:${r.date}:${r.h}`;
+    if (seen.has(slotKey)) continue;
+    const rows = all.filter(
+      (e) => e.date === r.date && want(e) && (r.forTomorrow || !e.time || e.time >= nowHm),
+    );
 
-    const body = rows.length > 0 ? rows.map(line).join("\n") : "적힌 일정이 없습니다.";
+    /*
+     * 비었을 때도 **쓸모 있는 한 줄**로. 「없습니다」만 일곱 번 오면 그건 소음이다 —
+     * 다음 것이 언제인지를 같이 적어 준다.
+     */
+    const ahead = all.filter((e) => want(e) && (e.date > r.date || (e.date === r.date && !!e.time && e.time >= nowHm)));
+    const nextOne = ahead.find((e) => e.date > r.date);
+    const body =
+      rows.length > 0
+        ? rows.map(line).join("\n")
+        : r.forTomorrow
+          ? `내일은 적힌 일정이 없습니다.${nextOne ? `\n다음 일정 — ${line(nextOne)}` : ""}`
+          : `오늘 남은 일정이 없습니다.${nextOne ? `\n다음 일정 — ${line(nextOne)}` : ""}`;
     /*
      * 알림 센터와 텔레그램 **둘 다**. 텔레그램은 자리를 비운 사이에 오고 알림
      * 센터는 화면에 남는다 — 서로를 대신하지 못한다(마감 뒤 정리와 같은 이유).
@@ -244,7 +283,7 @@ export async function runCalendarAlert(force = false): Promise<CalendarAlertRun>
       title: rows.length > 0 ? `${r.when === "before" ? "내일" : "오늘"} 일정 ${rows.length}건` : `${r.when === "before" ? "내일" : "오늘"} 일정 없음`,
       body,
       link: "#/calendar",
-      dedupeKey: `calendar:${r.when}:${r.date}`,
+      dedupeKey: `calendar:${r.date}:${r.h}`,
       dedupeHours: 20,
     }).catch(() => undefined);
 
@@ -252,20 +291,14 @@ export async function runCalendarAlert(force = false): Promise<CalendarAlertRun>
       /* 「일정/이벤트」 방으로 (2026-09-22) — 전용 키가 없으면 이름만 바꾼 옛 키워드 방으로 간다 */
       const r2 = await sendTelegram(`${r.head}\n\n${body}`, "calendar").catch(() => ({ ok: false, error: "던짐" }));
       if (!r2.ok) {
-        console.warn(`[calendar] ${r.when} 일정 ${rows.length}건 텔레그램 실패 — 도장 안 찍는다. 다음 틱에 다시 (${r2.error ?? ""})`);
+        console.warn(`[calendar] ${r.h}시 판 ${rows.length}건 텔레그램 실패 — 도장 안 찍는다. 다음 틱에 다시 (${r2.error ?? ""})`);
         continue;
       }
     }
 
-    for (const e of rows) {
-      s.sent.push(`${e.id}:${r.when}`);
-      seen.add(`${e.id}:${r.when}`);
-    }
-    /* 「없음」도 도장을 찍는다 — 안 그러면 5분 틱마다 「없습니다」가 간다 */
-    if (rows.length === 0) {
-      s.sent.push(noneKey);
-      seen.add(noneKey);
-    }
+    /* 회차 도장 — 「그날 그 시각 판을 보냈다」. 일정이 0건이어도 찍는다 */
+    s.sent.push(slotKey);
+    seen.add(slotKey);
     out.sent.push({ when: r.when, events: rows.map((e) => e.title) });
   }
 
