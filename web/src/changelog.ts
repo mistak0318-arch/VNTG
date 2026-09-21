@@ -6,11 +6,19 @@ export interface ChangeDay {
   items: { hash: string; subject: string }[];
 }
 
-/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-21T22:04:36.029Z */
+/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-21T22:11:25.902Z */
 export const CHANGELOG: ChangeDay[] = [
   {
     "date": "2026-09-22",
     "items": [
+      {
+        "hash": "8471ae4",
+        "subject": "일정·이벤트를 06:00 과 20:00 에, 이름 바꾼 그 방으로"
+      },
+      {
+        "hash": "e3747bc",
+        "subject": "변경 이력 다시 굽기"
+      },
       {
         "hash": "976d8fe",
         "subject": "목표주가 알림이 배포할 때마다 통째로 다시 가던 것 — 「보냈다」 표시가 재시작을 못 견뎠다"
@@ -1687,14 +1695,6 @@ export const CHANGELOG: ChangeDay[] = [
       {
         "hash": "5fbfb97",
         "subject": "매수·매도 단추를 크게, 색은 꽉 차게 — 잘못 누르면 제일 비싼 실수다"
-      },
-      {
-        "hash": "0e02d46",
-        "subject": "종목칸을 누르면 최근 본 종목이 내려온다 · 장 밖에도 호가 틀 · 폰 비율과 새 버전 띠"
-      },
-      {
-        "hash": "721b8db",
-        "subject": "주문 화면을 키움 앱처럼 — 폰에서도 호가 옆에 주문칸. 프리필이 라우터에 지워지고 있었다"
       }
     ]
   }
