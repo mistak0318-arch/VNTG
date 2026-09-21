@@ -248,6 +248,7 @@ export function UsBoardPanel() {
                       symbol: r.symbol,
                       label: r.label,
                       digits: r.digits,
+                      isRate: true, // 금리 줄 — 시트도 %p 로 적는다 (2026-09-21)
                       hintPrice: r.price ?? undefined,
                       hintRate: r.changeRate,
                     })

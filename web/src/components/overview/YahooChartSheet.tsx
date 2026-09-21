@@ -238,6 +238,15 @@ export interface ChartTarget {
    */
   hintPrice?: number | null;
   /**
+   * **금리인가** (2026-09-21 — 벤티지: "이건 또 왜 안 맞아").
+   *
+   * 카드는 금리를 `%p`(변화폭)로 적고 바로 밑에 「금리는 %p 로 읽습니다」라고 설명까지 해 두는데,
+   * 눌러서 연 시트는 등락률 `%` 로 그렸다 — 10년물이 카드엔 **+0.051%p**, 시트엔 **+1.03%**.
+   * 값은 같은 움직임인데(0.051÷4.947=1.03%) **우리 앱이 가르치는 것과 보여 주는 것이 어긋났다.**
+   * 시트는 제가 금리인지 몰랐다. 목록이 아는 사실이니 넘겨받는다(hintRate·hintPrice 와 같은 원칙).
+   */
+  isRate?: boolean;
+  /**
    * 선물 전용 — 베이시스·미결제 (2026-08-26 「차트 하단에 나오게」).
    * 타일에 있던 걸 시트 하단으로 옮겼다. 값은 지수 섹션이 이미 들고 있어
    * 넘겨받는다 — 시트가 따로 계산하면 언젠가 갈라진다(hintPrice 와 같은 원칙).
@@ -454,6 +463,18 @@ export function YahooChartSheet({
    * spark 값이 안 변할 뿐이니 주기만 늦춘다.
    */
   const [fastQ, setFastQ] = useState<{ price: number; changeRate: number | null } | null>(null);
+
+  /*
+   * **금리는 %p 로 적는다** (2026-09-21). 등락률(%)을 받아도 금리면 변화폭으로 바꿔 보여 준다 —
+   * 전날 값은 `price ÷ (1 + rate/100)` 으로 정확히 되짚을 수 있다. 카드·설명글과 같은 단위가 된다.
+   */
+  const moveText = (rate: number, price: number | null | undefined): string => {
+    const sign = (v: number) => (v >= 0 ? "+" : "");
+    if (!target.isRate || price == null || !Number.isFinite(price)) return `${sign(rate)}${rate.toFixed(2)}%`;
+    const prev = price / (1 + rate / 100);
+    const diff = price - prev;
+    return `${sign(diff)}${diff.toFixed(3)}%p`;
+  };
   useEffect(() => {
     if (!usStock) return;
     let alive = true;
@@ -768,26 +789,17 @@ export function YahooChartSheet({
               </b>
               {fastQ?.changeRate != null ? (
                 <>
-                  <span className={`yc-rate ${fastQ.changeRate >= 0 ? "positive" : "negative"}`}>
-                    {fastQ.changeRate >= 0 ? "+" : ""}
-                    {fastQ.changeRate.toFixed(2)}%
-                  </span>
+                  <span className={`yc-rate ${fastQ.changeRate >= 0 ? "positive" : "negative"}`}>{moveText(fastQ.changeRate, fastQ.price)}</span>
                   <span className="pt-n">전일 대비 · 3초 갱신</span>
                 </>
               ) : view.dayRate !== null ? (
                 <>
-                  <span className={`yc-rate ${view.dayRate >= 0 ? "positive" : "negative"}`}>
-                    {view.dayRate >= 0 ? "+" : ""}
-                    {view.dayRate.toFixed(2)}%
-                  </span>
+                  <span className={`yc-rate ${view.dayRate >= 0 ? "positive" : "negative"}`}>{moveText(view.dayRate, target.hintPrice ?? view.last)}</span>
                   <span className="pt-n">전일 대비</span>
                 </>
               ) : (
                 <>
-                  <span className={`yc-rate ${up ? "positive" : "negative"}`}>
-                    {up ? "+" : ""}
-                    {view.rate.toFixed(2)}%
-                  </span>
+                  <span className={`yc-rate ${up ? "positive" : "negative"}`}>{moveText(view.rate, target.hintPrice ?? view.last)}</span>
                   <span className="pt-n">{view.firstT} 이후</span>
                 </>
               )}

@@ -551,6 +551,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                       symbol: g.symbol,
                       label: g.label,
                       digits: g.isRate ? 3 : 2,
+                      isRate: g.isRate,
                       hintRate: g.changeRate,
                       hintPrice: g.price,
                     })

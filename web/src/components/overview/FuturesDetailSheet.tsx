@@ -140,12 +140,8 @@ export function FuturesDetailSheet({
    * 지수 수급(억원)과 같은 눈으로 견주는 게 우선이라는 타일 결정과 같은 문법.
    * 지수값을 못 받았으면(환산 불가) 계약만 적는다.
    */
-  const amtCell = (v: number) =>
-    true ? (
-      <>{eok(v)}</>
-    ) : (
-      <>{fmtNum(v)}</>
-    );
+  /* 2026-09-18 단위가 억원으로 바뀌며 환산 갈래가 사라졌다 — 죽은 삼항을 지운다 (09-21 회귀 점검) */
+  const amtCell = (v: number) => <>{eok(v)}</>;
 
   return (
     <div className="overlay" onClick={onClose}>
