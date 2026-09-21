@@ -85,13 +85,18 @@ export function MainNewsPanel({ cat = "main", onSelectStock }: { cat?: NaverNews
    * 코드가 하나도 없으면 아무것도 안 부른다.
    */
   useEffect(() => {
-    const codes = [...new Set(Object.values(leads).flatMap((l) => l.stocks.map((x) => x.code)))].filter((c) => /^\d{6}$/.test(c));
-    if (codes.length === 0) return;
+    /* 서버가 80개에서 자른다 — 여기서 안 맞추면 넘친 칩은 등락률이 영영 안 붙는다(조용히). 나눠 받는다 (2026-09-21) */
+    const all = [...new Set(Object.values(leads).flatMap((l) => l.stocks.map((x) => x.code)))].filter((c) => /^\d{6}$/.test(c));
+    if (all.length === 0) return;
+    const chunks: string[][] = [];
+    for (let i = 0; i < all.length; i += 80) chunks.push(all.slice(i, i + 80));
     let alive = true;
-    api
-      .marketQuotes(codes)
-      .then((r) => alive && setQuotes((prev) => ({ ...prev, ...r.quotes })))
-      .catch(() => undefined);
+    for (const part of chunks) {
+      api
+        .marketQuotes(part)
+        .then((r) => alive && setQuotes((prev) => ({ ...prev, ...r.quotes })))
+        .catch(() => undefined);
+    }
     return () => {
       alive = false;
     };
