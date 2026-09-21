@@ -1007,12 +1007,15 @@ export function CandleChart({
           : "") +
         (maRows ? `<div class="ct-sub">가격 이동평균</div>${maRows}` : "");
 
-      /* 좁은 화면은 두 칸 격자(아래 참고) — 켜는 순간 어떤 배치인지 JS 가 정한다. CSS 에 인라인 감지 같은 꼼수를 두지 않는다 */
       /*
-       * CSS 미디어쿼리(≤720px)와 **같은 문턱**을 써야 한다 — 한쪽만 걸리면 두 칸 격자인데 위 구석에 붙거나,
-       * 아래에 눕혔는데 한 칸으로 길어진다. 창이 넓어도 차트 칸이 좁으면(카드 안) 같이 눕힌다.
+       * 좁은 화면은 두 칸 격자로 눕힌다 — **문턱은 여기 한 줄뿐이다.**
+       *
+       * 처음엔 CSS 가 `@media (max-width:720px)` 로 따로 재는 바람에, 창이 넓고 차트 칸만 좁을 때
+       * (카드 안, clientWidth<520) 자리는 눕히고 격자는 안 걸려 한 줄씩 길게 늘어졌다(2026-09-21 회귀 점검 웹#3).
+       * 이제 `is-narrow` 를 켜 주면 CSS 가 그것만 본다.
        */
       const narrow = window.innerWidth <= 720 || el.clientWidth < 520;
+      tip.classList.toggle("is-narrow", narrow);
       tip.style.display = narrow ? "grid" : "block";
       /*
        * ⚠️ **커서를 따라다니지 않는다.**
