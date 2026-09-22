@@ -28,8 +28,12 @@ const LOCAL_ONLY = [
   "vntg.board.locks",
   // 잠금은 그 기기의 상태다. 폰에서 잠갔다고 PC 가 잠기면 안 된다
   "vntg.lock.locked",
-  // 최근 본 종목은 그 기기의 흔적이다
-  "vntg.recent.stocks.v1",
+  /*
+   * 최근 본 종목 `vntg.recent.stocks.v1` — 여기 있었다("그 기기의 흔적"). **2026-09-23 전역으로 뺐다.**
+   * 벤티지: "최근 조회 한거 기기별로 저장이 돼 가지고 … 전역으로 설정해서 어떤 기기에서 조회한 거든
+   * 최근 조회 내역에 뜰수 있도록". 시세분석에 「최근조회」 탭이 생기니 흔적이 아니라 목록이 됐다.
+   * 기기끼리 덮어쓰지 않게 `useRecentStocks.ts` 가 **읽을 때 서버 것과 합친다**(코드로 합집합, 최신 시각).
+   */
   /*
    * ⚠️ **종목 연동을 켤지는 그 창의 사정이다.**
    *
@@ -185,6 +189,8 @@ export async function loadPrefs(): Promise<void> {
        */
       const stale = Object.keys(body.values).filter((k) => !isGlobal(k));
       for (const [k, v] of Object.entries(body.values)) {
+        /* 최근 본 종목은 덮지 않고 **합친다** — 여기서 덮으면 이 기기의 목록이 첫 기동에 사라진다. 합치기는 useRecentStocks 가 */
+        if (k === "vntg.recent.stocks.v1" && localStorage.getItem(k)) continue;
         if (isGlobal(k)) localStorage.setItem(k, v);
       }
       ready = true;

@@ -7,8 +7,13 @@ import { removePref, setPref } from "./prefs";
  * 종목을 볼 때는 몇 개를 오가며 비교하게 되는데, 그때마다 이름을 다시 치는 게 일이다.
  * 검색 결과에서 고른 것을 기억해 두고 바로 누를 수 있게 한다.
  *
- * 서버에 둘 이유가 없어 localStorage 에만 둔다 — 기기마다 보는 종목이 달라도 자연스럽고,
- * 저장에 실패해도 검색이 막히지는 않는다.
+ * 처음엔 localStorage 에만 뒀다("기기마다 보는 종목이 달라도 자연스럽다"). **2026-09-23 전역이 됐다** —
+ * 벤티지: "어떤 기기에서 조회한 거든 최근 조회 내역에 뜰수 있도록". `prefs.ts` 의 LOCAL_ONLY 에서 빼서
+ * `setPref` 가 서버에 올리고, 여기서는 두 가지를 더 한다:
+ *   1. **읽을 때 서버 것과 합친다** (`syncFromServer`) — 앱이 뜰 때 한 번 받는 prefs 로는 다른 기기가
+ *      그 뒤에 본 종목이 새로고침 전엔 안 보인다. 훅이 마운트될 때·탭이 다시 보일 때 합친다.
+ *   2. **쌓을 때도 합친다** — 목록이 통째로 한 키라 나중에 쓴 기기가 앞 기기 것을 덮는다. 로컬에 먼저
+ *      적고(화면은 바로), 서버 것을 받아 합친 뒤 다시 올린다. 합치기는 코드로 합집합, 시각은 최신.
  */
 
 const KEY = "vntg.recent.stocks.v1";
@@ -57,6 +62,33 @@ export function pushRecent(code: string, name: string): void {
   /* 이름이 코드뿐이면 안 남긴다 — 목록에 「005930 005930」 같은 줄이 생긴다 (StockAnalysisPage 와 같은 규칙) */
   if (!code || !name || name === code) return;
   const next = [{ code, name, at: Date.now() }, ...read().filter((r) => r.code !== code)].slice(0, MAX);
+  write(next);
+  /* 서버 것과 합쳐 다시 올린다 — 다른 기기가 그새 본 종목을 덮지 않게 */
+  void syncFromServer(true);
+}
+
+function parse(raw: string | null): RecentStock[] {
+  try {
+    const arr = JSON.parse(raw ?? "[]") as RecentStock[];
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .filter((r) => r && typeof r.code === "string" && typeof r.name === "string")
+      .map((r) => ({ code: r.code, name: r.name, at: Number(r.at) || 0 }))
+      .slice(0, MAX);
+  } catch {
+    return [];
+  }
+}
+
+function read(): RecentStock[] {
+  try {
+    return parse(localStorage.getItem(KEY));
+  } catch {
+    return [];
+  }
+}
+
+function write(next: RecentStock[]): void {
   try {
     setPref(KEY, JSON.stringify(next));
     window.dispatchEvent(new StorageEvent("storage", { key: KEY }));
@@ -65,16 +97,56 @@ export function pushRecent(code: string, name: string): void {
   }
 }
 
-function read(): RecentStock[] {
-  try {
-    const raw = JSON.parse(localStorage.getItem(KEY) ?? "[]") as RecentStock[];
-    if (!Array.isArray(raw)) return [];
-    return raw
-      .filter((r) => r && typeof r.code === "string" && typeof r.name === "string")
-      .slice(0, MAX);
-  } catch {
-    return [];
+/*
+ * 이 기기에서 **지운 것**의 묘비 — 지운 직후 서버와 합치면(서버엔 600ms 뒤에야 올라간다) 지운 줄이
+ * 되살아난다. 지운 시각보다 먼저 본 기록은 서버 것이라도 안 받는다. 그 뒤에 다른 기기가 다시 보면 돌아온다.
+ */
+const tomb = new Map<string, number>();
+let clearedAt = 0;
+
+/** 두 목록의 합집합 — 같은 코드는 최신 시각 하나. 최신순 MAX 개 */
+function merge(a: RecentStock[], b: RecentStock[]): RecentStock[] {
+  const by = new Map<string, RecentStock>();
+  for (const r of [...a, ...b]) {
+    if (r.at <= clearedAt || r.at <= (tomb.get(r.code) ?? 0)) continue;
+    const cur = by.get(r.code);
+    if (!cur || r.at > cur.at) by.set(r.code, r);
   }
+  return [...by.values()].sort((x, y) => y.at - x.at).slice(0, MAX);
+}
+
+const same = (a: RecentStock[], b: RecentStock[]) =>
+  a.length === b.length && a.every((r, i) => r.code === b[i].code && r.at === b[i].at);
+
+let syncing: Promise<void> | null = null;
+let lastSync = 0;
+
+/**
+ * 서버 사본과 합친다. 로컬과 서버가 다르면 합친 것을 로컬에 적고(화면이 따라온다) 서버에도 올린다.
+ * 서버를 못 읽으면 아무 일도 없다 — 이 기기 목록으로 그대로 간다. 겹쳐 부르면 한 번만 돌고,
+ * 훅이 여럿 마운트돼도(검색창·시세분석) 3초 안엔 한 번만 묻는다. `force` 는 쌓을 때 — 그건 늘 합친다.
+ */
+export function syncFromServer(force = false): Promise<void> {
+  if (syncing) return syncing;
+  if (!force && Date.now() - lastSync < 3000) return Promise.resolve();
+  lastSync = Date.now();
+  syncing = (async () => {
+    try {
+      const res = await fetch("/api/settings/ui");
+      if (!res.ok) return;
+      const body = (await res.json()) as { values?: Record<string, string> };
+      const remote = parse(body.values?.[KEY] ?? null);
+      const local = read();
+      const merged = merge(local, remote);
+      if (!same(merged, local)) write(merged);
+      else if (!same(merged, remote)) write(merged); // 서버만 낡았다 — 올려서 맞춘다
+    } catch {
+      /* 서버가 없어도 목록은 이 기기 것으로 뜬다 */
+    } finally {
+      syncing = null;
+    }
+  })();
+  return syncing;
 }
 
 export function useRecentStocks() {
@@ -87,7 +159,16 @@ export function useRecentStocks() {
       if (e.key === KEY) setRecent(read());
     };
     window.addEventListener("storage", onChange);
-    return () => window.removeEventListener("storage", onChange);
+    /* 다른 기기가 본 것 — 마운트될 때, 그리고 탭이 다시 보일 때 서버와 합친다 (2026-09-23) */
+    void syncFromServer();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void syncFromServer();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("storage", onChange);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
   /** 종목을 봤다고 알린다. 같은 종목이면 맨 앞으로 올린다 */
@@ -98,26 +179,20 @@ export function useRecentStocks() {
       MAX,
     );
     setRecent(next);
-    try {
-      setPref(KEY, JSON.stringify(next));
-      window.dispatchEvent(new StorageEvent("storage", { key: KEY }));
-    } catch {
-      /* 저장 못 해도 이번 세션에는 남는다 */
-    }
+    write(next);
+    void syncFromServer(true);
   }, []);
 
+  /* 지우기 — 묘비를 남기고(`merge` 가 되살리지 않게) 로컬을 적어 올린다 */
   const remove = useCallback((code: string) => {
+    tomb.set(code, Date.now());
     const next = read().filter((r) => r.code !== code);
     setRecent(next);
-    try {
-      setPref(KEY, JSON.stringify(next));
-      window.dispatchEvent(new StorageEvent("storage", { key: KEY }));
-    } catch {
-      /* 무시 */
-    }
+    write(next);
   }, []);
 
   const clear = useCallback(() => {
+    clearedAt = Date.now();
     setRecent([]);
     try {
       removePref(KEY);
