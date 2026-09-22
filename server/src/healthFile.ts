@@ -10,6 +10,7 @@ import { peekRealtime, subscribedCount } from "./realtimeHub.js";
 import { hantooRealtimeStatus } from "./hantooRealtime.js";
 import { afterCloseStatus, afterCloseStateSummary } from "./afterClose.js";
 import { tradingDayStatus } from "./tradingDay.js";
+import { getUsage } from "./apiUsage.js";
 import { cisWhyNotSnapshot } from "./cisWhyNot.js";
 import { alertHealthLines } from "./alertHealth.js";
 import { getCisConfig } from "./cisConfig.js";
@@ -138,6 +139,27 @@ async function writeOnceInner(): Promise<void> {
      * 안 남기고 그날이 빈다 — 「일본 증시 휴장」 한 줄로 저녁이 다 날아간 날이 있었다. 밖에서 바로 보이게.
      */
     거래일: tradingDayStatus(),
+    /*
+     * **무엇이 조회를 먹고 있나** (2026-09-22 — 벤티지: "오늘 새로고침 왜이렇게 느린거야?" ·
+     * "지금 쓰기가 불편해졋어 속도도 느리고 갱신도 안되고").
+     *
+     * 키움 토큰버킷이 초당 4.5인데 초당 6~12 가 나가 줄이 끝없이 길어졌다. 그런데 **무엇이
+     * 그러는지 밖에서 볼 길이 없었다** — 화면의 「API 사용량」 탭에만 있어서 사람에게 찍어 달라고
+     * 해야 했다. 오늘치 TR별 상위 여덟 개를 여기 싣는다. 개수뿐 — 종목·계좌는 없다.
+     */
+    조회상위: await getUsage()
+      .then((u) => {
+        const k = u.providers.find((p) => p.provider === "kiwoom");
+        return k
+          ? {
+              오늘합계: k.total,
+              실패: k.failed,
+              한도초과: k.rateLimited,
+              상위: k.topEndpoints.slice(0, 10).map((e) => `${e.endpoint} ${e.count}`),
+            }
+          : null;
+      })
+      .catch(() => null),
     /*
      * **알림 갈래가 켜져 있나** (2026-09-22). 키워드 알림이 한 달 동안 안 왔는데 원인이 「벤티지가
      * 꺼 놓은 것」이었다 — 밖에서 「꺼짐」과 「고장」이 구분이 안 돼 코드를 한참 뒤졌다. 상태만 싣는다.
