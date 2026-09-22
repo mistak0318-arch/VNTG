@@ -195,6 +195,19 @@ function extremes(candles: Candle[]) {
 }
 
 /** 마커 정렬용 — Time을 비교 가능한 숫자로 (BusinessDay는 YYYYMMDD) */
+/**
+ * 범례의 고·저 **값** 표기 (2026-09-23 — 벤티지: "고가 저가 현재가 시가 이런걸 표현해야지").
+ *
+ * 퍼센트만 적어 두고 실제 값은 툴팁에 숨겨 뒀었다 — **폰에는 마우스를 올릴 방법이 없다.**
+ * 차트 축 꼬리표와 같은 규칙으로 적는다: 1,000 이상은 반올림해 천단위, 그 밑은 소수 두 자리까지.
+ * 국내(1,935,000)와 해외(196.48)가 한 함수로 다 읽힌다.
+ */
+function gapPx(v: number): string {
+  return v >= 1000
+    ? Math.round(v).toLocaleString("ko-KR")
+    : v.toLocaleString("ko-KR", { maximumFractionDigits: 2 });
+}
+
 function timeValue(time: Time): number {
   if (typeof time === "object" && "year" in time) {
     return time.year * 10000 + time.month * 100 + time.day;
@@ -394,7 +407,7 @@ export function CandleChart({
    * 띠를 채우는 함수 — 차트 effect 안에서 만들어 여기 걸어 둔다.
    * 리사이저도 이걸 불러야 해서(띠를 막 켰을 때) 클로저 밖으로 꺼낸다.
    */
-  const fillBarRef = useRef<((i: number) => void) | null>(null);
+  const fillBarRef = useRef<((i: number, whole?: boolean) => void) | null>(null);
   /** 리사이저 — 십자선이 「좁음」 판정이 어긋난 걸 발견하면 여기로 다시 부른다 */
   const resizeRef = useRef<(() => void) | null>(null);
   const { theme } = useAppearance();
@@ -866,7 +879,7 @@ export function CandleChart({
            * 넓히지 못한다. 110px 짜리 글이 70px 칸에 들어가니 **왼쪽으로 넘쳐
            * 가격 눈금과 봉을 덮었다** — 폰에서 눈금이 통째로 가렸다.
            *
-           * 괴리율은 범례 줄의 「고점 -40.8% 저점 +44.6%」에 이미 있다. 같은 것을
+           * 괴리율은 범례 줄의 「고점 대비 -40.8% · 저점 대비 +44.6%」에 이미 있다. 같은 것을
            * 축에 또 적자고 차트를 가릴 이유가 없다.
            */
           return num;
@@ -962,17 +975,41 @@ export function CandleChart({
      */
     /** 체결강도를 받아 온 뒤 「아직 그 봉인가」를 확인하려고 마지막으로 그린 봉 번호를 기억한다 */
     let barShownIdx = -1;
-    const fillBar = (i: number): void => {
+    /**
+     * @param whole **한 봉이 아니라 구간 전체**를 묶어 보여 줄까 (2026-09-23).
+     *
+     * 분봉 차트에서 십자선을 안 짚고 있으면 여태 **마지막 1분 봉**을 보여 줬다. 1분 안에는
+     * 값이 거의 안 움직이니 「시 193 · 고 193 · 저 193 · 현재 193」처럼 같은 숫자 넷이 떴다 —
+     * 벤티지: "고가 저가 현재가 시가 이런걸 표현해야지". 일봉에서는 마지막 봉이 곧 그날이라
+     * 멀쩡했는데(국내 화면은 잘 나왔다), 분봉에서만 무의미했던 것이다.
+     *
+     * 그래서 분봉이면 **받아 온 구간 전체**를 하나로 묶는다 — 시가는 첫 봉의 시가, 고·저는
+     * 구간의 최고·최저, 현재는 마지막 종가. 「1일·분봉」이면 그게 곧 그날의 시고저현이다.
+     *
+     * ⚠️ 이때 등락률의 기준은 **첫 봉의 시가**다. 분봉 시리즈에는 전일 종가가 없어서 전일 대비를
+     * 낼 수가 없다 — 없는 값을 지어내느니 기준을 바꾸고 그렇게 적는다(줄 머리에 「시가대비」).
+     */
+    const fillBar = (i: number, whole = false): void => {
       const bar = barRef.current;
       if (!bar) return;
       const rows = dataRef.current;
-      const cur = rows[i];
-      if (!cur) {
+      const one = rows[i];
+      if (!one) {
         bar.innerHTML = "";
         return;
       }
       barShownIdx = i;
-      const prev = rows[i - 1];
+      /* 묶을 때는 첫 봉의 시가·구간 최고·구간 최저·마지막 종가 */
+      const cur = whole
+        ? {
+            ...one,
+            open: rows[0].open,
+            high: rows.reduce((m, r) => Math.max(m, r.high), rows[0].high),
+            low: rows.reduce((m, r) => Math.min(m, r.low), rows[0].low),
+            close: rows[rows.length - 1].close,
+          }
+        : one;
+      const prev = whole ? undefined : rows[i - 1];
       const base = prev ? prev.close : cur.open;
       /*
        * 시·고·저에도 **전일 종가 대비 등락률**을 붙인다 (2026-09-22 — 벤티지: "시고저에도 등락률 표시
@@ -982,8 +1019,13 @@ export function CandleChart({
       const cell = (label: string, v: number) =>
         `<span class="cb-c"><i>${label}</i><b class="${rateCls(v, base)}">${won(v)}</b>` +
         `<em class="cb-r ${rateCls(v, base)}">${rate(v, base)}</em></span>`;
-      /* 날짜는 연도를 뗀다 — 「2026/」 다섯 글자가 일곱 자리 가격 하나 자리를 먹는다 */
-      const dateShort = tooltipDate(cur.time, intraday).replace(/^\d{4}\//, "");
+      /*
+       * 날짜는 연도를 뗀다 — 「2026/」 다섯 글자가 일곱 자리 가격 하나 자리를 먹는다.
+       * 묶어서 볼 때는 **시각이 아니라 날짜**를 적고, 기준이 시가라는 것을 밝힌다.
+       */
+      const dateShort = whole
+        ? `${tooltipDate(rows[rows.length - 1].time, false).replace(/^\d{4}\//, "")} 시가대비`
+        : tooltipDate(cur.time, intraday).replace(/^\d{4}\//, "");
       const head =
         `<span class="cb-d">${dateShort}</span>` +
         `<span class="cb-c cb-now"><i>현재</i><b class="${rateCls(cur.close, base)}">${won(cur.close)}</b>` +
@@ -1044,13 +1086,13 @@ export function CandleChart({
       if (!param.time || !param.point || rows.length === 0) {
         tip.style.display = "none";
         /* 십자선이 없으면 띠는 **마지막 봉**으로 — 자리만 먹는 빈 띠를 만들지 않는다 */
-        if (narrowRef.current) fillBar(rows.length - 1);
+        if (narrowRef.current) fillBar(rows.length - 1, intraday);
         return;
       }
       const i = rows.findIndex((r) => timeValue(r.time) === timeValue(param.time as Time));
       if (i < 0) {
         tip.style.display = "none";
-        if (narrowRef.current) fillBar(rows.length - 1);
+        if (narrowRef.current) fillBar(rows.length - 1, intraday);
         return;
       }
       /*
@@ -1181,7 +1223,7 @@ export function CandleChart({
       if (bar) {
         bar.classList.toggle("on", narrow);
         /* 띠를 막 켰는데 비어 있으면 마지막 봉으로 채운다 — 빈 띠가 자리만 먹지 않게 */
-        if (narrow && !bar.innerHTML) fillBarRef.current?.(dataRef.current.length - 1);
+        if (narrow && !bar.innerHTML) fillBarRef.current?.(dataRef.current.length - 1, intraday);
         if (!narrow) bar.innerHTML = "";
       }
       const barH = narrow && bar ? bar.offsetHeight : 0;
@@ -1699,13 +1741,33 @@ export function CandleChart({
           겹쳐 가려졌다. 왼쪽 맨 앞이면 겹칠 게 없고, MA 이름표보다 매매에 먼저
           쓰는 값이라 앞에 오는 게 순서로도 맞다.
         */}
+        {/*
+          **「대비」를 적는다** (2026-09-23 — 벤티지: "고점 저점 표시가 이게 맞아,").
+          값은 맞았다(실측 SKHY: 고 196.48·저 186.37·현재 193.64 → −1.45%·+3.90%). 그런데
+          「고점 −1.5%」는 **「고점이 −1.5%」로 읽힌다.** 실제 뜻은 「현재가가 고점 대비 −1.5%」다.
+          읽는 사람이 머릿속에서 주어를 뒤집어야 하는 표기는 틀린 표기다.
+
+          ⚠️ 그리고 **색·부호를 값에서 낸다.** 예전엔 고점은 늘 `negative`(파랑), 저점은 늘
+          `positive`(빨강)에 `+` 를 손으로 붙여 놨다. 현재가가 고·저 사이일 때만 맞는 가정이다 —
+          화면을 옮겨 **마지막 봉이 보이는 구간 밖으로 나가면** 현재가가 그 구간 고점보다 위일 수
+          있고, 그때 양수가 `+` 없이 파란 글씨로 떴다. 기준(`last`)은 보이는 구간과 무관하게 늘
+          마지막 봉 종가라 실제로 일어난다.
+        */}
         {gap && (
           <span className="chart-gap">
-            <b title={`구간 최고 ${gap.hi.toLocaleString("ko-KR")}`}>
-              고점 <i className="negative">{gap.hiPct.toFixed(1)}%</i>
+            <b title="보이는 구간의 최고가 · 괄호는 현재가가 거기서 얼마나 왔나">
+              고점 <em>{gapPx(gap.hi)}</em>{" "}
+              <i className={gap.hiPct > 0 ? "positive" : gap.hiPct < 0 ? "negative" : ""}>
+                ({gap.hiPct > 0 ? "+" : ""}
+                {gap.hiPct.toFixed(1)}%)
+              </i>
             </b>
-            <b title={`구간 최저 ${gap.lo.toLocaleString("ko-KR")}`}>
-              저점 <i className="positive">+{gap.loPct.toFixed(1)}%</i>
+            <b title="보이는 구간의 최저가 · 괄호는 현재가가 거기서 얼마나 왔나">
+              저점 <em>{gapPx(gap.lo)}</em>{" "}
+              <i className={gap.loPct > 0 ? "positive" : gap.loPct < 0 ? "negative" : ""}>
+                ({gap.loPct > 0 ? "+" : ""}
+                {gap.loPct.toFixed(1)}%)
+              </i>
             </b>
           </span>
         )}
