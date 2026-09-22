@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type RankResult } from "../../api";
+import { useTabActive } from "../../tabActive";
 
 /**
  * 실시간 조회순위 — 시황 카드 (2026-09-10 저녁 — 벤티지: "차라리 주도주가 여기에 와야지. 실시간 조회순위나").
@@ -14,7 +15,10 @@ export function InquiryRankPanel({ onSelectStock }: { onSelectStock: (code: stri
   const [rows, setRows] = useState<Row[]>([]);
   const [note, setNote] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  /* 시황 탭이 보일 때만 (2026-09-23 전수검토 (라)) — 페이지는 시계만 막고 있었고 카드는 숨어서도 돌았다 */
+  const tabActive = useTabActive();
   useEffect(() => {
+    if (!tabActive) return;
     let alive = true;
     const load = () =>
       api
@@ -32,7 +36,7 @@ export function InquiryRankPanel({ onSelectStock }: { onSelectStock: (code: stri
       alive = false;
       clearInterval(t);
     };
-  }, []);
+  }, [tabActive]);
   if (err && rows.length === 0) return <div className="error-banner">{err}</div>;
   if (rows.length === 0) return <div className="empty">불러오는 중…</div>;
   const num = (v: unknown) => {

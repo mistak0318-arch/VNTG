@@ -1,5 +1,6 @@
 import { GroupTiles } from "../GroupTiles";
 import { useCallback, useEffect, useState } from "react";
+import { useTabActive } from "../../tabActive";
 import { removePref, setPref } from "../../prefs";
 import {
   api,
@@ -692,12 +693,15 @@ function UsBoardWatch({ onOpen }: { onOpen: (symbol: string, label: string) => v
     }
   }, []);
 
+  /* 시황 탭이 보일 때만 (2026-09-23 전수검토 (라)) — 20초 폴링이 숨은 탭에서도 돌았다 */
+  const tabActive = useTabActive();
   useEffect(() => {
+    if (!tabActive) return;
     void load();
     // 미국장이 도는 동안 값이 움직인다. 20초면 전광판으로 충분하다
     const t = setInterval(() => void load(true), 20_000);
     return () => clearInterval(t);
-  }, [load]);
+  }, [load, tabActive]);
 
   // 종목 검색
   useEffect(() => {

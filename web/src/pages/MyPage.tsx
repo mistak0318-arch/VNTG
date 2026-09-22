@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
+import { useTabActive } from "../tabActive";
 import { JudgeChips, JudgeLegend } from "../components/JudgeChips";
 import {
   api,
@@ -255,7 +256,14 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
    * ka10095(_AL) 통합 시세를 5초로 받아 그걸 쓴다. 정규장엔 실시간이 이긴다.
    */
   const [alq, setAlq] = useState<Record<string, { price: number; changeRate: number }>>({});
+  /*
+   * **이 탭이 보일 때만** (2026-09-23 전수검토 (라)). `visibilityState` 는 브라우저 탭 기준이라 앱 안에서 다른
+   * 메뉴로 옮겨도(`display:none`) 계속 돌았다 — 서버는 캐시 없이 매번 키움 ka10095 라 관심종목을 한 번
+   * 열어 둔 기기마다 **숨어서 시간당 720콜**이었다. 게이트 안 된 폴링 중 키움을 직접 부르는 가장 짧은 주기.
+   */
+  const tabActive = useTabActive();
   useEffect(() => {
+    if (!tabActive) return;
     let alive = true;
     const tick = () => {
       if (document.visibilityState !== "visible") return;
@@ -270,7 +278,7 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
       alive = false;
       clearInterval(t);
     };
-  }, []);
+  }, [tabActive]);
   /*
    * `rt` 는 어디서 온 값인가 — 실시간 소켓(0B)이면 true, 5초 REST 폴백(ka10095)이면 false.
    * ● 표시가 폴백 값에도 켜져 「실시간」이라고 거짓말하던 것 (2026-09-18 전수검증 D7).

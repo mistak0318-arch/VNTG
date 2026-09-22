@@ -12,6 +12,9 @@ import { usRank } from "../src/usRank.js";
 import { futuresFlow } from "../src/naverFuturesFlow.js";
 import { fetchEtfs } from "../src/naverThemes.js";
 import { getEtfInfo } from "../src/etfInfo.js";
+import { yahooChart } from "../src/yahooChart.js";
+import { usFastQuotes } from "../src/usFastQuotes.js";
+import { usPopular, discussionRanking, depositTrend, naverBriefings, npayRanking, researchBoard, marketCalendar } from "../src/naverMarket.js";
 
 type Line = { where: string; http: string; count: number | string; verdict: string };
 const lines: Line[] = [];
@@ -79,6 +82,27 @@ async function main() {
   await mod("futuresFlow(5).days", async () => (await futuresFlow(5)).length);
   await mod("fetchEtfs().length", async () => (await fetchEtfs()).length);
   await mod("getEtfInfo(069500)", async () => { const i = await getEtfInfo("069500"); return i.nav ?? i.name ?? JSON.stringify(i).slice(0, 80); });
+
+  /* ── (마) 바깥 의존 — 나머지 창구 (2026-09-23 4회차) ── */
+  await raw("업비트 ticker", "https://api.upbit.com/v1/ticker?markets=KRW-BTC,KRW-ETH", {}, (b) => { try { return (JSON.parse(b) as unknown[]).length; } catch { return "JSON 아님"; } });
+  await raw("야후 RSS headline(AAPL)", "https://feeds.finance.yahoo.com/rss/2.0/headline?s=AAPL&region=US&lang=en-US",
+    { headers: { "User-Agent": "Mozilla/5.0" } }, (b) => (b.match(/<item>/g) ?? []).length);
+  await raw("SEC company_tickers", "https://www.sec.gov/files/company_tickers.json",
+    { headers: { "User-Agent": "VNTG research contact@example.com" } }, (b) => { try { return Object.keys(JSON.parse(b)).length; } catch { return "JSON 아님"; } });
+  await mod("yahooChart(^KS11,1mo).bars", async () => (await yahooChart("^KS11", "1mo")).candles.length);
+  await mod("usFastQuotes([AAPL,MSFT])", async () => (await usFastQuotes(["AAPL", "MSFT"])).size);
+  await mod("naverMarket.usPopular(20)", async () => (await usPopular(20)).rows.length);
+  await mod("naverMarket.discussionRanking(KOR)", async () => (await discussionRanking("KOR")).items.length);
+  await mod("naverMarket.depositTrend(10)", async () => (await depositTrend(10)).days.length);
+  await mod("naverMarket.naverBriefings()", async () => (await naverBriefings()).recent.length);
+  await mod("naverMarket.npayRanking(earningRate)", async () => (await npayRanking("earningRate", "all", 10)).rows.length);
+  await mod("naverMarket.researchBoard()", async () => { const r = await researchBoard() as Record<string, unknown>; const first = Object.values(r).find((v) => Array.isArray(v)) as unknown[] | undefined; return first?.length ?? JSON.stringify(r).slice(0, 60); });
+  await mod("naverMarket.marketCalendar(이번주)", async () => { const d = kst(0); const e = kst(-7); return (await marketCalendar(d, e)).events.length; });
+  /* 키가 있는 창구 — 로컬 .env 에 있을 때만, 한 번씩(둘 다 일 한도 1만) */
+  if (process.env.DART_API_KEY) {
+    await raw("DART list.json 오늘", `https://opendart.fss.or.kr/api/list.json?crtfc_key=${process.env.DART_API_KEY}&bgn_de=${kst(0).replace(/-/g, "")}&page_count=10`,
+      {}, (b) => { try { const j = JSON.parse(b); return j.status === "000" ? (j.list ?? []).length : `status ${j.status} ${j.message ?? ""}`; } catch { return "JSON 아님"; } });
+  }
 
   console.log(`\n${lines.filter((l) => l.verdict === "OK").length} OK / ${lines.filter((l) => l.verdict !== "OK").length} ❌`);
 }

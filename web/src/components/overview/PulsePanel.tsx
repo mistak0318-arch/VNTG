@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, fmtKstHm, type MarketLeaders, type PulseStock } from "../../api";
+import { useTabActive } from "../../tabActive";
 
 /**
  * 주도주·급소 — 상한가(연속)·거래량 급증·250일 거래량 갱신·프로그램 순매수 (2026-09-10).
@@ -11,7 +12,10 @@ import { api, fmtKstHm, type MarketLeaders, type PulseStock } from "../../api";
 export function PulsePanel({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
   const [data, setData] = useState<MarketLeaders | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  /* 시황 탭이 보일 때만 (2026-09-23 전수검토 (라)) */
+  const tabActive = useTabActive();
   useEffect(() => {
+    if (!tabActive) return;
     let alive = true;
     const load = () =>
       api
@@ -28,7 +32,7 @@ export function PulsePanel({ onSelectStock }: { onSelectStock: (code: string, na
       alive = false;
       clearInterval(t);
     };
-  }, []);
+  }, [tabActive]);
   if (err && !data) return <div className="error-banner">{err}</div>;
   if (!data) return <div className="empty">불러오는 중…</div>;
 
