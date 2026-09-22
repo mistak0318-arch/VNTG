@@ -124,14 +124,33 @@ async function candles(
   return out;
 }
 
-/** 줄의 대부분이 거래대금 0·등락률 0 — 새 날의 빈 껍데기 */
-function looksReset(rows: { tv: number | null; flu_rt?: unknown }[]): boolean {
-  if (rows.length < 5) return false;
-  const dead = rows.filter((r) => !(r.tv && r.tv > 0) && !(Number(r.flu_rt) !== 0 && Number.isFinite(Number(r.flu_rt)))).length;
-  return dead >= rows.length * 0.8;
+/*
+ * 여기 있던 `looksReset(rows)` 를 걷어냈다 (2026-09-23).
+ *
+ * 「거래대금 0 **이면서** 등락률 0」인 줄을 세는 함수였는데, **완성된 줄을 받아서** 셌다.
+ * 그런데 그 줄은 이미 등락률이 어제 값으로 메워진 뒤라 조건이 구조적으로 안 걸렸다 —
+ * 함수 자체가 틀린 게 아니라 **보는 시점이 틀렸다.** 이제 메우기 직전에 `rawEmpty` 로
+ * 세므로(아래 `fluWasZero`) 같은 함수를 다시 만들 이유가 없다.
+ */
+
+/**
+ * **0짜리 줄로는 덮어쓰지 않는다** (2026-09-23).
+ *
+ * 이 파일은 새 날 아침에 표를 되살리는 **유일한 원본**이다. 그런데 2026-09-23 아침에 거래대금이
+ * 전부 0 인 줄로 덮여 어제 것이 사라졌다 — 되살릴 원본 자체가 없어지니 다음 날에도 못 고친다.
+ * 부르는 쪽 판정이 틀려도 여기서 한 번 더 막는다. 문지기가 둘이어야 하는 종류의 자리다.
+ */
+function worthSaving(rows: unknown[]): boolean {
+  const live = rows.filter((r) => {
+    const tv = (r as { tv?: unknown }).tv;
+    return typeof tv === "number" && tv > 0;
+  }).length;
+  /* 다섯 줄 중 하나라도 거래대금이 살아 있으면 장이 돈 것이다 */
+  return live >= Math.max(1, Math.floor(rows.length * 0.2));
 }
 
 async function saveLast(key: string, rows: unknown[]): Promise<void> {
+  if (!worthSaving(rows)) return;
   try {
     await mkdir(LAST_DIR, { recursive: true });
     await writeFile(lastFile(key), JSON.stringify({ at: new Date().toISOString(), rows }), "utf8");
@@ -1152,6 +1171,13 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
       const snap = await getMarketSnapshot(client).catch(() => null);
       /** 어제 값으로 메운 줄 수 — 절반이 넘으면 화면에 「어제 값」이라고 알린다 */
       let filledFromSnap = 0;
+      /**
+       * **메우기 전 기준**으로 센 빈 줄 수 — 거래대금 0 이면서 등락률도 0 이던 줄.
+       *
+       * 이걸 따로 세는 이유는 아래 `fluWasZero` 주석에 있다: 메운 뒤의 값으로 세면
+       * 「빈 껍데기」 판정이 영영 안 걸려 어제 줄을 되살리지 못한다.
+       */
+      let rawEmpty = 0;
       const drawn = rows.slice(0, limit).map((r) => {
           const code = bare(r.stk_cd);
           const k = krxOf.get(code);
@@ -1209,10 +1235,20 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
            * 등락률로 바꾼다. 스냅샷은 다음 개장까지 어제 값을 들고 있고(`marketSnapshot` 의 `traded`),
            * 장중에는 같은 값이라 바뀌는 것이 없다. 진짜 보합(0.00%)은 스냅샷도 0 이라 안 건드린다.
            */
+          /**
+           * 메우기 **전**의 등락률이 0 이었나 — 아래 「빈 껍데기」 판정이 이 값을 본다.
+           *
+           * ⚠️ 2026-09-23 아침에 드러난 함정(벤티지: "등락률은 나오는데 왜 거래대금이 다 0이냐?").
+           * 바로 아래에서 등락률을 어제 값으로 메우는데, 「빈 껍데기」 판정은 **거래대금 0 이면서
+           * 등락률 0** 인 줄을 센다. 즉 **메우는 행위가 그 판정을 스스로 깨뜨렸다** — 그래서
+           * 어제 줄 전체(거래대금·거래량·순위)를 되살리는 길이 막히고, 화면엔 등락률만 어제 것이고
+           * 거래대금은 0 인 반쪽이 떴다. 순위도 거래대금 순이 아니라 뒤죽박죽이 됐다.
+           */
+          const fluWasZero = toNum(mapped.flu_rt) === 0;
           if (snap) {
             const s = snap.byCode.get(code);
             /* **정확히 0 일 때만** — 위에서 전일대비로 되짚은 값(`null` 이던 것)은 그대로 둔다 */
-            if (s && s.changeRate !== 0 && toNum(mapped.flu_rt) === 0) {
+            if (s && s.changeRate !== 0 && fluWasZero) {
               mapped.cur_prc = Math.abs(s.price);
               mapped.flu_rt = s.changeRate;
               filledFromSnap += 1;
@@ -1224,6 +1260,8 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
            */
           const ex = extras({ ...r, cur_prc: mapped.cur_prc ?? r.cur_prc }, index.get(code));
           if (ex.tv === null && snap) ex.tv = snap.byCode.get(code)?.tradeValue ?? null;
+          /* 메우기 전 기준으로 「빈 줄」을 센다 — 메운 값으로 세면 영영 안 걸린다 (위 주석) */
+          if (!(ex.tv && ex.tv > 0) && fluWasZero) rawEmpty += 1;
           return {
             ...mapped,
             code,
@@ -1266,7 +1304,17 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
       const lastKey = `${spec.key}.${market}.${exchange}.${limit}.${Object.entries(chosen).map(([k, v]) => `${k}=${v}`).join(",")}`;
       let outRows: Record<string, unknown>[] = await withFlow(drawn);
       let staleNote = "";
-      if (!spec.noMarket && looksReset(outRows as { tv: number | null; flu_rt?: unknown }[])) {
+      /*
+       * **빈 껍데기인가** — 메우기 전 기준으로 센 줄이 여덟 할이 넘으면.
+       *
+       * 2026-09-23 고침: 여기서 `looksReset(outRows)` 를 불렀는데, `outRows` 는 이미 등락률이
+       * 어제 값으로 메워진 뒤라 **판정이 구조적으로 안 걸렸다.** 그 결과 두 가지가 났다 —
+       *   ① 어제 줄 전체(거래대금·거래량·순위)를 되살리지 못해 반쪽짜리 표가 떴고,
+       *   ② `else` 로 빠져 `saveLast` 가 돌아 **어제 좋은 파일을 0짜리 줄로 덮어썼다.**
+       * ②가 더 아프다. 되살릴 원본 자체를 지우는 것이라 다음 날 아침에도 못 고친다.
+       */
+      const empty = drawn.length >= 5 && rawEmpty >= drawn.length * 0.8;
+      if (!spec.noMarket && empty) {
         const last = await loadLast(lastKey);
         if (last && last.rows.length > 0) {
           outRows = last.rows as Record<string, unknown>[];
