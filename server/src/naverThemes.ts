@@ -46,6 +46,17 @@ const FILE = join(DIR, "naverThemes.json");
  *   상세  /api/stocks/theme/{no}?page=1&pageSize=100     → stocks[{itemCode,stockName,…}] · themeItemInfoMap{코드: 편입 사유}
  * 옛 HTML 을 긁을 때보다 오히려 낫다 — 편입 사유가 표 안 툴팁이 아니라 칸으로 온다.
  */
+/**
+ * **모자라게 받았으면 덮어쓰지 않는다.** 받은 게 0개이거나 예전의 절반도 안 되면 던진다 — 호출한 쪽이 실패로
+ * 기록하고 예전 파일은 그대로 남는다. 국내(09-15)·미국·ETF(09-23) 셋이 같은 문턱을 쓴다.
+ */
+function guardCount(what: string, got: number, before: number): void {
+  const floor = Math.max(1, Math.floor(before * 0.5));
+  if (got === 0 || (before > 0 && got < floor)) {
+    throw new Error(`${what}를 ${got}개밖에 못 받았다(예전 ${before}개) — 예전 목록을 그대로 둔다`);
+  }
+}
+
 const LIST_API = "https://m.stock.naver.com/api/stocks/theme";
 const DETAIL_API = "https://m.stock.naver.com/api/stocks/theme/";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36";
@@ -388,12 +399,7 @@ export async function fetchAllThemes(opts: { limit?: number } = {}): Promise<Nav
      * 받는 시험 호출은 이 검사를 건너뛴다.
      */
     const prev = await loadThemes();
-    if (!opts.limit) {
-      const floor = Math.max(1, Math.floor(prev.themes.length * 0.5));
-      if (themes.length === 0 || (prev.themes.length > 0 && themes.length < floor)) {
-        throw new Error(`네이버 테마를 ${themes.length}개밖에 못 받았다(예전 ${prev.themes.length}개) — 예전 목록을 그대로 둔다`);
-      }
-    }
+    if (!opts.limit) guardCount("네이버 테마", themes.length, prev.themes.length);
 
     /* 미국 쪽은 **건드리지 않는다** — 국내만 다시 받는 일이 흔하다 */
     const store: NaverThemeStore = {
@@ -501,6 +507,8 @@ export async function fetchUsThemes(): Promise<UsTheme[]> {
 export async function refreshUsThemes(): Promise<{ themes: number; stocks: number }> {
   const us = await fetchUsThemes();
   const prev = await loadThemes();
+  /* 국내와 같은 가드 (2026-09-23 전수검토 (나)) — 09-15 에 국내만 막았고 여기엔 없었다. 0개·절반 미만이면 예전 것을 둔다 */
+  guardCount("미국 테마", us.length, prev.us.length);
   /*
    * **프리마켓 전후엔 네이버가 등락률을 0.00 으로 되돌린다** (2026-09-15 실측, 한국 16:50 무렵 `PREOPEN`).
    * 정규 회차(한국 07시대, 미국 마감 뒤)는 괜찮지만 손으로 누르면 그 시각일 수 있다. 등락률이 거의 다 0 이면
@@ -580,6 +588,7 @@ export async function fetchEtfs(): Promise<EtfRow[]> {
 export async function refreshEtfs(): Promise<{ count: number }> {
   const etf = await fetchEtfs();
   const prev = await loadThemes();
+  guardCount("ETF", etf.length, prev.etf.length);
   const store: NaverThemeStore = { ...prev, etf, etfFetchedAt: new Date().toISOString() };
   await mkdir(DIR, { recursive: true });
   await writeFile(FILE, JSON.stringify(store), "utf-8");

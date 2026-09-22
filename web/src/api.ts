@@ -4588,6 +4588,8 @@ export interface FinanceResult {
   periods: FinancialPeriod[];
   /** 한투 분기 — 단위는 **억원**이다. 연간과 단위가 다르니 섞어 쓰면 안 된다 */
   quarters: QuarterRow[];
+  /** 분기를 **못 받은** 이유 — 빈 quarters 가 「없는 종목」인지 「한투 실패」인지 가른다 (2026-09-23) */
+  quartersError?: string | null;
   /** 애널리스트 추정 (한투). 160여 개 대형주만 있고 없으면 null 이다 */
   estimate: EstimateResult | null;
   dividend: DividendInfo | null;

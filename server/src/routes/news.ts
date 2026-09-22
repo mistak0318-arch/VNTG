@@ -282,13 +282,18 @@ export function createNewsRouter(client: KiwoomClient): Router {
    */
   router.get("/finance/:code", async (req, res, next) => {
     try {
+      /* 실패와 「분기가 없는 종목」은 다른 것 — 실패면 한 줄 이유를 같이 보낸다 (2026-09-23 전수검토 (나)) */
+      let quartersError: string | null = null;
       const [annual, quarters, estimate] = await Promise.all([
         getFinance(req.params.code),
-        quarterFinance(req.params.code, Math.min(Number(req.query.limit) || 8, 24)).catch(() => []),
+        quarterFinance(req.params.code, Math.min(Number(req.query.limit) || 8, 24)).catch((e: unknown) => {
+          quartersError = e instanceof Error ? e.message : String(e);
+          return [];
+        }),
         // 160여 개 대형주만 있다 — 없으면 null 이고 그건 오류가 아니다
         estimatePerform(req.params.code).catch(() => null),
       ]);
-      res.json({ ...annual, quarters, estimate });
+      res.json({ ...annual, quarters, quartersError, estimate });
     } catch (err) {
       next(err);
     }

@@ -196,7 +196,13 @@ export async function intradayFlow(
       void recordApiCall("naver", `intraFlow:${sosok}`, "ok");
       return { date, points };
     }
-    return { date: "", points: [] };
+    /*
+     * 닷새를 물러도 다 비었다 — 200 인데 표가 없는 것이니(주소가 바뀌었거나 점검) 410 과 같은 길로:
+     * 실패로 적고 한 시간 쉬고 우리 표본으로 (2026-09-23 전수검토 (나)). 전엔 빈 채로 돌려주고 아무 기록도 없었다.
+     */
+    void recordApiCall("naver", `intraFlow:${sosok}`, "failed", undefined, "닷새 모두 빈 표");
+    goneUntil = Date.now() + 3600_000;
+    return sampledFlow(sosok);
   } catch (e) {
     void recordApiCall("naver", `intraFlow:${sosok}`, "failed");
     if (hit) return { date: hit.date, points: hit.points };

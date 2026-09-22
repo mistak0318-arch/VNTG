@@ -209,9 +209,15 @@ export function FinancePanel({
 
   const quarters = data.quarters ?? [];
   const periods = data.periods;
+  /* 분기가 비었는데 **못 받은** 것이면 말한다 — 없는 종목과 같은 모양이었고 판정은 연간만으로 조용히 내려졌다 (2026-09-23) */
+  const quartersNote =
+    quarters.length === 0 && data.quartersError ? (
+      <div className="page-note">⚠️ 분기 실적을 못 받았습니다(한투: {data.quartersError}). 아래 판정은 연간만으로 낸 것입니다.</div>
+    ) : null;
   if (periods.length === 0) {
     return (
       <div>
+        {quartersNote}
         <FinVerdict quarters={quarters} periods={periods} />
         {afterVerdict}
         <EstimateTable est={data.estimate} />
@@ -225,6 +231,7 @@ export function FinancePanel({
 
   return (
     <div>
+      {quartersNote}
       {/* 결론부터 — 표는 그 근거다 */}
       <FinVerdict quarters={quarters} periods={periods} />
       {afterVerdict}

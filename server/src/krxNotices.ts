@@ -312,8 +312,12 @@ async function backfill(client: KiwoomClient, days = 30): Promise<void> {
     const day = kstDate(i);
     if (!isTradingDate(day)) continue; // (2026-09-10 전수 점검) getUTCDay 는 전날 요일이었다(B) · 휴장일도 건너뛴다(A)
     try {
-      await readFile(fileOf(day), "utf8");
-      continue; // 이미 있다
+      /*
+       * 이미 있다 — 단, **거래일인데 빈 배열이면 없는 것으로 친다** (2026-09-23 전수검토 (나)). KIND 가 200 으로
+       * 빈 표(점검 페이지)를 주면 `[]` 를 저장하고 「ok」로 찍는데, 그 파일이 이 검사를 통과해 그 날은 영영 안 메꿔졌다.
+       * 거래일에 공시가 0건일 리는 없다.
+       */
+      if ((await readFile(fileOf(day), "utf8")).trim().length > 2) continue;
     } catch {
       /* 없으면 받는다 */
     }
