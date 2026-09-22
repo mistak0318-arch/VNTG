@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { CHANGELOG, CHANGELOG_COMMITS } from "../changelog";
+import { useCfEdge } from "../cfEdge";
 
 /**
  * 설정 › **정보** (2026-09-04) — 벤티지: "설정메뉴에 정보 라는 탭 하나 만들어서
@@ -40,6 +41,8 @@ export function AboutPanel() {
   /** 며칠씩 끊어 보여 준다 — 400건을 한 번에 그리면 스크롤이 끝나지 않는다 */
   const [days, setDays] = useState(6);
   const [q, setQ] = useState("");
+  /* 지금 붙어 있는 Cloudflare 엣지 — 1분마다 다시 잰다 (숨은 탭에서는 안 잰다) */
+  const edge = useCfEdge();
 
   useEffect(() => {
     void api
@@ -77,6 +80,36 @@ export function AboutPanel() {
             {health
               ? new Date(health.startedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
               : (err ?? "확인 중")}
+          </small>
+        </div>
+        {/*
+          **어느 Cloudflare 엣지로 붙어 있나** (2026-09-23 — 벤티지: "클라우드플레어 어디 서버에
+          붙어있는지 써줄 수 있나? 실시간으로?").
+
+          2026-09-21~22 홍콩 엣지 장애 때 「느리다」만 가지고 서버·터널·키움을 한 시간 넘게
+          뒤졌다. 이 한 줄이 있었으면 바로 갈렸다 — 서울 5ms 인지 홍콩 44ms 인지가 곧 답이었다.
+        */}
+        <div className={`about-cell${edge.kind === "edge" && !edge.info.home ? " about-warn" : ""}`}>
+          <span>붙어 있는 Cloudflare</span>
+          <b>
+            {edge.kind === "loading"
+              ? "…"
+              : edge.kind === "direct"
+                ? "직통"
+                : `${edge.info.place} ${edge.info.ms}ms`}
+          </b>
+          <small>
+            {edge.kind === "loading" ? (
+              "재는 중"
+            ) : edge.kind === "direct" ? (
+              "Cloudflare 를 안 거칩니다 — tailnet 직통"
+            ) : edge.info.home ? (
+              <>{edge.info.colo} · 서울이라 제일 가깝습니다</>
+            ) : (
+              <>
+                {edge.info.colo} · ⚠️ 서울(ICN)이 아닙니다 — 이러면 앱 전체가 느립니다
+              </>
+            )}
           </small>
         </div>
       </div>

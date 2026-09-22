@@ -15991,7 +15991,14 @@ select.ord-in { appearance: auto; cursor: pointer; }
 
 /* ── 설정 › 정보 (2026-09-04) ─────────────────────────────────────────── */
 .about { display: flex; flex-direction: column; gap: 0.6rem; }
-.about-now { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+/*
+ * 칸이 둘에서 **셋**이 됐다 (2026-09-23 — 붙어 있는 Cloudflare 엣지). 좁아지면 저절로 접히게
+ * `auto-fit` + `minmax` 로 둔다 — 개수를 손으로 적어 두면 칸이 늘 때마다 여기도 고쳐야 한다.
+ */
+.about-now { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 0.5rem; }
+/* 서울이 아닐 때 — 숫자만으로는 안 보이므로 칸 자체를 물들인다 */
+.about-cell.about-warn { border-color: var(--amber, #f5c542); }
+.about-cell.about-warn b { color: var(--amber, #f5c542); }
 .about-cell {
   background: var(--panel);
   border: 1px solid var(--border);
