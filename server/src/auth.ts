@@ -772,6 +772,14 @@ export interface DoorState {
   /** BIND_HOST=127.0.0.1 인가 — 아니면 같은 공유기의 아무 기기나 닿는다 */
   loopbackOnly: boolean;
   bindHost: string;
+  /**
+   * 루프백 말고 **더 열어 둔 주소**(`BIND_EXTRA`) — 2026-09-23.
+   *
+   * Cloudflare 장애 때 쓸 우회로로 Tailscale 주소를 하나 더 연다. 이것까지 봐야 화면이
+   * 「루프백뿐」이라고 **거짓말을 안 한다** — 문이 하나 더 있는 건 사실이니 그대로 적는다.
+   * 다만 아무나 닿는 문이 아니라 tailnet(WireGuard 상호 인증) 안쪽이라는 것도 같이 말한다.
+   */
+  extraHosts: string[];
 }
 
 export function doorState(): DoorState {
@@ -785,6 +793,10 @@ export function doorState(): DoorState {
     corsOrigins: origins,
     loopbackOnly: bindHost === "127.0.0.1" || bindHost === "localhost",
     bindHost,
+    extraHosts: (process.env.BIND_EXTRA ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
   };
 }
 

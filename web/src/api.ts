@@ -197,6 +197,8 @@ export interface DoorState {
   corsOrigins: string[];
   loopbackOnly: boolean;
   bindHost: string;
+  /** 루프백 말고 더 연 주소 — Cloudflare 장애 때 쓸 tailnet 우회로 (2026-09-23) */
+  extraHosts?: string[];
 }
 
 export interface AuthDevice {

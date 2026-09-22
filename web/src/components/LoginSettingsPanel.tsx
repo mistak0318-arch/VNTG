@@ -510,11 +510,30 @@ export function LoginSettingsPanel() {
           </span>
         </li>
         <li className={cfg.door.loopbackOnly ? "ok" : "bad"}>
-          <b>{cfg.door.loopbackOnly ? "이 기계에서만 접속" : `모든 주소에서 접속 가능`}</b>
+          <b>
+            {cfg.door.loopbackOnly
+              ? (cfg.door.extraHosts?.length ?? 0) > 0
+                ? "이 기계 + 지정한 주소에서만 접속"
+                : "이 기계에서만 접속"
+              : `모든 주소에서 접속 가능`}
+          </b>
           <span className="login-set-hint">
             {cfg.door.loopbackOnly ? (
               <>
                 <code>BIND_HOST={cfg.door.bindHost}</code> — 터널만 통과합니다.
+                {/*
+                  우회로가 열려 있으면 **숨기지 않고 적는다** (2026-09-23). 문이 하나 더 있는 건
+                  사실이고, 「이 기계에서만」이라고만 적으면 화면이 거짓말을 하는 셈이다.
+                  다만 아무나 닿는 문이 아니라는 것(tailnet 안쪽 + 앱 로그인)도 같이 말한다.
+                */}
+                {(cfg.door.extraHosts?.length ?? 0) > 0 && (
+                  <>
+                    <br />
+                    여기에 더해 <code>{cfg.door.extraHosts?.join(", ")}</code> 로도 듣습니다 —
+                    Cloudflare 가 말썽일 때 쓰는 <b>우회로</b>입니다. tailnet(서로 인증된 내 기기들)
+                    안에서만 닿고, 들어와도 로그인은 그대로 걸립니다.
+                  </>
+                )}
               </>
             ) : (
               <>

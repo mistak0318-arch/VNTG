@@ -470,8 +470,46 @@ const port = Number(process.env.PORT ?? 4000);
  * 안 보인다. 열린 문은 적을수록 좋다.
  */
 const host = process.env.BIND_HOST ?? "0.0.0.0";
+/*
+ * **`BIND_EXTRA` — 더 열 주소를 콕 집어서** (2026-09-23 — 벤티지: "tailnet 자체가 보안이니깐 이거
+ * 동시에 켜두는건 어때 Cloudflare 문제일때 우회 접속하게").
+ *
+ * 2026-09-21~22 에 Cloudflare 홍콩 엣지가 말썽을 부려 도메인으로 붙는 길이 통째로 느려졌다.
+ * 그때 쓸 **우회로**가 필요한데, 미니PC 는 `BIND_HOST=127.0.0.1` 이라 터널 말고는 아무도 못 닿았다.
+ *
+ * 그렇다고 `0.0.0.0` 으로 되돌리면 **공유기 안의 아무 기기나** 닿는다. 그래서 되돌리는 대신
+ * **들을 주소를 하나 더 지정한다** — Tailscale 주소만. 쉼표로 여럿도 된다.
+ *
+ *   BIND_HOST=127.0.0.1        터널(cloudflared)이 쓰는 길 — 그대로
+ *   BIND_EXTRA=100.88.182.35   tailnet 에서 들어오는 길 — 새로 여는 것
+ *
+ * ⚠️ **방화벽 규칙보다 이 편이 확실하다.** 규칙은 프로필(개인/공용)이 어긋나면 조용히 안 먹지만,
+ * 소켓을 그 주소에만 묶으면 **운영체제가 아예 다른 인터페이스로는 안 받는다.** 랜(192.168.x)으로는
+ * 연결 자체가 성립하지 않는다.
+ *
+ * 우회로로 들어와도 **앱 로그인은 그대로 걸린다**(`app.use(requireAuth)`). Cloudflare Access 는
+ * 그 바깥의 한 겹이고, 이 길은 그 겹 대신 tailnet(WireGuard 상호 인증)이 맡는 셈이다.
+ */
+const extraHosts = (process.env.BIND_EXTRA ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean)
+  /* 이미 듣고 있는 주소를 또 열면 EADDRINUSE 로 서버가 안 뜬다 */
+  .filter((h) => h !== host && !(host === "0.0.0.0"));
+
 app.listen(port, host, () => {
   console.log(`VNTG HTS server listening on ${host}:${port}`);
   if (host === "0.0.0.0") for (const ip of localIPv4()) console.log(`  http://${ip}:${port}`);
   if (allowedOrigins.length > 0) console.log(`  CORS 허용: ${allowedOrigins.join(", ")}`);
 });
+for (const extra of extraHosts) {
+  /*
+   * 하나가 실패해도 **본 서버는 살려 둔다.** Tailscale 이 아직 안 올라와 그 주소가 없으면
+   * EADDRNOTAVAIL 이 나는데, 그걸로 서버 전체가 죽으면 우회로를 만들려다 본길을 잃는다.
+   */
+  app
+    .listen(port, extra, () => console.log(`  추가 주소로도 듣는 중: http://${extra}:${port}`))
+    .on("error", (e: NodeJS.ErrnoException) =>
+      console.warn(`[bind] ${extra}:${port} 못 열었다 — ${e.code ?? e.message} (본 서버는 그대로 돈다)`),
+    );
+}
