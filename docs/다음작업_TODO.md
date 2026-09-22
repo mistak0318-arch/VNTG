@@ -257,3 +257,46 @@ K4 를 먼저 붙이면 다음에 같은 일이 나도 하루 안에 보인다(9
 열려 있으니, 키움 수급이 빈 날의 **대조용**으로 쓸 수 있다(지금은 안 붙임 — 필요해지면 그때).
 
 - [ ] (남은 것 하나) 옛 `etfItemList.nhn` 이 죽는 날 새 API 폴백 붙이기. 죽기 전엔 안 건드린다
+
+---
+
+## 숨은 탭 폴링 — 막은 것과 남은 것 (2026-09-22)
+
+벤티지: "탭 많이 열려있음 이렇게 될수있는거면 활성화된 탭에서만 하면 되잖아."
+
+탭은 언마운트하지 않고 `display:none` 으로 숨긴다(App.tsx:577). 그래서 숨은 판의 `setInterval` 이
+계속 돈다. web/src 전수 조사 결과 **직접 setInterval 이 110곳**, 그중 인앱 탭 게이트(`useTabActive`)를
+거치던 것은 공용 훅 6 + 화면 6 뿐이었다.
+
+⚠️ `document.visibilityState` 는 게이트가 아니다 — 브라우저 창이 앞에 있으면 숨은 인앱 탭도 계속
+"visible" 이다(SuperDashboardPage.tsx:767 에 같은 함정 기록).
+
+### 9f8e298 에서 막은 곳 (23자리 / 16파일)
+
+주문(useRows·세션·정정·잔고·감시시세·자동감시) · 종목상세 PriceHeader 둘 · 시장보드 usePoll+신호 ·
+계좌정보 · 항해일지 둘 · 종목추적 3초 · 설정/테마DB/실시간상태 · 개요 장상태 · 현미경 ·
+거래원 · 프로그램 · VI · 마감정리 · 종목요약.
+
+### 아직 안 막은 곳 — 다음에
+
+탭 **밖**(App 셸)이라 탭 수와 무관하게 한 벌만 도는 것은 그대로 둔다: 사이드바 N 배지 60초,
+HeaderTicker 60초, NotifyBell 30초, NotifyToasts 6초, LiveDot 4초, NaverBriefingBell 10분.
+
+탭 **안**인데 아직 게이트가 없는 자리(주기가 길어 뒤로 미룸):
+
+| 파일 | 주기 |
+|---|---|
+| `pages/BriefingPage.tsx:278` · `pages/MyPage.tsx:268` · `pages/UsWatchPage.tsx:212,229` | 30초 / 5초 / 3·30초 (브라우저 가시성만 봄) |
+| `pages/EtfFlowPage` `EtfRankPage` `EtfSentimentPage` `UsBuzzPage` `UsEtfFlowPage` `MapPage` | 3~5분 |
+| `components/overview/` — `InquiryRankPanel` `PulsePanel` `FlowIntradayChart` `DomesticIndexGrid` `MoneyFlowPanel` `DiscussionRankPanel` `UsBridgePanel` `UsBoardPanel` | 20초~10분 |
+| `TopicPulse` `WatchTicker` `KeywordFlowPanel` `BuzzBoardPanel` `ChannelStorePanel` `HantooNewsPanel` `InvestorEstimate` `NaverBriefingBlock` `LeaderScanPanel` `EtfWatchTab` `MajorChannelPanel` `MoneyNowPanel` `TelegramRoomsPanel` `BreakingNews` `BriefingBlocks` `YahooChartSheet` | 60초~10분 |
+
+- [ ] `clearInterval` 누락 한 곳: `pages/DailyReportPage.tsx:295` (탭이 안 죽어 실무상 문제는 없지만 정리)
+- [ ] 위 표를 같은 방식(`useTabActive` 조건 + deps)으로 마저 막기
+
+### 곁에서 잡은 것
+
+같은 날, 장중 느림의 **진짜 큰 몫은 코드가 아니었다** — 로컬 dev 서버(포트 4000)가 08:30 부터
+살아 있어 미니PC 와 같은 키움 앱키로 한도를 나눠 먹고 있었다(그날 한도초과 927·실패 1018).
+`preview_stop` 으로는 자식 하나만 죽고 `npm run dev`·`tsx watch` 부모가 다시 띄운다.
+→ 메모리 `local-dev-server-eats-kiwoom-quota`.
