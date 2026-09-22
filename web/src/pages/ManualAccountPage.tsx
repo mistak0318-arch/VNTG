@@ -688,15 +688,21 @@ export function ManualAccountPage({
               <div className="label">평가금액</div>
               <div className="value">{fmtNum(Math.round(a.totalValue))}</div>
             </div>
-            <div className="summary-item">
-              <div className="label">평가손익</div>
+            {/*
+              **「비용 전」이라고 밝힌다** (2026-09-23 전수검토 (가)-3).
+              키움 연동 계좌의 평가손익·수익률은 키움이 **수수료·세금을 뺀 값**을 주고, 여기는
+              `평가 − 매입` 이라 비용이 없다. 같은 종목·같은 평단이면 두 화면 숫자가 다른데 이름은
+              같았다. 숫자를 바꾸지 않는다(증권사마다 비용이 달라 지어낼 수 없다) — 이름만 정직하게.
+            */}
+            <div className="summary-item" title="평가금액 − 매입금액. 수수료·세금은 빼지 않았습니다 — 키움 연동 계좌의 평가손익은 비용을 뺀 값이라 같은 종목도 숫자가 다를 수 있습니다">
+              <div className="label">평가손익 <small>비용 전</small></div>
               <div className={`value ${signClass(a.totalProfit)}`}>
                 {a.totalProfit > 0 ? "+" : ""}
                 {fmtNum(Math.round(a.totalProfit))}
               </div>
             </div>
-            <div className="summary-item">
-              <div className="label">수익률</div>
+            <div className="summary-item" title="매입금액 대비. 수수료·세금은 빼지 않았습니다 — 키움 연동 계좌의 수익률은 비용을 뺀 값입니다">
+              <div className="label">수익률 <small>비용 전</small></div>
               <div className={`value ${signClass(a.totalReturnRate)}`}>{pct(a.totalReturnRate)}</div>
             </div>
             {/*

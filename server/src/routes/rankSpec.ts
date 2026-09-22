@@ -1,4 +1,4 @@
-﻿import { Router } from "express";
+import { Router } from "express";
 import { cumulativeRank } from "../cumulativeRank.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { COMMON_PARAMS, findSpec, specGroups, type RankSpec } from "../rankSpecs.js";
@@ -671,7 +671,7 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
         choices: [],
         note:
           "이 기기에서 최근에 연 종목입니다 — 최근에 본 것이 맨 위입니다. 표는 거래대금 상위와 같고, " +
-          "거래대금은 백만원 단위입니다. 목록은 이 브라우저에만 남습니다(서버에 안 보냅니다).",
+          "거래대금은 억원입니다. 목록은 이 브라우저에만 남습니다(서버에 안 보냅니다).",
       };
 
       if (codes.length === 0) {
@@ -1215,10 +1215,21 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
            * 전일 종가 = 현재가 − 전일대비. 화면이 색을 칠하고 실시간을 덧씌우는 칸이라 비워 두면 안 된다.
            */
           if (toNum(mapped.flu_rt) === null) {
-            const cur = toNum(mapped.cur_prc);
-            const pre = toNum(r.pred_pre);
-            if (cur !== null && pre !== null && Math.abs(cur) - pre !== 0) {
-              mapped.flu_rt = Math.round((pre / (Math.abs(cur) - pre)) * 10000) / 100;
+            /*
+             * **스냅샷이 있으면 그 등락률을 먼저** (2026-09-23 전수검토 (가)-4).
+             * 아래 되짚기(`pre / (cur − pre)`)의 분모는 **전일 종가**라, 권리락·배당락 날엔 거래소
+             * 기준가(`base_pric`)와 어긋난다 — 종목 상세는 9/17 퓨쳐켐 때 기준가로 고쳤는데 이 폴백만
+             * 옛 방식이었다. 스냅샷의 등락률은 키움이 기준가로 낸 값이다.
+             */
+            const s = snap?.byCode.get(code);
+            if (s && Number.isFinite(s.changeRate)) {
+              mapped.flu_rt = s.changeRate;
+            } else {
+              const cur = toNum(mapped.cur_prc);
+              const pre = toNum(r.pred_pre);
+              if (cur !== null && pre !== null && Math.abs(cur) - pre !== 0) {
+                mapped.flu_rt = Math.round((pre / (Math.abs(cur) - pre)) * 10000) / 100;
+              }
             }
           }
           /*
@@ -1348,7 +1359,26 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
         /* 거래소 단추를 그대로 넘긴다 — KRX 를 보는 중이면 봉도 KRX 다 (2026-09-22) */
         const job = candles(client, codes, exchange).catch(() => null);
         const cd = await Promise.race([job, new Promise<null>((r) => setTimeout(() => r(null), 1200))]);
-        if (cd) for (const r of outRows) r.cd = cd.get(String(r.code ?? "")) ?? null;
+        if (cd) {
+          for (const r of outRows) {
+            const c = cd.get(String(r.code ?? ""));
+            if (!c) {
+              r.cd = null;
+              continue;
+            }
+            /*
+             * **봉의 종가는 그 줄의 현재가 칸과 같은 값이어야 한다** (2026-09-23 전수검토 (가)-2).
+             *
+             * 통합 탭에서 현재가 칸은 위에서 KRX 로 덮는데(「가격만 KRX 로 덮는다」), 봉은 `_AL` 통합이라
+             * 15:30~20:00 이나 NXT 가 마지막으로 체결된 순간엔 **칸과 봉이 다른 현재가**를 말했다 —
+             * 어제(9/22) 종목 상세에서 잡은 것과 같은 종류의 어긋남을, 봉을 통합으로 바꾸며 표에 새로
+             * 심은 것이다. 한 줄에 한 기준: 봉의 종가는 칸이 보여 주는 값으로 맞춘다. 시·고·저는 하루
+             * 범위라 그대로 둔다(통합 범위가 KRX 범위를 품으므로 종가가 범위 밖으로 나가지 않는다).
+             */
+            const shown = toNum(r.cur_prc);
+            r.cd = shown !== null && shown > 0 ? { ...c, c: Math.abs(shown) } : c;
+          }
+        }
       }
       /*
        * 줄 단위로 메웠으면 그것도 「어제 값」이다 — 절반이 넘을 때만 알린다 (2026-09-22).

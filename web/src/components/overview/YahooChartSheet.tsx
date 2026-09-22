@@ -644,8 +644,30 @@ export function YahooChartSheet({
             low={futDay.low}
             /* 현재가는 목록이 준 지금 값이 먼저다(hintPrice) — 일봉 종가는 몇 분 늦다 */
             close={target.hintPrice ?? futDay.close}
-            prevClose={futDay.prevClose}
+            /*
+             * **전일 기준을 큰 숫자와 맞춘다** (2026-09-23 전수검토 (가)-1).
+             *
+             * 이 카드는 `직전 일봉 종가`(야간이면 전날 밤 세션 종가)를 「전일 종가」로 썼고, 위의 큰
+             * 숫자는 한투가 준 전일대비율을 그대로 썼다. 같은 순간에 카드는 −0.79%, 큰 숫자는 +1.37% —
+             * 부호가 반대였다(9/23 01:32 실측: 카드 base 1,137.00, 큰 숫자 역산 base 1,114.6).
+             *
+             * 야간선물의 시장 관례는 **당일 주간 정산가 대비**이고, 한투가 주는 것이 그것이다. 카드가
+             * 비표준이었으니 카드를 맞춘다 — 큰 숫자의 (현재가, 등락률)에서 base 를 되짚어 쓴다.
+             * 한투 값이 없으면(hintRate 없음) 예전대로 직전 봉 종가로 떨어진다.
+             */
+            prevClose={
+              target.hintPrice != null && target.hintRate != null && target.hintRate > -100
+                ? target.hintPrice / (1 + target.hintRate / 100)
+                : futDay.prevClose
+            }
             closeLabel={target.hintPrice != null ? "현재가" : "종가"}
+            prevLabel={
+              target.hintPrice != null && target.hintRate != null
+                ? (target.futMarket ?? "CM") === "CM"
+                  ? "기준가(주간 정산가)"
+                  : "기준가"
+                : "전일 종가"
+            }
           />
         )}
 

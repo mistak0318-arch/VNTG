@@ -18,6 +18,8 @@ export function OhlcStrip({
   prevClose,
   digits = 2,
   closeLabel = "현재가",
+  /* 기준이 전일 종가가 아닐 때(야간선물 = 주간 정산가) 이름을 바꿔 적는다 (2026-09-23) */
+  prevLabel = "전일 종가",
 }: {
   /** 「오늘」 · 「9/2 야간 세션」 */
   label: string;
@@ -28,6 +30,7 @@ export function OhlcStrip({
   prevClose: number | null;
   digits?: number;
   closeLabel?: string;
+  prevLabel?: string;
 }) {
   const f = (v: number) => (digits === 0 ? fmtNum(Math.round(v)) : v.toLocaleString("ko-KR", { minimumFractionDigits: digits, maximumFractionDigits: digits }));
   const pct = (v: number) => (prevClose && prevClose > 0 ? `${v - prevClose > 0 ? "+" : ""}${(((v - prevClose) / prevClose) * 100).toFixed(2)}%` : null);
@@ -48,7 +51,7 @@ export function OhlcStrip({
       <Cell k={closeLabel} v={close} />
       {prevClose !== null && (
         <span className="ohlc-cell">
-          <i>전일 종가</i>
+          <i>{prevLabel}</i>
           <b>{f(prevClose)}</b>
         </span>
       )}
