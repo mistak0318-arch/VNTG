@@ -22,13 +22,19 @@ function ago(iso: string): string {
   return `${Math.floor(m / 1440)}일 전`;
 }
 
+/*
+ * 2026-09-22 — 아래 다섯은 **네이버 뉴스 경제 섹션**으로 옮겼다. 옛 「시황·전망」「기업·종목분석」
+ * 은 네이버 개편으로 없어진 갈래라 그 위 줄기를 쓴다. 시각이 「7분 전」처럼 어림인 까닭도 적는다 —
+ * 섹션 목록이 절대 시각을 안 준다(server/src/naverMainNews.ts 의 `agoToIso`).
+ */
 const NOTE: Record<NaverNewsCat, string> = {
   main: "네이버 증권 첫 화면의 주요뉴스(편집자 선별)입니다.",
   flash: "네이버 증권 속보 흐름입니다 — 최신이 맨 위입니다.",
-  market: "네이버 금융뉴스 「시황·전망」 갈래입니다.",
-  company: "네이버 금융뉴스 「기업·종목분석」 갈래입니다.",
-  world: "네이버 금융뉴스 「해외증시」 갈래입니다.",
-  estate: "네이버 뉴스 「부동산」 갈래입니다.",
+  market: "네이버 뉴스 경제 > 「증권」 갈래입니다. 시각은 어림입니다(네이버가 「7분 전」처럼만 줍니다).",
+  company: "네이버 뉴스 경제 > 「산업·재계」 갈래입니다. 옛 「기업·종목분석」은 네이버 개편으로 없어졌습니다.",
+  world: "네이버 뉴스 경제 > 「글로벌 경제」 갈래입니다. 옛 「해외증시」는 네이버 개편으로 없어졌습니다.",
+  estate: "네이버 뉴스 경제 > 「부동산」 갈래입니다.",
+  money: "네이버 뉴스 경제 > 「금융」 갈래입니다 — 금리·은행·환율이 여기로 옵니다.",
 };
 
 export function MainNewsPanel({ cat = "main", onSelectStock }: { cat?: NaverNewsCat; onSelectStock?: (code: string, name: string) => void }) {

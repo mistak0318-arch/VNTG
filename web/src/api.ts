@@ -2477,8 +2477,14 @@ export interface IntraFlowPoint {
   institution: number;
 }
 
-/** 네이버 뉴스 카테고리 — 서버 NaverCat 과 같은 값 */
-export type NaverNewsCat = "main" | "flash" | "market" | "company" | "world" | "estate";
+/**
+ * 네이버 뉴스 카테고리 — 서버 NaverCat 과 같은 값.
+ *
+ * 2026-09-22 개편: market·company·world·estate 는 옛 PC 금융뉴스가 죽어 **news.naver.com 경제
+ * 섹션**으로 옮겼고(증권 258 · 산업·재계 261 · 글로벌 경제 262 · 부동산 260), money(금융 259)를
+ * 더했다. 라벨이 네이버 갈래 이름으로 바뀐 이유는 server/src/naverMainNews.ts 에 적어 뒀다.
+ */
+export type NaverNewsCat = "main" | "flash" | "market" | "company" | "world" | "estate" | "money";
 
 export interface NaverNewsItem {
   title: string;

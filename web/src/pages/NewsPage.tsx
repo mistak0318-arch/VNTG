@@ -14,9 +14,17 @@ import { useListKeys } from "../useListKeys";
 
 /*
  * 뉴스 탭 (2026-08-26 확장) — 네이버 증권의 갈래를 그대로 편다.
- * 기본 순서: 주요뉴스 → ⚡속보(그 옆 — 사용자 요청) → 시황·전망 → 기업·종목 →
- * 해외증시 → ⭐관심종목 → 부동산 → 분야별 → 맨 끝 네이버 증권 바로가기.
  * **탭을 끌면 순서가 바뀌고 이 기기에 저장된다** (useDragOrder — 다른 순서 UI 와 동일).
+ *
+ * ⚠️ **탭 이름 넷이 바뀌었다** (2026-09-22 — 벤티지: "시황 부동산 이런것들은 아예 안 넘어오네
+ * 네이버 개편되면서 빠진건지"). 네이버가 PC 금융뉴스를 걷어내면서 「시황·전망」「기업·종목」
+ * 이라는 갈래 자체가 없어졌다. news.naver.com 경제 섹션으로 옮기며 **네이버가 지금 쓰는 이름**을
+ * 그대로 달았다 — 없는 갈래 이름을 달아 두면 그 탭이 무엇인지 거짓말을 하는 셈이다.
+ *
+ *   시황·전망 → 증권(258) · 기업·종목 → 산업·재계(261) · 해외증시 → 글로벌 경제(262)
+ *   부동산(260)은 옛 탭과 같은 갈래라 이름 그대로. 금융(259)은 이번에 새로 붙였다.
+ *
+ * 저장된 순서에 없는 새 탭은 `loadTabOrder` 가 뒤에 이어 붙인다 — 「금융」은 맨 끝에 생긴다.
  */
 type SrcTab = NaverNewsCat | "mine" | "sector" | "naver" | "flow" | "hantoo";
 const TAB_LABEL: Record<SrcTab, string> = {
@@ -24,16 +32,17 @@ const TAB_LABEL: Record<SrcTab, string> = {
   main: "🏠 주요뉴스",
   flash: "⚡ 속보",
   hantoo: "🏦 한투 속보",
-  market: "시황·전망",
-  company: "기업·종목",
-  world: "해외증시",
+  market: "증권",
+  company: "산업·재계",
+  world: "글로벌 경제",
   mine: "⭐ 관심종목",
   estate: "부동산",
+  money: "금융",
   sector: "분야별 뉴스",
   naver: "네이버 증권",
 };
 const TAB_DEFAULT: SrcTab[] = [
-  "flow", "main", "flash", "hantoo", "market", "company", "world", "mine", "estate", "sector", "naver",
+  "flow", "main", "flash", "hantoo", "market", "company", "world", "mine", "estate", "money", "sector", "naver",
 ];
 const TAB_ORDER_KEY = "vntg.newsTabOrder.v2";
 

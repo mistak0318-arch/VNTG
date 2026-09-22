@@ -18737,17 +18737,48 @@ a.watch-btn { text-decoration: none; }
 .sc-strip.compact .refresh-btn { padding: 1px 7px; font-size: 0.8rem; }
 
 /* 한투 속보 (2026-09-10) */
+/*
+ * 한투 속보 줄 모양 (2026-09-22 고침 — 벤티지: "한투속보는 가독성이 넘 안 좋아").
+ *
+ * 무엇이 안 좋았나, 넷:
+ *   ① `.hn-title` 에 font-weight 가 없어 제목이 출처·칩과 같은 무게였다 — 눈이 제목을 못 집는다.
+ *   ② `.hn-stocks { display:inline }` 이라 제목 → 출처 → 칩이 **한 문단으로 흘러** 줄 끝에서 엉켰다.
+ *   ③ `.hn-tm` 에 `num` 클래스를 붙여 뒀는데 **전역 `.num` 규칙이 없다**(전부 `.token-row .num` 식으로
+ *      부모에 갇혀 있다). 같은 일을 하는 ⚡속보의 `.bn-time` 은 tabular-nums 가 제대로 있었다.
+ *   ④ 날짜 구분이 없어, 「더 보기」로 어제까지 내려가도 전부 `14:32` 로만 보였다.
+ */
 .hn-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; }
-.hn-item { display: grid; grid-template-columns: auto 1fr; gap: 0 8px; padding: 5px 0; border-top: 1px solid var(--border); align-items: start; }
+.hn-item { display: grid; grid-template-columns: auto 1fr; gap: 0 10px; padding: 7px 0; border-top: 1px solid var(--border); align-items: start; }
 .hn-item:first-child { border-top: none; }
-.hn-item.auto { opacity: 0.75; }
-.hn-tm { font-size: 0.72rem; color: var(--muted); padding-top: 2px; white-space: nowrap; }
-.hn-body { min-width: 0; line-height: 1.5; font-size: 0.86rem; }
-.hn-title { color: var(--text); text-decoration: none; }
+/* 자동 생성 줄은 켰을 때만 보인다 — 흐리게만 두면 제목 무게를 올린 뒤엔 오히려 튄다 */
+.hn-item.auto .hn-title { font-weight: 400; color: var(--muted); }
+.hn-tm {
+  font-size: 0.72rem;
+  color: var(--muted);
+  padding-top: 3px;
+  white-space: nowrap;
+  /* ③ 레일 고정 — 1 과 8 의 폭이 달라 시각 칸이 미세하게 흔들렸다 */
+  font-variant-numeric: tabular-nums;
+}
+.hn-body { min-width: 0; line-height: 1.45; font-size: 0.86rem; }
+/* ① 제목은 제목으로 — 굵기와 줄바꿈 기준을 준다 */
+.hn-title { display: block; color: var(--text); text-decoration: none; font-weight: 600; font-size: 0.9rem; word-break: keep-all; overflow-wrap: anywhere; }
 .hn-title:hover { text-decoration: underline; }
-.hn-org { font-style: normal; font-size: 0.68rem; color: var(--muted); margin-left: 6px; white-space: nowrap; }
-.hn-stocks { display: inline; margin-left: 4px; }
-.hn-stocks > * { display: inline-block; vertical-align: baseline; margin: 0 3px 2px 0; }
+/* ② 출처·종목칩은 제목 아랫줄로 */
+.hn-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 3px; }
+.hn-org { font-style: normal; font-size: 0.68rem; color: var(--muted); white-space: nowrap; }
+.hn-meta > .rp-nc-stock { margin: 0; }
+/* ④ 날짜가 바뀌는 자리 */
+.hn-day {
+  margin: 10px 0 2px;
+  padding: 3px 8px;
+  align-self: flex-start;
+  border-radius: 10px;
+  background: var(--panel-2, var(--panel));
+  border: 1px solid var(--border);
+  font-size: 0.7rem;
+  color: var(--muted);
+}
 .hn-more { margin-top: 8px; }
 
 /* 거래원 일별 매매 (2026-09-10) */

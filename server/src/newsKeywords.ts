@@ -50,8 +50,14 @@ import { isEnabled, markRun, periodOverrideMs } from "./naverSyncConfig.js";
 const here = dirname(fileURLToPath(import.meta.url));
 const DIR = join(here, "..", "data", "newsKeywords");
 
-/** 긁는 갈래 — 네이버 증권 뉴스의 전부 */
-const CATS: NaverCat[] = ["main", "flash", "market", "company", "world", "estate"];
+/**
+ * 긁는 갈래 — 네이버 뉴스의 전부.
+ *
+ * ⚠️ 2026-09-22 까지 이 중 **넷(market·company·world·estate)이 빈 배열**이었다. 네이버가 PC
+ * 금융뉴스를 걷어내 파서가 0건을 뱉는데 `.catch(() => ({items:[]}))` 가 삼켜서, 키워드 기준선이
+ * 조용히 main·flash 둘로 쪼그라들어 있었다. 재료를 섹션 API 로 옮기며 되살렸고 money 를 더했다.
+ */
+const CATS: NaverCat[] = ["main", "flash", "market", "company", "world", "estate", "money"];
 
 /** 며칠치를 남기나. 기준선은 7일이면 충분하고, 그 이상은 디스크만 먹는다 */
 /* 보관일은 설정 > 데이터 보관이 정한다 (2026-09-10) */

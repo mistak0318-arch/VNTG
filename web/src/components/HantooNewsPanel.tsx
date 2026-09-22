@@ -1,5 +1,15 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { api, fmtKstHm, type HantooNewsItem } from "../api";
+import { useTabActive } from "../tabActive";
+
+/** 「9월 21일 (일)」 — 날짜 구분줄에만 쓴다. KST 로 읽어야 자정 근처가 안 어긋난다 */
+function fmtKstDayLabel(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const k = new Date(d.getTime() + 9 * 3600_000);
+  const w = ["일", "월", "화", "수", "목", "금", "토"][k.getUTCDay()];
+  return `${k.getUTCMonth() + 1}월 ${k.getUTCDate()}일 (${w})`;
+}
 
 /**
  * 🏦 한투 속보 — 한국투자증권 HTS 뉴스창 그대로 (FHKST01011800, 2026-09-10).
@@ -40,12 +50,15 @@ export function HantooNewsPanel({ onSelectStock }: { onSelectStock: (code: strin
       .finally(() => setLoading(false));
   };
 
+  /* 숨은 탭에서는 안 묻는다 (2026-09-22) — 탭은 `display:none` 이라 열어 둔 수만큼 배가된다 */
+  const tabActive = useTabActive();
   useEffect(() => {
+    if (!tabActive) return;
     void load();
     const t = setInterval(() => void load(), 60_000);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [tabActive]);
 
   const shown = items.filter((x) => (!hideAuto || !x.auto) && (!onlyStock || x.stocks.length > 0));
   const searchUrl = (title: string) => `https://search.naver.com/search.naver?where=news&sm=tab_jum&query=${encodeURIComponent(title.replace(/\[.*?\]/g, "").slice(0, 60))}`;
@@ -86,26 +99,43 @@ export function HantooNewsPanel({ onSelectStock }: { onSelectStock: (code: strin
       {error && <div className="error-banner">{error}</div>}
       {shown.length === 0 && !loading && !error && <div className="empty">지금은 걸리는 줄이 없습니다.</div>}
       <ul className="hn-list">
-        {shown.map((n) => (
-          <li className={`hn-item${n.auto ? " auto" : ""}`} key={n.id}>
-            <span className="hn-tm num">{fmtKstHm(n.at)}</span>
-            <span className="hn-body">
-              <a className="hn-title" href={searchUrl(n.title)} target="_blank" rel="noreferrer" title="네이버 뉴스에서 이 제목 찾기">
-                {n.title}
-              </a>
-              {n.org && <i className="hn-org">{n.org}</i>}
-              {n.stocks.length > 0 && (
-                <span className="hn-stocks">
-                  {n.stocks.slice(0, 6).map((s) => (
-                    <button type="button" className="rp-nc-stock" key={s.code} onClick={() => onSelectStock(s.code, s.name)} title={`${s.name} 종목 상세`}>
-                      {s.name}
-                    </button>
-                  ))}
+        {shown.map((n, i) => {
+          /*
+           * **날짜가 바뀌면 구분줄** (2026-09-22 — 벤티지: "한투속보는 가독성이 넘 안 좋아").
+           * 시각을 `HH:mm` 로만 찍는데 「더 보기(이전 40건)」를 누르면 어제·그제까지 내려간다.
+           * 전부 `14:32` 로 보여서 어느 날 것인지 알 길이 없었다.
+           */
+          const day = n.at.slice(0, 10);
+          const newDay = i === 0 || shown[i - 1].at.slice(0, 10) !== day;
+          return (
+            <Fragment key={n.id}>
+              {newDay && i > 0 && <li className="hn-day">{fmtKstDayLabel(n.at)}</li>}
+              <li className={`hn-item${n.auto ? " auto" : ""}`}>
+                <span className="hn-tm">{fmtKstHm(n.at)}</span>
+                <span className="hn-body">
+                  <a className="hn-title" href={searchUrl(n.title)} target="_blank" rel="noreferrer" title="네이버 뉴스에서 이 제목 찾기">
+                    {n.title}
+                  </a>
+                  {/*
+                   * 출처·종목칩은 **제목 아랫줄**로 내렸다 (2026-09-22). 예전엔 `.hn-stocks` 가
+                   * `display:inline` 이라 제목 → 출처 → 칩이 한 문단으로 흘러, 제목이 길면
+                   * 줄 끝에서 엉켰다. 제목만 한 덩어리로 보이게 두는 편이 훑기 좋다.
+                   */}
+                  {(n.org || n.stocks.length > 0) && (
+                    <span className="hn-meta">
+                      {n.org && <i className="hn-org">{n.org}</i>}
+                      {n.stocks.slice(0, 6).map((s) => (
+                        <button type="button" className="rp-nc-stock" key={s.code} onClick={() => onSelectStock(s.code, s.name)} title={`${s.name} 종목 상세`}>
+                          {s.name}
+                        </button>
+                      ))}
+                    </span>
+                  )}
                 </span>
-              )}
-            </span>
-          </li>
-        ))}
+              </li>
+            </Fragment>
+          );
+        })}
       </ul>
       {next && (
         <button className="filter-btn hn-more" onClick={() => void load(next)} disabled={loading}>

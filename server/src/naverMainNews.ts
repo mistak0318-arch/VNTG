@@ -27,26 +27,43 @@ export interface MainNewsItem {
 }
 
 /*
- * ── 카테고리 (2026-08-26 확장·전부 실측) ──
+ * ── 카테고리 ──
  *
- * m-api(list?category=)가 받는 값은 mainnews·flashnews·ranknews 뿐이다(후보 11개
- * 탐침). 시황·전망/기업·종목/해외증시/부동산은 **PC 금융뉴스**(news_list.naver,
- * EUC-KR HTML)의 section_id2 로만 있다 — 기사 표본으로 판별했다:
+ * m-api(list?category=)가 받는 값은 **mainnews·flashnews·worldnews** 뿐이다
+ * (2026-09-22 재탐침 12개: sise·market·company·stock·estate·economy… 전부 HTTP 400.
+ * worldnews 는 200 이지만 오늘은 0건이라 안 쓴다).
  *
- *   258 시황·전망 · 402 기업·종목분석(마윈·프로그램 매물) ·
- *   403 해외증시(뉴욕증시) · 260 부동산(종부세·주담대)
+ * ⚠️ **PC 금융뉴스는 2026-09 개편으로 사라졌다** (2026-09-22 실측 — 벤티지: "시황 부동산
+ * 이런것들은 아예 안 넘어오네 네이버 개편되면서 빠진건지").
  *
- * PC 목록도 썸네일(thumb70)·요약·매체·시각을 다 준다. 한 쪽 20건, page 파라미터로
- * 뒤 페이지를 넘긴다(m-api 도 page 를 받는다).
+ *   finance.naver.com/news/news_list.naver?…section_id2=258  → 302 stock.naver.com/news/flashnews
+ *   finance.naver.com/news/news_list.naver?…section_id2=260  → 302 stock.naver.com/news/flashnews
+ *   finance.naver.com/news/mainnews.naver                    → 302 stock.naver.com/news/mainnews
+ *
+ * **세 갈래가 한 곳으로 간다.** 새 SPA 의 뉴스 갈래를 뽑아 보니 「뉴스 홈 · 실시간 속보 ·
+ * 주요 뉴스 · 많이 본 뉴스 · 뉴스 포커스 · 해외 뉴스 · 공시」다 — 옛 `시황·전망(401)`,
+ * `기업·종목(402)` 은 **네이버에서 없어진 갈래**라 되살릴 원본이 없다.
+ *
+ * 그래서 **news.naver.com 의 경제 섹션**으로 옮긴다(2026-09-22 실측, 전부 200 · 36건/쪽):
+ *
+ *   258 증권 · 259 금융 · 260 부동산 · 261 산업·재계 · 262 글로벌 경제
+ *
+ * 부동산(260)은 옛 탭과 **정확히 같은 갈래**다. 나머지는 없어진 잔가지 대신 그 위 줄기를
+ * 쓴다 — 화면 라벨도 네이버 것에 맞춰 바꿨다(없는 갈래 이름을 달아 두면 거짓말이 된다).
+ *
+ * 얻은 것도 있다: 옛 PC 목록은 한 쪽 20건이었는데 여기는 **36건**이고, 요약·썸네일·언론사가
+ * 다 온다. 잃은 것은 **정확한 시각** — 상대 표기("7분전"·"3시간전"·"3일전")뿐이다(아래 `agoToIso`).
  */
-export type NaverCat = "main" | "flash" | "market" | "company" | "world" | "estate";
+export type NaverCat = "main" | "flash" | "market" | "company" | "world" | "estate" | "money";
 
 const M_API: Partial<Record<NaverCat, string>> = { main: "mainnews", flash: "flashnews" };
-const PC_SECTION: Partial<Record<NaverCat, string>> = {
-  market: "258",
-  company: "402",
-  world: "403",
-  estate: "260",
+/** news.naver.com 경제(101)의 하위 분야 번호 */
+const SECTION_SID2: Partial<Record<NaverCat, string>> = {
+  market: "258", // 증권
+  company: "261", // 산업·재계
+  world: "262", // 글로벌 경제
+  estate: "260", // 부동산
+  money: "259", // 금융
 };
 
 const cacheMap = new Map<string, { at: number; items: MainNewsItem[]; hasMore: boolean }>();
@@ -60,110 +77,124 @@ function unescapeHtml(s: string): string {
   };
   return s
     .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    /* 섹션 API 의 썸네일 주소는 `?type&#x3D;nf220_150` 처럼 **16진수** 엔티티로 온다 (2026-09-22) */
+    .replace(/&#x([0-9a-f]+);/gi, (_, h: string) => String.fromCodePoint(parseInt(h, 16)))
     .replace(/&([a-z]+);/g, (m, name: string) => NAMED[name] ?? m)
     .trim();
 }
 
-/*
- * PC 금융뉴스의 쪽 넘김은 **날짜 단위**다 (2026-08-26 실측) —
- * `date=YYYYMMDD&page=N` 이고, page 는 그 날짜 안에서만 돈다. date 없이 page=2 를
- * 넣으면 빈 목록이 온다(자정 직후 실측: 오늘 1쪽뿐, 어제는 46쪽). 그래서 화면의
- * 「전역 쪽 번호」는 오늘부터 날짜를 거슬러 걸으며 날짜별 쪽수를 세어 맞춘다.
+/**
+ * **상대 시각 → ISO** (2026-09-22).
+ *
+ * 섹션 목록은 절대 시각을 안 준다 — `7분전`·`3시간전`·`3일전` 뿐이다(오래된 날짜 페이지까지
+ * 확인했다). 기사를 하나씩 열어야 정확한 시각이 나오는데 목록 한 쪽에 36건이라 그럴 수 없다.
+ *
+ * 그래서 **받은 시점에서 되짚어 만든다.** 분 단위는 정확하고, 시간·일 단위는 그만큼 거칠다.
+ * 목록이 이미 최신순이라 **순서는 안 틀어진다** — 「얼마나 새 기사냐」를 읽는 데 쓰는 값이다.
  */
-
-/** KST 기준 back 일 전 날짜 — 서버가 어느 시간대에 있든 네이버(한국 날짜)와 맞아야 한다 */
-function kstDate(back: number): string {
-  return new Date(Date.now() + 9 * 3600_000 - back * 86_400_000)
-    .toISOString()
-    .slice(0, 10)
-    .replace(/-/g, "");
+function agoToIso(text: string, now = Date.now()): string {
+  const t = text.replace(/\s/g, "");
+  if (/^방금/.test(t)) return new Date(now).toISOString();
+  const m = t.match(/^(\d+)(분|시간|일|주)전$/);
+  if (m) {
+    const n = Number(m[1]);
+    const unit = { 분: 60_000, 시간: 3600_000, 일: 86_400_000, 주: 7 * 86_400_000 }[m[2]] ?? 0;
+    return new Date(now - n * unit).toISOString();
+  }
+  /* 아주 오래된 기사는 `2026.09.18.` 로 온다 — 그 날 정오로 둔다(시각을 모른다) */
+  const d = t.match(/^(\d{4})\.(\d{2})\.(\d{2})\.?$/);
+  if (d) return `${d[1]}-${d[2]}-${d[3]}T12:00:00+09:00`;
+  return "";
 }
 
-/** 날짜+쪽 하나의 캐시. 지난 날짜는 내용이 안 바뀌니 오래 들고 있는다 */
-const pcPageCache = new Map<string, { at: number; items: MainNewsItem[]; maxPage: number }>();
+/** 목록 한 번치 — 기사들과 **다음 장 커서** */
+interface SectionBatch {
+  items: MainNewsItem[];
+  cursor: string | null;
+  hasNext: boolean;
+}
 
-/** PC 금융뉴스 한 쪽 파서 — thumb·제목·요약·매체·시각 + 그 날짜의 총 쪽수 */
-async function fetchPcPage(
-  sectionId2: string,
-  date: string,
-  page: number,
-): Promise<{ items: MainNewsItem[]; maxPage: number }> {
-  const key = `${sectionId2}:${date}:${page}`;
-  const hit = pcPageCache.get(key);
-  const ttl = date === kstDate(0) ? TTL : 12 * 3600_000;
-  if (hit && Date.now() - hit.at < ttl) return hit;
-
-  const res = await fetch(
-    `https://finance.naver.com/news/news_list.naver?mode=LSS2D&section_id=101&section_id2=${sectionId2}&date=${date}&page=${page}`,
-    { headers: { "user-agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(8000) },
-  );
+/**
+ * news.naver.com 경제 섹션 한 장 (2026-09-22 실측).
+ *
+ *   GET /section/template/SECTION_ARTICLE_LIST_FOR_LATEST?sid=101&sid2=260&sort=standard&pageNo=N[&next=커서]
+ *   → { component, renderedComponent: { <이름>: "<html>" }, uhv }
+ *
+ * ⚠️ **`pageNo` 만으로는 안 넘어간다.** 커서 없이 pageNo 만 2·5·20 으로 바꿔 불러 봤더니
+ * 매번 **같은 36건**이 왔다. 목록 껍데기의 `data-cursor` 를 다음 호출의 `next` 로 넘겨야
+ * 진짜로 넘어간다 — 그렇게 5번 불러 180건, 겹침 0 을 확인했다.
+ */
+async function fetchSectionBatch(sid2: string, pageNo: number, next?: string): Promise<SectionBatch> {
+  const url =
+    `https://news.naver.com/section/template/SECTION_ARTICLE_LIST_FOR_LATEST?sid=101&sid2=${sid2}&sort=standard&pageNo=${pageNo}` +
+    (next ? `&next=${encodeURIComponent(next)}` : "");
+  const res = await fetch(url, {
+    /* Referer 가 없으면 네이버가 빈 껍데기를 준다 */
+    headers: { "user-agent": "Mozilla/5.0", referer: `https://news.naver.com/section/101` },
+    signal: AbortSignal.timeout(8000),
+  });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const html = new TextDecoder("euc-kr").decode(await res.arrayBuffer());
+  const body = (await res.json()) as { renderedComponent?: Record<string, string> | string };
+  const rc = body.renderedComponent;
+  const html = typeof rc === "string" ? rc : String(Object.values(rc ?? {})[0] ?? "");
 
+  const now = Date.now();
   const items: MainNewsItem[] = [];
-  /*
-   * 기사 하나 = (썸네일 dt 는 있을 수도) + articleSubject(제목·링크) + articleSummary
-   * (요약 + press + wdate). subject 를 닻으로 잡고 앞뒤에서 줍는다.
-   */
-  const re =
-    /(?:<dt class="thumb">\s*<a[^>]*><img src="([^"]+)"[\s\S]{0,200}?)?<dd class="articleSubject">\s*<a href="[^"]*article_id=(\d+)&office_id=(\d+)[^"]*"[^>]*title="([^"]+)"[\s\S]*?<dd class="articleSummary">\s*([\s\S]*?)<span class="press">([^<]+)<\/span>[\s\S]*?<span class="wdate">([^<]+)<\/span>/g;
-  for (const m of html.matchAll(re)) {
-    const [, thumb, articleId, officeId, tit, summaryRaw, press, wdate] = m;
+  for (const block of html.match(/<li class="sa_item[\s\S]*?<\/li>/g) ?? []) {
+    /* 기사 링크. `article/comment/029/...`(댓글)은 세 자리 숫자가 아니라 안 걸린다 */
+    const link = block.match(/href="(https:\/\/n\.news\.naver\.com\/article\/\d{3}\/\d+)"/);
+    const title = block.match(/class="sa_text_strong"[^>]*>([\s\S]*?)<\/strong>/);
+    if (!link || !title) continue;
+    const lede = block.match(/class="sa_text_lede"[^>]*>([\s\S]*?)<\/div>/);
+    const press = block.match(/class="sa_text_press"[^>]*>([\s\S]*?)<\/div>/);
+    const when = block.match(/class="sa_text_datetime[^"]*"[^>]*>\s*<b>([\s\S]*?)<\/b>/);
+    /* 썸네일은 지연 로딩이라 `src` 가 아니라 `data-src` 에 있다 */
+    const thumb = block.match(/<img[^>]+data-src="([^"]+)"/);
     items.push({
-      title: unescapeHtml(tit),
-      summary: unescapeHtml(summaryRaw.replace(/<[^>]+>/g, "")).slice(0, 160),
-      thumb: thumb || null,
-      press: unescapeHtml(press),
-      link: `https://n.news.naver.com/article/${officeId}/${articleId}`,
-      at: /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(wdate.trim())
-        ? `${wdate.trim().replace(" ", "T")}:00+09:00`
-        : "",
+      title: unescapeHtml(title[1].replace(/<[^>]+>/g, "")),
+      summary: lede ? unescapeHtml(lede[1].replace(/<[^>]+>/g, "")).slice(0, 160) : "",
+      thumb: thumb ? unescapeHtml(thumb[1]) : null,
+      press: press ? unescapeHtml(press[1].replace(/<[^>]+>/g, "")) : "",
+      link: link[1],
+      at: when ? agoToIso(unescapeHtml(when[1]), now) : "",
     });
   }
 
-  /*
-   * 그 날짜의 총 쪽수 — 페이지 내비(Nnavi) 안의 쪽 번호 최댓값(「맨뒤」 링크 포함).
-   * 기사가 적은 날은 Nnavi 자체가 없다 → 1쪽. 본문 전체에서 page= 를 세면
-   * 기사 링크의 page=1 같은 게 섞이므로 **Nnavi 구간만** 본다.
-   */
-  let maxPage = 1;
-  const navAt = html.indexOf('class="Nnavi"');
-  if (navAt >= 0) {
-    // 링크가 `&amp;page=2` 로 이스케이프돼 있다 — [?&] 를 앞에 걸면 하나도 안 잡힌다(실측)
-    const nav = html.slice(navAt, html.indexOf("</table>", navAt) + 8);
-    for (const m of nav.matchAll(/page=(\d+)/g)) maxPage = Math.max(maxPage, Number(m[1]));
-  }
-
-  const out = { at: Date.now(), items, maxPage };
-  pcPageCache.set(key, out);
-  if (pcPageCache.size > 300) {
-    const first = pcPageCache.keys().next().value;
-    if (first) pcPageCache.delete(first);
-  }
-  return out;
+  /* 목록 껍데기가 다음 장 커서를 들고 있다 */
+  const meta = html.match(/class="section_latest_article _CONTENT_LIST[^"]*"([^>]*)>/);
+  const attr = (n: string): string | null => (meta ? (meta[1].match(new RegExp(`${n}="([^"]*)"`)) ?? [])[1] ?? null : null);
+  return { items, cursor: attr("data-cursor"), hasNext: attr("data-has-next") === "true" };
 }
 
-/** 전역 쪽 번호 → (날짜, 그 날짜 안의 쪽)으로 풀어 걷는다 */
-async function fetchPcSection(
-  sectionId2: string,
-  page: number,
-): Promise<{ items: MainNewsItem[]; hasMore: boolean }> {
-  let skip = page - 1;
-  // 3주면 충분히 깊다 — 뉴스 화면에서 그 뒤까지 넘겨 볼 일은 없다
-  for (let back = 0; back < 21; back++) {
-    const date = kstDate(back);
-    const first = await fetchPcPage(sectionId2, date, 1);
-    if (first.items.length === 0) continue; // 기사가 없는 날(연휴 등)은 건너뛴다
-    const pages = Math.max(1, first.maxPage);
-    if (skip >= pages) {
-      skip -= pages;
-      continue;
-    }
-    const target = skip === 0 ? first : await fetchPcPage(sectionId2, date, skip + 1);
-    // 지난 날짜는 늘 더 있다 — 벽(21일)에 닿기 전까지는 다음 쪽이 있다고 본다
-    return { items: target.items, hasMore: true };
+/**
+ * 쪽 번호로 부르는 화면에 커서 목록을 맞춰 준다.
+ *
+ * 화면은 「← 이전 / 다음 →」으로 **한 칸씩만** 움직인다(MainNewsPanel). 그래서 갈래마다
+ * 받아 둔 장을 순서대로 쌓아 두면, 다음 쪽 요청은 늘 **마지막 장의 커서 하나**로 끝난다.
+ * 캐시가 식었거나 깊은 쪽을 바로 부르면 1장부터 걸어가되 **20장에서 멈춘다**(720건).
+ */
+const chainOf = new Map<string, { at: number; pages: SectionBatch[] }>();
+const CHAIN_TTL = 5 * 60_000;
+const MAX_PAGES = 20;
+
+async function fetchSection(sid2: string, page: number): Promise<{ items: MainNewsItem[]; hasMore: boolean }> {
+  const want = Math.max(1, Math.min(page, MAX_PAGES));
+  let chain = chainOf.get(sid2);
+  if (!chain || Date.now() - chain.at >= CHAIN_TTL) {
+    chain = { at: Date.now(), pages: [] };
+    chainOf.set(sid2, chain);
   }
-  return { items: [], hasMore: false };
+  while (chain.pages.length < want) {
+    const prev = chain.pages[chain.pages.length - 1];
+    /* 앞 장이 「다음 없음」이라고 했으면 더 안 부른다 */
+    if (prev && !prev.hasNext) break;
+    const got = await fetchSectionBatch(sid2, chain.pages.length + 1, prev?.cursor ?? undefined);
+    if (got.items.length === 0) break;
+    chain.pages.push(got);
+  }
+  const hit = chain.pages[want - 1];
+  if (!hit) return { items: [], hasMore: false };
+  return { items: hit.items, hasMore: hit.hasNext && want < MAX_PAGES };
 }
 
 function toIso(dt: string): string {
@@ -206,13 +237,21 @@ export async function naverNews(
   try {
     const got = M_API[cat]
       ? await fetchMApi(M_API[cat]!, page)
-      : await fetchPcSection(PC_SECTION[cat]!, page);
+      : await fetchSection(SECTION_SID2[cat]!, page);
     if (got.items.length > 0) cacheMap.set(key, { at: Date.now(), ...got });
     if (cacheMap.size > 60) {
       const first = cacheMap.keys().next().value;
       if (first) cacheMap.delete(first);
     }
-    void recordApiCall("naver", `news:${cat}`, "ok");
+    /*
+     * ⚠️ **빈 1쪽은 성공이 아니다** (2026-09-22).
+     *
+     * 이 화면이 한 달 가까이 조용히 비어 있었던 까닭이 여기다. 네이버가 개편돼 파서가 0건을
+     * 뱉는데도 HTTP 는 200 이라 `ok` 로 기록됐다 — 그날 계기판은 `naver ok 1507 · failed 0`,
+     * `news:market 140건` 이었다. **호출은 다 성공인데 기사가 0건**이니 아무 데도 안 걸린다.
+     * 1쪽이 비면 `failed` 로 적는다. 뒷쪽이 비는 건 바닥에 닿은 것이라 정상이다.
+     */
+    void recordApiCall("naver", `news:${cat}`, page === 1 && got.items.length === 0 ? "failed" : "ok");
     return got;
   } catch (e) {
     void recordApiCall("naver", `news:${cat}`, "failed");

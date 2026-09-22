@@ -172,9 +172,10 @@ export function createNewsRouter(client: KiwoomClient): Router {
   });
 
   /**
-   * 네이버 뉴스 카테고리 + 페이지 (2026-08-26) —
-   * main 주요 · flash 속보 · market 시황·전망 · company 기업·종목 ·
-   * world 해외증시 · estate 부동산. 한 쪽 20건, page 로 넘긴다.
+   * 네이버 뉴스 카테고리 + 페이지 (2026-08-26, 2026-09-22 개편) —
+   * main 주요 · flash 속보 는 모바일 증권 API(한 쪽 20건),
+   * market 증권 · company 산업·재계 · world 글로벌 경제 · estate 부동산 · money 금융 은
+   * news.naver.com 경제 섹션(한 쪽 36건). 옛 PC 금융뉴스는 302 로 죽었다 — naverMainNews.ts 참고.
    */
   /** 뉴스 카드 채우기 — 본문 앞 400자 + 관련 종목 (2026-09-08). 한 쪽치 링크를 한 번에 */
   /** 기사 전문 — 시세분석 조회순위 팝업이 창 안에서 읽는다 (2026-09-09) */
@@ -214,7 +215,8 @@ export function createNewsRouter(client: KiwoomClient): Router {
   router.get("/news/naver", async (req, res, next) => {
     try {
       const cat = String(req.query.cat ?? "main") as NaverCat;
-      if (!["main", "flash", "market", "company", "world", "estate"].includes(cat)) {
+      /* money(금융)는 2026-09-22 개편 때 붙였다 — 네이버 경제 섹션 259 */
+      if (!["main", "flash", "market", "company", "world", "estate", "money"].includes(cat)) {
         res.status(400).json({ error: "모르는 카테고리입니다" });
         return;
       }
