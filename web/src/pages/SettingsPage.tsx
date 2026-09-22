@@ -4,6 +4,7 @@ import { SIDEBAR_HOTKEYS, type Hotkey } from "../hotkey";
 import { AboutPanel } from "../components/AboutPanel";
 import { pushGlobalSnapshot, setPref } from "../prefs";
 import { api, fmtNum, type ProviderUsage, type UsageTotals } from "../api";
+import { useTabActive } from "../tabActive";
 import { RefreshBar } from "../components/RefreshBar";
 import { AiModelPanel } from "../components/AiModelPanel";
 import { AlertConfigPanel } from "../components/AlertConfigPanel";
@@ -108,11 +109,14 @@ export function SettingsPage() {
     }
   }
 
+  /* 숨은 탭에서는 안 묻는다 (2026-09-22) — 탭은 `display:none` 이라 열어 둔 수만큼 배가된다 */
+  const tabActive = useTabActive();
   useEffect(() => {
+    if (!tabActive) return;
     load();
     const timer = setInterval(load, 30_000);
     return () => clearInterval(timer);
-  }, []);
+  }, [tabActive]);
 
   return (
     <div>

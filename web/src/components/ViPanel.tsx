@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLockPaused } from "../lockPause";
+import { useTabActive } from "../tabActive";
 import { fmtNum } from "../api";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 
@@ -47,9 +48,11 @@ export function ViPanel({ onSelectStock }: { onSelectStock?: (c: string, n: stri
   const [firedOnly, setFiredOnly] = useState(true);
   /* 잠겨 있으면(Ctrl+Q) 5초 폴링을 놓는다 (2026-09-09 재검토) */
   const lockPaused = useLockPaused();
+  /* 숨은 탭에서도 놓는다 (2026-09-22) — 잠금과 같은 이유다. 5초짜리라 탭 수만큼 크게 는다 */
+  const tabActive = useTabActive();
 
   useEffect(() => {
-    if (lockPaused) return;
+    if (lockPaused || !tabActive) return;
     let alive = true;
     const load = async () => {
       try {
@@ -68,7 +71,7 @@ export function ViPanel({ onSelectStock }: { onSelectStock?: (c: string, n: stri
       alive = false;
       clearInterval(t);
     };
-  }, [lockPaused]);
+  }, [lockPaused, tabActive]);
 
   // 컬럼 정렬 — 모든 표 공통 규칙(2026-08-26). 훅이라 조기 return 앞에 둔다
   const rows = firedOnly ? (events ?? []).filter((e) => !e.clearedAt) : events ?? [];

@@ -39,6 +39,7 @@ import { StockSearchBox } from "../components/StockSearchBox";
 import { latestStock } from "../useRecentStocks";
 import { LiveDot } from "../components/LiveDot";
 import { StockPeek } from "../components/StockPeek";
+import { useTabActive } from "../tabActive";
 
 /**
  * 주문 (2026-09-03) — 벤티지: "주문 메뉴 들어갈 때는 아이디랑 비밀번호를 한 번 더,
@@ -565,11 +566,25 @@ export function OrderPage({ onSelectStock }: { onSelectStock?: (code: string, na
     }
   }, []);
 
+  /*
+   * **숨은 탭에서는 안 묻는다** (2026-09-22 — 벤티지: "탭 많이 열려있음 이렇게 될수있는거면
+   * 활성화된 탭에서만 하면 되잖아"). 주문 화면은 **이 앱에서 폴러가 가장 많은 판**이다
+   * (5초 셋 · 8초 · 15초 · 30초). 탭은 언마운트가 아니라 `display:none` 이라(App.tsx:577)
+   * 열어 둔 채 다른 탭을 보면 그게 통째로 계속 돌았다.
+   *
+   * ⚠️ `document.visibilityState` 로는 못 잡는다 — 브라우저 창이 앞에 있으면 숨은 인앱 탭도
+   * 계속 "visible" 이다. 인앱 탭은 `useTabActive` 로만 알 수 있다.
+   *
+   * 탭으로 돌아오면 effect 가 다시 걸려 **곧바로 한 번 읽는다** — 묵은 잔고·미체결을 보여 주지
+   * 않는다. 체결 알림(`vntg:fill`)은 그대로라 숨어 있어도 놓치지 않는다.
+   */
+  const tabActive = useTabActive();
   useEffect(() => {
+    if (!tabActive) return;
     void load();
     const t = setInterval(() => void load(), 30_000);
     return () => clearInterval(t);
-  }, [load]);
+  }, [load, tabActive]);
 
   /* 이미 주문 화면인 채로 알림을 또 누르면 해시만 바뀐다 — 그때도 채워져야 한다 */
   useEffect(() => {
@@ -1239,8 +1254,10 @@ function OrderForm({
     setAmend({ ordNo: "", side: "buy", qty: 0, price: 0, name: "", code: "", venue: "KRX", remain: 0 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill.key]);
+  /* 숨은 탭에서는 안 돈다 — 위 `tabActive` 주석 참고 (2026-09-22) */
+  const tabActiveAmend = useTabActive();
   useEffect(() => {
-    if (!amend) return;
+    if (!amend || !tabActiveAmend) return;
     let alive = true;
     const pull = () =>
       void api
@@ -1257,7 +1274,7 @@ function OrderForm({
       window.removeEventListener("vntg:fill", f);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [amend !== null]);
+  }, [amend !== null, tabActiveAmend]);
   /* 링크가 준 주문번호가 목록에 있으면 골라 둔다 — 사람이 한 번 더 안 눌러도 되게 */
   const pickedAmend = useRef("");
   useEffect(() => {
@@ -1347,14 +1364,21 @@ function OrderForm({
    * 벤티지 "방금 매수하고 매도 갔는데 계좌에 없는 종목이라고 뜨네"). 한 번만 읽던 잔고가 묵어서
    * 방금 체결된 종목이 안 보였다. 키움 쪽도 체결 뒤 몇 초는 잔고에 안 잡힌다 — 그래서 폴링.
    */
+  /*
+   * 숨은 탭에서는 잔고를 안 읽는다 (2026-09-22). **탭으로 돌아오는 것도 「폼을 여는 것」과 같다** —
+   * 그래서 아래 한 번 읽기 effect 에도 `tabActive` 를 넣어, 돌아오자마자 최신 잔고를 집는다.
+   * 숨어 있는 동안 체결이 났어도 묵은 잔고를 보여 주지 않는다.
+   */
+  const tabActiveForm = useTabActive();
   useEffect(() => {
+    if (!tabActiveForm) return;
     pullAcct();
-  }, [pullAcct, side, code]);
+  }, [pullAcct, side, code, tabActiveForm]);
   useEffect(() => {
-    if (side !== "sell") return;
+    if (side !== "sell" || !tabActiveForm) return;
     const t = setInterval(pullAcct, 5_000);
     return () => clearInterval(t);
-  }, [side, pullAcct]);
+  }, [side, pullAcct, tabActiveForm]);
   /* 체결 알림이 오면 즉시 — 토스트 폴러가 vntg:fill 을 쏜다 */
   useEffect(() => {
     const f = () => pullAcct();
@@ -2756,9 +2780,11 @@ function WatchForm({
     clearPrefill();
   }, [prefill.key]);
 
-  /* 종목이 정해지면 값을 한 번 — 15초마다 갱신(감시 폼은 호가창이 없다) */
+  /* 종목이 정해지면 값을 한 번 — 15초마다 갱신(감시 폼은 호가창이 없다).
+     숨은 탭에서는 안 돈다 (2026-09-22) — 돌아오면 이 effect 가 다시 걸려 곧바로 한 번 읽는다 */
+  const tabActiveWatch = useTabActive();
   useEffect(() => {
-    if (!code) return;
+    if (!code || !tabActiveWatch) return;
     let alive = true;
     const pull = () =>
       void api
@@ -2771,7 +2797,7 @@ function WatchForm({
       alive = false;
       clearInterval(t);
     };
-  }, [code]);
+  }, [code, tabActiveWatch]);
 
   useEffect(() => {
     if (wBasis === "price") return;
@@ -3472,11 +3498,17 @@ function useRows(fetcher: () => Promise<{ rows: OrderRow[] }>, ms: number) {
       });
   }, [fetcher]);
 
+  /*
+   * 숨은 탭에서는 안 묻는다 (2026-09-22) — 이 훅 하나가 **미체결(5초)과 체결(8초) 둘**을 돌린다.
+   * 탭으로 돌아오면 곧바로 한 번 읽고, 그 사이 체결은 `vntg:fill` 이 따로 깨운다.
+   */
+  const tabActive = useTabActive();
   useEffect(() => {
+    if (!tabActive) return;
     run();
     const t = setInterval(run, ms);
     return () => clearInterval(t);
-  }, [run, ms]);
+  }, [run, ms, tabActive]);
 
   return { rows, error, loading, busy, readAt, tookMs, reload: run };
 }
@@ -3709,11 +3741,14 @@ function PositionsTab({ status, prefill, onDone, onSelectStock }: { status: Orde
     window.addEventListener("vntg:fill", f);
     return () => window.removeEventListener("vntg:fill", f);
   }, [load]);
+  /* 숨은 탭에서는 안 묻는다 (2026-09-22) — 체결 알림(`vntg:fill`)은 위에서 따로 받는다 */
+  const tabActiveList = useTabActive();
   useEffect(() => {
+    if (!tabActiveList) return;
     void load();
     const t = setInterval(() => void load(), 5_000);
     return () => clearInterval(t);
-  }, [load]);
+  }, [load, tabActiveList]);
   useEffect(() => {
     if (prefill.watch) setShowForm(true);
   }, [prefill.key, prefill.watch]);

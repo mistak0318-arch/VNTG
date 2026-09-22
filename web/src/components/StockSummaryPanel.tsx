@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, fmtNum, signClass, type StockSummaryData } from "../api";
+import { useTabActive } from "../tabActive";
 
 /**
  * **오늘 누가 샀나** — 장중 수급 요약.
@@ -269,8 +270,10 @@ export function StockSummaryPanel({ code }: { code: string }) {
   /** 1 = 당일(곡선 없음) */
   const [spanState, setSpan] = useState(20);
 
+  /* 숨은 탭에서는 안 묻는다 (2026-09-22) — 탭은 `display:none` 이라 열어 둔 수만큼 배가된다 */
+  const tabActive = useTabActive();
   useEffect(() => {
-    if (!code) return;
+    if (!code || !tabActive) return;
     let alive = true;
     setD(null);
     const load = () =>
@@ -285,7 +288,7 @@ export function StockSummaryPanel({ code }: { code: string }) {
       alive = false;
       clearInterval(t);
     };
-  }, [code]);
+  }, [code, tabActive]);
 
   if (!d) return null;
 

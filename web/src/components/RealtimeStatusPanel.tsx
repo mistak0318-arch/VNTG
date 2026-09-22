@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type RealtimeStatus, type RealtimeStoreInfo, fmtKstHms } from "../api";
+import { useTabActive } from "../tabActive";
 
 /**
  * 실시간 상태 (2026-08-31).
@@ -28,7 +29,10 @@ export function RealtimeStatusPanel() {
   const [store, setStore] = useState<RealtimeStoreInfo | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
+  /* 숨은 탭에서는 안 묻는다 (2026-09-22) — 탭은 `display:none` 이라 열어 둔 수만큼 배가된다 */
+  const tabActive = useTabActive();
   useEffect(() => {
+    if (!tabActive) return;
     const load = () => {
       api.realtimeStatus().then(setS).catch((e) => setErr(e instanceof Error ? e.message : "못 받음"));
       api.realtimeStoreInfo().then(setStore).catch(() => undefined);
@@ -36,7 +40,7 @@ export function RealtimeStatusPanel() {
     load();
     const t = setInterval(load, 10_000);
     return () => clearInterval(t);
-  }, []);
+  }, [tabActive]);
 
   if (err) return <div className="error-banner">{err}</div>;
   if (!s) return <div className="table-note">불러오는 중…</div>;

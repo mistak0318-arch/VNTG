@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type AfterCloseRun, type StepResult } from "../api";
+import { useTabActive } from "../tabActive";
 
 /**
  * **마감 뒤 정리** (2026-09-01) — 무엇이 언제 돌았고, 손으로 다시 돌린다.
@@ -160,10 +161,17 @@ export function AfterClosePanel() {
    * 붙여 놓고 정작 시작을 못 보면 소용이 없다. 쉬는 동안의 6초는 우리 서버의 메모리를
    * 읽는 값이라 조회가 안 나간다.
    */
+  /*
+   * 다만 **숨은 탭에서는 놓는다** (2026-09-22). 위 이유(시작을 봐야 한다)는 화면을 보고 있을 때의
+   * 얘기다 — 안 보이는 탭에서 6초마다 도는 것까지 정당화하지 않는다. 탭은 언마운트가 아니라
+   * `display:none` 이라(App.tsx:577) 열어 둔 수만큼 그대로 배가됐다. 돌아오면 곧바로 다시 붙는다.
+   */
+  const tabActive = useTabActive();
   useEffect(() => {
+    if (!tabActive) return;
     const t = setInterval(load, st?.running ? 2500 : 6000);
     return () => clearInterval(t);
-  }, [st?.running]);
+  }, [st?.running, tabActive]);
 
   const toggle = (k: string) =>
     setPick((p) => (p.includes(k) ? p.filter((x) => x !== k) : [...p, k]));

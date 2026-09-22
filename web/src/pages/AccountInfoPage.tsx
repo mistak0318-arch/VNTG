@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, normalizeStockCode, pick, pickList, type RawRecord, type StockSearchResult } from "../api";
+import { useTabActive } from "../tabActive";
 import { RawJson } from "../components/RawJson";
 import { CollapsibleCard } from "../components/CollapsibleCard";
 import { ConcentrationCard } from "../components/ConcentrationCard";
@@ -109,17 +110,28 @@ export function AccountInfoPage({ onSelectStock }: { onSelectStock: (code: strin
     }
   }
 
+  /*
+   * 숨은 탭에서는 안 묻는다 (2026-09-22). 탭은 언마운트가 아니라 `display:none` 이라
+   * (App.tsx:577) 열어 둔 채 다른 탭을 봐도 예수금·잔고·요약 셋이 20초마다 계속 나갔다.
+   * 돌아오면 곧바로 한 번 읽고, 체결 알림(`vntg:fill`)은 숨어 있어도 그대로 받는다.
+   */
+  const tabActive = useTabActive();
   useEffect(() => {
-    void load();
-    const timer = setInterval(() => void load(), 20_000);
-    /* 체결 알림이 오면 즉시 — 주문 화면과 같은 방아쇠 */
+    /*
+     * ⚠️ **막는 것은 폴링뿐이다.** 조기 return 으로 effect 를 통째로 끄면 아래 체결 알림
+     * 리스너까지 같이 떨어져 나가, 숨어 있는 동안 체결이 나도 돌아왔을 때 모른다.
+     */
+    if (tabActive) void load();
+    const timer = tabActive ? setInterval(() => void load(), 20_000) : null;
+    /* 체결 알림이 오면 즉시 — 주문 화면과 같은 방아쇠. 숨은 탭에서도 계속 듣는다 */
     const f = () => void load();
     window.addEventListener("vntg:fill", f);
     return () => {
-      clearInterval(timer);
+      if (timer !== null) clearInterval(timer);
       window.removeEventListener("vntg:fill", f);
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabActive]);
 
   const rows: Row[] = useMemo(
     () =>

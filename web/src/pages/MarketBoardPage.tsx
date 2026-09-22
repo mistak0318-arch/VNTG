@@ -35,6 +35,7 @@ import {
   type WatchItem,
 } from "../api";
 import { useSection } from "../useSection";
+import { useTabActive } from "../tabActive";
 import { useMarketLens } from "../components/MarketLensPanel";
 import { IndexDetailSheet } from "../components/overview/IndexDetailSheet";
 import { YahooChartSheet, type ChartTarget } from "../components/overview/YahooChartSheet";
@@ -194,7 +195,23 @@ function judge(args: {
 /* ------------------------------------------------------------------ */
 function usePoll<T>(fn: () => Promise<T>, ms: number): { data: T | null; error: string | null; at: number } {
   const [st, setSt] = useState<{ data: T | null; error: string | null; at: number }>({ data: null, error: null, at: 0 });
+  /*
+   * **숨은 탭에서는 안 묻는다** (2026-09-22 — 벤티지: "오늘 이렇게 계속 끊기는데 … 탭 많이
+   * 열려있음 이렇게 될수있는거면 활성화된 탭에서만 하면 되잖아"). 맞는 지적이다.
+   *
+   * 이 앱의 탭은 **언마운트하지 않고 `display:none` 으로 숨긴다**(App.tsx:577 — 스크롤·필터·입력을
+   * 살려 두려고). 그래서 숨은 화면의 `setInterval` 이 그대로 돈다 — 탭을 다섯 개 열어 두면
+   * 이 판의 조회 다섯 벌이 계속 나간다. 공용 훅(useAutoRefresh·useLive·useSection·useRealtime)은
+   * 진작 `useTabActive` 로 멈추는데, 날 setInterval 로 도는 자리들이 그 관문을 안 거쳤다.
+   *
+   * ⚠️ `document.visibilityState` 로는 못 잡는다 — 브라우저 창이 앞에 있으면 숨은 인앱 탭도
+   * 계속 "visible" 이다 (SuperDashboardPage.tsx:767 에 같은 함정이 적혀 있다).
+   *
+   * 탭으로 돌아오면 effect 가 다시 걸리면서 **곧바로 한 번 묻는다** — 묵은 값을 보여 주지 않는다.
+   */
+  const tabActive = useTabActive();
   useEffect(() => {
+    if (!tabActive) return;
     let alive = true;
     const pull = async () => {
       try {
@@ -211,7 +228,7 @@ function usePoll<T>(fn: () => Promise<T>, ms: number): { data: T | null; error: 
       clearInterval(t);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [tabActive]);
   return st;
 }
 
@@ -377,12 +394,15 @@ export function MarketBoardPage({ onSelectStock }: { onSelectStock: (code: strin
     return { items, leads };
   }, 180_000);
 
+  /* 숨은 탭에서는 안 묻는다 — 위 `usePoll` 주석 참고 (2026-09-22) */
+  const tabActive = useTabActive();
   useEffect(() => {
+    if (!tabActive) return;
     const pullSig = () => void api.marketSignal().then(setSig).catch(() => undefined);
     pullSig();
     const ts = setInterval(pullSig, 60_000);
     return () => clearInterval(ts);
-  }, []);
+  }, [tabActive]);
 
   const kospi = indices.data?.find((c) => c.code === "001");
   const kosdaq = indices.data?.find((c) => c.code === "101");

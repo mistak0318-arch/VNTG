@@ -18,6 +18,7 @@ function sameAvg(
 import { useCardOrder } from "../useCardOrder";
 import { OrderResetButton } from "../components/OrderResetButton";
 import { api, type ListTrackSummary, type ListTrackRow } from "../api";
+import { useTabActive } from "../tabActive";
 /* 접기 — 조건 검색과 **같은 훅**을 쓴다. 열쇠 접두사(`lt`)는 그대로라 접어 둔 상태가 이어진다 */
 import { useFold as useFoldBase } from "../useFold";
 
@@ -144,7 +145,14 @@ export function ListTrackPage({
     [load],
   );
 
+  /*
+   * 숨은 탭에서는 안 묻는다 (2026-09-22 — 벤티지: "탭 많이 열려있음 이렇게 될수있는거면 활성화된
+   * 탭에서만 하면 되잖아"). 이 판은 **작업이 없어도 3초마다** 물었다 — 탭을 열어 두면 가장 시끄러운
+   * 폴러였다. 탭은 언마운트가 아니라 `display:none` 이라(App.tsx:577) 숨어도 계속 돌던 것.
+   */
+  const tabActive = useTabActive();
   useEffect(() => {
+    if (!tabActive) return;
     load();
     const t = window.setInterval(() => {
       api
@@ -157,7 +165,7 @@ export function ListTrackPage({
         .catch(() => undefined);
     }, 3000);
     return () => window.clearInterval(t);
-  }, [load]);
+  }, [load, tabActive]);
 
   if (err) return <div className="error-banner">{err}</div>;
   /*

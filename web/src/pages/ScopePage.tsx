@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTabTitle } from "../tabTitle";
 import { api, type ScopeDetail, type ScopeFlow, type ScopeRow, fmtKst, kstYmd } from "../api";
+import { useTabActive } from "../tabActive";
 import { MiniLine } from "../components/MiniLine";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { useWatchedCodes } from "../useWatchedCodes";
@@ -584,12 +585,15 @@ export function ScopePage({ onSelectStock }: { onSelectStock: (code: string, nam
     }
   }, []);
 
+  /* 숨은 탭에서는 안 묻는다 (2026-09-22) — 탭은 `display:none` 이라 열어 둔 수만큼 배가된다 */
+  const tabActive = useTabActive();
   useEffect(() => {
+    if (!tabActive) return;
     void load();
     /* 현재가와 오늘 수급만 바뀐다 — 1분이면 된다(오늘 수급은 서버가 1분 캐시) */
     const t = setInterval(() => void load(), 60_000);
     return () => clearInterval(t);
-  }, [load]);
+  }, [load, tabActive]);
 
   /* 어느 화면에서든 담기 시트에서 「현미경」에 체크하면 여기도 바로 */
   useEffect(() => {

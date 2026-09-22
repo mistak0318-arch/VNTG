@@ -3,6 +3,7 @@ import { FlowSeries, useMinutePrices, type FlowSample, type FlowSeriesData } fro
 import { api, fmtNum, signClass, type BrokerFlow, type BrokerDayRow } from "../api";
 import { useLive } from "../useLive";
 import { useLockPaused } from "../lockPause";
+import { useTabActive } from "../tabActive";
 import { useProgramSeries } from "./ProgramFlowPanel";
 
 /**
@@ -51,9 +52,11 @@ function useBrokerSeries(code: string, broker: string | null): FlowSeriesData {
   const [s, setS] = useState<FlowSeriesData>({ pts: [], day: "", stale: false });
   /* 잠겨 있으면(Ctrl+Q) 15초 폴링도 놓는다 (2026-09-09 재검토) — 잠금이 실시간에만 걸려 있었다 */
   const lockPaused = useLockPaused();
+  /* 숨은 탭에서도 놓는다 (2026-09-22) — 잠금과 같은 이유다. 탭은 `display:none` 이라 계속 살아 있다 */
+  const tabActive = useTabActive();
 
   useEffect(() => {
-    if (!code || !broker || lockPaused) {
+    if (!code || !broker || lockPaused || !tabActive) {
       setS({ pts: [], day: "", stale: false });
       return;
     }
@@ -113,7 +116,7 @@ function useBrokerSeries(code: string, broker: string | null): FlowSeriesData {
       alive = false;
       clearInterval(t);
     };
-  }, [code, broker, lockPaused]);
+  }, [code, broker, lockPaused, tabActive]);
 
   return s;
 }

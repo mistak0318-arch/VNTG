@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { MoneyFlowPanel } from "../components/overview/MoneyFlowPanel";
+import { useTabActive } from "../tabActive";
 import { RotationStrip, ThermoPanel, useMarketLens } from "../components/MarketLensPanel";
 import {
   api,
@@ -262,14 +263,21 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
     reloadLens();
   }
 
+  /*
+   * 숨은 탭에서는 시계도 장상태도 안 돌린다 (2026-09-22 — 벤티지: "탭 많이 열려있음 …
+   * 활성화된 탭에서만 하면 되잖아"). 탭은 언마운트가 아니라 `display:none` 이라(App.tsx:577)
+   * 안 보이는 시계를 위해 30초마다 조회가 나가고 있었다.
+   */
+  const tabActive = useTabActive();
   useEffect(() => {
+    if (!tabActive) return;
     api.marketStatus().then(setStatus).catch(() => {});
     const timer = setInterval(() => {
       setNow(new Date());
       api.marketStatus().then(setStatus).catch(() => {});
     }, 30_000);
     return () => clearInterval(timer);
-  }, []);
+  }, [tabActive]);
 
   // 데스크톱(700px~)에서는 서브탭 없이 전 섹션을 보여준다
   /*

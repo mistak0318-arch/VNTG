@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { FlowSeries, useMinutePrices, type FlowSeriesData } from "./FlowSeries";
 import { useLive } from "../useLive";
 import { useLockPaused } from "../lockPause";
+import { useTabActive } from "../tabActive";
 
 /**
  * 종목별 프로그램 매매 — **오늘 계속 샀나, 샀다 팔았나.**
@@ -70,9 +71,11 @@ export function useProgramSeries(code: string, enabled = true): FlowSeriesData {
   const [s, setS] = useState<FlowSeriesData>({ pts: [], day: "", stale: false });
   /* 잠겨 있으면(Ctrl+Q) 폴링을 놓는다 (2026-09-09 재검토) — 거래원·프로그램 둘 다 이 훅이라 여기 한 번 */
   const lockPaused = useLockPaused();
+  /* 숨은 탭에서도 놓는다 (2026-09-22) — 잠금과 같은 이유다 */
+  const tabActive = useTabActive();
 
   useEffect(() => {
-    if (!code || !enabled || lockPaused) {
+    if (!code || !enabled || lockPaused || !tabActive) {
       setS({ pts: [], day: "", stale: false });
       return;
     }
@@ -128,7 +131,7 @@ export function useProgramSeries(code: string, enabled = true): FlowSeriesData {
       alive = false;
       clearInterval(t);
     };
-  }, [code, enabled, lockPaused]);
+  }, [code, enabled, lockPaused, tabActive]);
 
   return s;
 }

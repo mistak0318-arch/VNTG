@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTabTitle } from "../tabTitle";
+import { useTabActive } from "../tabActive";
 import {
   api,
   type CisAccountView,
@@ -195,7 +196,13 @@ function DeskStrip({
       .catch(() => undefined);
   }, []);
 
+  /*
+   * 숨은 탭에서는 안 묻는다 (2026-09-22 — 벤티지: "탭 많이 열려있음 … 활성화된 탭에서만 하면 되잖아").
+   * 탭은 언마운트가 아니라 `display:none` 이라(App.tsx:577) 열어 둔 수만큼 조회가 배가된다.
+   */
+  const tabActive = useTabActive();
   useEffect(() => {
+    if (!tabActive) return;
     let alive = true;
     const load = () => {
       api
@@ -211,7 +218,7 @@ function DeskStrip({
       alive = false;
       clearInterval(t);
     };
-  }, []);
+  }, [tabActive]);
 
   if (!desk) return <div className="cis-desk cis-desk-wait">계좌를 읽는 중…</div>;
 
@@ -1081,13 +1088,16 @@ function FillsTab({
       .finally(() => setLoaded(true));
   }, [account]);
 
+  /* 숨은 탭에서는 안 묻는다 (2026-09-22) — 돌아오면 곧바로 한 번 읽는다 */
+  const tabActiveFills = useTabActive();
   useEffect(() => {
+    if (!tabActiveFills) return;
     setLoaded(false);
     setFills([]);
     void load();
     const t = setInterval(() => void load(), 30_000);
     return () => clearInterval(t);
-  }, [load]);
+  }, [load, tabActiveFills]);
 
   async function stampOld() {
     setStamping(true);

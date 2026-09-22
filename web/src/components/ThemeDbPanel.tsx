@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type ThemeDbSummary } from "../api";
+import { useTabActive } from "../tabActive";
 
 /**
  * 테마 DB 받기 — 설정 > 분석 기준.
@@ -41,7 +42,14 @@ export function ThemeDbPanel() {
     }
   }
 
+  /*
+   * 숨은 탭에서는 안 묻는다 (2026-09-22). 주석엔 「평소엔 조용하다」고 적혀 있지만 **진행률 조회
+   * 자체는 3초마다 상시로 나갔다** — 받는 중이 아닐 때 화면을 안 바꿀 뿐이다. 탭은 언마운트가
+   * 아니라 `display:none` 이라(App.tsx:577) 설정 탭을 열어 두면 그 3초가 계속 돌았다.
+   */
+  const tabActive = useTabActive();
   useEffect(() => {
+    if (!tabActive) return;
     load();
     /* 받는 중일 때만 진행률을 물어본다 — 평소엔 조용하다 */
     const t = setInterval(() => {
@@ -59,7 +67,7 @@ export function ThemeDbPanel() {
     }, 3000);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [tabActive]);
 
   const when = (iso: string) =>
     iso ? new Date(iso).toLocaleString("ko-KR", { hour12: false }) : "받은 적 없음";

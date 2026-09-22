@@ -1,5 +1,6 @@
 ﻿import { useEffect, useRef, useState } from "react";
 import { api, fmtAbsNum, fmtNum, type ExchangeQuote, type MarkWhy, type RawRecord } from "../api";
+import { useTabActive } from "../tabActive";
 import { PeriodReturns, type LastSession } from "./PeriodReturns";
 import { MiniCandle } from "./MiniCandle";
 import { afterMarketEra, krPhase, type KrPhase } from "../marketSession";
@@ -154,8 +155,17 @@ export function PriceHeader({
     setStrength(null);
   }, [code]);
 
+  /*
+   * **숨은 탭에서는 안 묻는다** (2026-09-22 — 벤티지: "탭 많이 열려있음 이렇게 될수있는거면
+   * 활성화된 탭에서만 하면 되잖아"). 이 요약줄은 **종목 상세를 연 탭마다 하나씩** 있고 10초짜리
+   * 폴러를 둘 돌린다 — 종목 탭을 다섯 개 열어 두면 열 벌이 계속 나갔다. 탭은 언마운트가 아니라
+   * `display:none` 이라(App.tsx:577) 숨어도 그대로 살아 있다.
+   *
+   * 돌아오면 effect 가 다시 걸려 곧바로 한 번 읽는다 — 묵은 값을 보여 주지 않는다.
+   */
+  const tabActive = useTabActive();
   useEffect(() => {
-    if (!code) return;
+    if (!code || !tabActive) return;
     let cancelled = false;
     const load = () =>
       fetch(`/api/market/ticks/${encodeURIComponent(code)}`)
@@ -171,7 +181,7 @@ export function PriceHeader({
       cancelled = true;
       clearInterval(t);
     };
-  }, [code]);
+  }, [code, tabActive]);
 
   /** KRX 몫 거래대금 — 조회에서 직접 받는다(일봉은 개장 전에 어제 값을 준다) */
   const [krxValue, setKrxValue] = useState<number | null>(null);
@@ -187,7 +197,8 @@ export function PriceHeader({
   }, [code]);
 
   useEffect(() => {
-    if (!code) return;
+    /* 숨은 탭에서는 안 묻는다 — 위 체결강도 폴러와 같은 이유 (2026-09-22) */
+    if (!code || !tabActive) return;
     let cancelled = false;
     /*
      * ⚠️ **한 번만 받고 끝냈었다.** 그래서 08~09시 NXT 프리마켓에 값이 움직이는데도
@@ -217,7 +228,7 @@ export function PriceHeader({
       cancelled = true;
       clearInterval(t);
     };
-  }, [code]);
+  }, [code, tabActive]);
 
   if (!info) return null;
 
