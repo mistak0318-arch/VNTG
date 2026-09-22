@@ -146,19 +146,47 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "")
   .map((s) => s.trim())
   .filter(Boolean);
 
+/**
+ * **같은 출처인가** — `Origin` 의 host:port 가 이 요청의 `Host` 와 같으면 우리 자신이 보낸 페이지다.
+ *
+ * ⚠️ 2026-09-23 실측으로 고친 자리. 여기 「같은 출처면 브라우저가 Origin 을 안 보낸다」고 적어
+ * 두었는데 **틀렸다.** Vite 는 자산을 `<script type="module" crossorigin>` 으로 내보내고, 그러면
+ * 브라우저는 **같은 출처여도 CORS 모드로 받아 Origin 을 싣는다.**
+ *
+ * 그 탓에 tailnet 우회로(`http://100.88.182.35:4000`)로 들어가면 `ALLOWED_ORIGINS` 에 없는
+ * 출처가 되어 **자기 자신의 JS·CSS 가 500 으로 거절**됐다 — 화면이 하얗게만 떴다(벤티지:
+ * "되긴하는거 같은데 하얀창만뜨네"). 서버가 내준 페이지가 그 서버의 자산을 못 받는 꼴이다.
+ *
+ * 목록에 주소를 하나 더 적는 식으로 때우지 않는다. 그러면 `BIND_EXTRA` 와 `ALLOWED_ORIGINS` 를
+ * 늘 손으로 맞춰야 하고, 포트를 바꾸면 또 어긋난다. **같은 출처는 정의상 남이 아니므로** 목록과
+ * 무관하게 통과시키는 것이 맞다 — 남의 사이트를 막는다는 목적은 그대로 지켜진다.
+ */
+function isSameOrigin(headers: Record<string, unknown>): boolean {
+  const origin = typeof headers.origin === "string" ? headers.origin : "";
+  const host = typeof headers.host === "string" ? headers.host : "";
+  if (!origin) return true; // Origin 이 없으면 브라우저가 이미 같은 출처로 본 것
+  if (!host) return false;
+  try {
+    return new URL(origin).host === host;
+  } catch {
+    return false;
+  }
+}
+
 app.use(
-  cors(
-    allowedOrigins.length === 0
-      ? undefined
-      : {
-          origin(origin, cb) {
-            // 같은 출처(브라우저가 Origin 을 안 보냄)와 목록에 있는 것만
-            if (!origin || allowedOrigins.includes(origin)) cb(null, true);
-            else cb(new Error("허용되지 않은 출처입니다"));
-          },
-          credentials: true,
-        },
-  ),
+  cors((req, cb) => {
+    if (allowedOrigins.length === 0) {
+      cb(null, { origin: true, credentials: true });
+      return;
+    }
+    const headers = req.headers as unknown as Record<string, unknown>;
+    const origin = typeof headers.origin === "string" ? headers.origin : "";
+    if (!origin || allowedOrigins.includes(origin) || isSameOrigin(headers)) {
+      cb(null, { origin: true, credentials: true });
+    } else {
+      cb(new Error("허용되지 않은 출처입니다"));
+    }
+  }),
 );
 app.use(express.json({ limit: "12mb" })); // 캘린더 이미지가 base64로 온다
 
