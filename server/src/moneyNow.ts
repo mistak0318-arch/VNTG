@@ -862,7 +862,8 @@ async function flipAlerts(rows: AccountRow[]): Promise<void> {
     const n = st.count[r.code] ?? 0;
     if (n >= 2) continue;
     const label = r.verdict === "in" ? "돈 들어옴" : "돈 빠짐";
-    const title = `💧 ${r.name} ${label} (${r.account})`;
+    /* 브리핑 머리와 같은 🌊 — 같은 기능의 알림이 서로 다른 기호를 달면 다른 것으로 읽힌다 (2026-09-22) */
+    const title = `🌊 ${r.name} ${label} (${r.account})`;
     const body = `${hhmm} · ${r.rate === null ? "" : `${r.rate > 0 ? "+" : ""}${r.rate.toFixed(2)}% · `}${r.why || (prev === "quiet" ? "조용하다가 바뀜" : "반대로 뒤집힘")}`;
     /*
      * (2026-09-18 A21) 카운트는 알림종에 들어간 뒤 올렸는데, 알림함 **저장이 실패하면 카운트가 안 올라
@@ -1043,7 +1044,14 @@ export function moneyNowText(m: MoneyNow): string {
   const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const kindLabel = m.verdict.kind === "in" ? "🟢 들어오는 장" : m.verdict.kind === "out" ? "🔴 빠지는 장" : m.verdict.kind === "rotate" ? "🟡 회전장" : "⚪ 판정 보류";
   const lines: string[] = [];
-  lines.push(`<b>💧 돈의 흐름 ${m.slot.label}</b> — ${kindLabel}`);
+  /*
+   * 머리 기호는 **🌊** 다 (2026-09-22 — 벤티지: "이거 눈물 표시 같은디.. 파도나 돈 모양으로 좀
+   * 바꿔줄래?"). 💧 를 쓰고 있었는데 뒤에 🔴/🟡 판정이 붙으니 「빠지는 장」과 겹쳐 울상으로 읽혔다.
+   *
+   * 🌊 로 고른 것은 취향이 아니라 **앱이 이미 그걸 쓰고 있어서**다 — 사이드바의 「돈의 흐름」 메뉴가
+   * `App.tsx:177` 에서 🌊 다. 같은 기능이 텔레그램에서만 다른 얼굴이면 두 개인 줄 안다.
+   */
+  lines.push(`<b>🌊 돈의 흐름 ${m.slot.label}</b> — ${kindLabel}`);
   lines.push(esc(m.verdict.parts.filter((p) => p.sign !== null).map((p) => `${p.label} ${p.sign === 1 ? "▲" : p.sign === -1 ? "▼" : "–"}`).join(" · ")));
   if (m.trend.length >= 2) lines.push(`추세: ${m.trend.slice(-4).map((t) => `${t.hhmm} ${t.kind === "in" ? "들어옴" : t.kind === "out" ? "빠짐" : "회전"}`).join(" → ")}`);
   if (m.where.fresh.length > 0) lines.push(`부상: ${esc(m.where.fresh.map((t) => `${t.name} ${t.changeRate > 0 ? "+" : ""}${t.changeRate.toFixed(1)}%`).join(" · "))}`);
