@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { TopScrollTable } from "../TopScrollTable";
 import { useSheetBack } from "../../useSheetBack";
 import { api, fmtNum } from "../../api";
+import { useLoadWatch } from "../../loadWatch";
 import { CandleChart } from "../CandleChart";
 import { IntradayFlowChart } from "./IntradayFlowChart";
 import { OhlcStrip } from "./OhlcStrip";
@@ -12,7 +13,10 @@ function todayIso(): string {
 }
 
 /**
- * 코스피200 선물(주간) 상세 (2026-08-26) — **코스피/코스닥 시트와 같은 골격.**
+ * 코스피200 선물(주간거래) 상세 (2026-08-26) — **코스피/코스닥 시트와 같은 골격.**
+ *
+ * ⚠️ 「주간」은 週가 아니라 **낮 장**이다(야간선물과 가르는 말). 2026-09-22 에 「주간거래」로
+ * 고쳤다 — 바로 아래 일/주/월 단추 때문에 주(週) 봉으로 읽혔다.
  *
  * 전에는 선물만 야후식 SVG 시트(기간 3개월/1년/3년)라 코스피를 보다 선물을 열면
  * 화면 문법이 바뀌었다(사용자 지적). 지수 시트와 똑같이 간다:
@@ -88,16 +92,34 @@ export function FuturesDetailSheet({
     };
   }, [target.code, range]);
 
+  /*
+   * **실패 사유를 버리지 않는다** (2026-09-22 — 벤티지: "이거 바로 안나오면 … 왜 안나오는지
+   * 로딩 걸린이유 좀 알려줄수있어?").
+   *
+   * 예전엔 `catch(() => setFlow([]))` 였다. 그러면 화면에는 「선물 수급을 받지 못했습니다」만
+   * 남고 **왜인지가 통째로 사라진다** — 서버가 죽은 것인지, 네이버가 막은 것인지, 그냥 느린
+   * 것인지 구분이 안 됐다. 사유를 들고 있다가 그 자리에 적고 토스트로도 알린다.
+   */
+  const [flowErr, setFlowErr] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
+    setFlowErr(null);
     api
       .futuresFlow(30)
       .then((r) => alive && setFlow(r.days))
-      .catch(() => alive && setFlow([]));
+      .catch((e: Error) => {
+        if (!alive) return;
+        setFlowErr(e.message || "알 수 없는 까닭");
+        setFlow([]);
+      });
     return () => {
       alive = false;
     };
   }, []);
+
+  /* 느리면 그 자리에 초를 적고, 문턱을 넘기면 토스트로 한 번 알린다 */
+  const chartNote = useLoadWatch("선물 차트", candles.length === 0 && !chartErr, chartErr);
+  const flowNote = useLoadWatch("선물 수급", flow === null, flowErr);
 
   const last = flow?.[flow.length - 1];
 
@@ -148,7 +170,16 @@ export function FuturesDetailSheet({
       <div className="sheet idx-sheet" onClick={(e) => e.stopPropagation()}>
         <div className="sheet-header">
           <h2>
-            코스피200 선물 (주간)
+            {/*
+              **「주간」이 헷갈린다** (2026-09-22 — 벤티지: "코스피 200선물 저 타이틀이 맞아?").
+              뜻 자체는 맞았다 — 야간선물(`globalMarket.ts` 의 nightFutures)과 가르려고 붙인
+              **주간거래(낮 장)** 다. 그런데 바로 아래 줄에 일/주/월 단추가 있어서 「주(週) 봉」으로
+              읽힌다. 「거래」를 붙이면 그 오독이 사라진다 — 업계에서 쓰는 말 그대로다.
+            */}
+            코스피200 선물{" "}
+            <span className="sheet-sub" title="주간거래(낮 장) 기준입니다. 미국장 시간대에 도는 야간선물과는 다른 값입니다">
+              주간거래
+            </span>
             <span className={`sheet-sub ${sign(target.changeRate)}`}>
               {fmtNum(target.price)} ({target.changeRate > 0 ? "+" : ""}
               {target.changeRate.toFixed(2)}%)
@@ -221,8 +252,10 @@ export function FuturesDetailSheet({
           )}
         </div>
 
-        {chartErr && <div className="error-banner">{chartErr}</div>}
-        {candles.length === 0 && !chartErr && <div className="page-note">불러오는 중…</div>}
+        {chartErr && <div className="error-banner">차트를 못 받았습니다 — {chartErr}</div>}
+        {candles.length === 0 && !chartErr && (
+          <div className="page-note">불러오는 중…{chartNote ? ` ${chartNote}` : ""}</div>
+        )}
 
         {/* 지수 시트와 같은 캔들 모듈 — 이평·자물쇠·키보드(+/−·←/→)가 그대로 따라온다 */}
         {candles.length > 1 && (
@@ -324,9 +357,11 @@ export function FuturesDetailSheet({
             억원 · 9/18 부터
           </span>
         </h3>
-        {flow === null && <div className="empty">수급 불러오는 중…</div>}
+        {flow === null && <div className="empty">수급 불러오는 중…{flowNote ? ` ${flowNote}` : ""}</div>}
         {flow !== null && flow.length === 0 && (
-          <div className="empty">선물 수급을 받지 못했습니다.</div>
+          <div className="empty">
+            선물 수급을 받지 못했습니다{flowErr ? ` — ${flowErr}` : " — 서버가 빈 목록을 줬습니다(네이버 쪽이 막혔을 수 있습니다)"}.
+          </div>
         )}
         {flow !== null && flow.length > 0 && (
           <TopScrollTable>
@@ -354,7 +389,8 @@ export function FuturesDetailSheet({
         )}
 
         <div className="table-note">
-          차트는 한투 기간별시세(주간 선물), 수급은 네이버 투자자별 매매동향(억원, ±10분
+          {/* 「주간 선물」 → 「주간거래 선물」 + 월물 이름 (2026-09-22) — 위 제목과 같은 이유 */}
+          차트는 한투 기간별시세(주간거래 선물 · {target.name}), 수급은 네이버 투자자별 매매동향(억원, ±10분
           지연 — 9/18 부터 날마다 쌓임)입니다. <b>베이시스</b> = 선물 − 현물: 양수(콘탱고)면 프로그램 매수,
           음수(백워데이션)면 프로그램 매도가 붙기 쉽습니다. <b>미결제약정</b>은 살아 있는
           계약 수 — 오르며 늘면 새 돈이 들어오는 추세, 오르며 줄면 숏 청산 반등입니다.

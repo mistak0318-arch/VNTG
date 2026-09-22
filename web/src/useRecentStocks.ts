@@ -39,6 +39,32 @@ export function latestStock(): RecentStock | null {
   return read()[0] ?? null;
 }
 
+/**
+ * **훅 없이 쌓는다** (2026-09-22 — 벤티지: "시세조회 다른 탭에서 삼성전기 조회하고 나서 최근조회
+ * 탭 가서 보는데 삼성전기가 안뜨네?").
+ *
+ * 그때까지 `push` 는 **검색창에서 고를 때만** 불렸다. 시세분석 표에서 종목을 눌러 상세를 여는
+ * 길에는 없어서, 표로 보던 종목은 최근 목록에 영영 안 쌓였다 — 「최근조회」 탭을 붙이고 나서야
+ * 드러난 구멍이다(그전에는 검색 드롭다운에서만 보던 목록이라 눈에 안 띄었다).
+ *
+ * 고치는 자리는 **상세를 여는 단 하나의 문**(`App.tsx` 의 `onSelectStock`)이다. 거기 하나면
+ * 시세분석·전광판·주도주·뉴스·관심종목이 전부 따라온다.
+ *
+ * ⚠️ 훅(`useRecentStocks`)이 아니라 함수다. App 최상위에 훅을 달면 종목을 누를 때마다 목록
+ * 상태가 바뀌어 **앱 전체가 다시 그려진다.** 여기서는 쌓기만 하고, 보는 쪽이 storage 사건으로 받는다.
+ */
+export function pushRecent(code: string, name: string): void {
+  /* 이름이 코드뿐이면 안 남긴다 — 목록에 「005930 005930」 같은 줄이 생긴다 (StockAnalysisPage 와 같은 규칙) */
+  if (!code || !name || name === code) return;
+  const next = [{ code, name, at: Date.now() }, ...read().filter((r) => r.code !== code)].slice(0, MAX);
+  try {
+    setPref(KEY, JSON.stringify(next));
+    window.dispatchEvent(new StorageEvent("storage", { key: KEY }));
+  } catch {
+    /* 저장 못 해도 화면은 그대로 뜬다 */
+  }
+}
+
 function read(): RecentStock[] {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? "[]") as RecentStock[];

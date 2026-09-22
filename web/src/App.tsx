@@ -81,6 +81,7 @@ import { CornerToggle } from "./components/CornerToggle";
 import { ScrollTopButton } from "./components/ScrollTopButton";
 import { AuthExpiredBar } from "./components/AuthExpiredBar";
 import { useStockFocus } from "./useStockFocus";
+import { pushRecent } from "./useRecentStocks";
 import { NotifyToasts } from "./components/NotifyToasts";
 import { armAudio } from "./notifySound";
 import { TelegramPage } from "./pages/TelegramPage";
@@ -547,6 +548,15 @@ export default function App() {
   function onSelectStock(code: string, name: string) {
     navigate({ stock: { code, name } });
     focus.publish(code, name);
+    /*
+     * **최근 본 종목에 쌓는다** (2026-09-22 — 벤티지: "시세조회 다른 탭에서 삼성전기 조회하고
+     * 나서 최근조회 탭 가서 보는데 삼성전기가 안뜨네?").
+     *
+     * 여태 `recent.push` 는 **검색창에서 고를 때만** 불렸다. 표에서 눌러 여는 길에는 없어서
+     * 시세분석으로 훑어본 종목은 목록에 안 남았다. 이 함수가 상세를 여는 **단 하나의 문**이라
+     * 여기 한 줄이면 시세분석·전광판·주도주·뉴스·관심종목이 전부 따라온다.
+     */
+    pushRecent(code, name);
   }
 
   /** 종목 상세(모달) → 개별종목분석 페이지로. 종목은 유지한 채 탭만 옮긴다 */

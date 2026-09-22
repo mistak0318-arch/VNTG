@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type React from "react";
 import { api, type Notice } from "../api";
 import { playSound, readNotifyPrefs, onNotifyPrefs, vibrate, type NotifyPrefs } from "../notifySound";
+import { LOCAL_TOAST_EVENT, type LocalToast } from "../loadWatch";
 
 /**
  * **체결됐다는 걸 화면이 말해 준다** (2026-09-08).
@@ -113,10 +114,35 @@ export function NotifyToasts() {
       if (document.visibilityState === "visible") void pull();
     };
     document.addEventListener("visibilitychange", onShow);
+    /*
+     * **화면이 직접 띄우는 토스트** (2026-09-22 — 벤티지: "이거 바로 안나오면 토스트 알림 같은걸로
+     * 왜 안나오는지 로딩 걸린이유 좀 알려줄수있어?").
+     *
+     * 여태 토스트는 서버 알림(`/api/notify`)만 탔다. 그래서 「불러오는 중」이 멎어도 화면은
+     * 말할 방법이 없었다 — 알림함에 쌓을 일도 아니고(나중에 다시 볼 값이 아니다) 서버가 아는
+     * 일도 아니다(느린 쪽이 서버일 수도 있다). 이 사건으로 그 자리를 연다.
+     *
+     * ⚠️ 알림함에 안 쌓는다. 그래서 `id` 를 우리가 만들고, 읽음 처리(`noticesRead`)도 안 간다 —
+     * `local:` 접두가 그 표식이다(아래 `onOpen` 참고).
+     */
+    const onLocal = (e: Event) => {
+      const d = (e as CustomEvent<LocalToast>).detail;
+      if (!d?.title) return;
+      if (!prefs.current.toast) return;
+      const item: ToastItem = {
+        id: `local:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`,
+        title: d.title,
+        body: d.body,
+        level: d.level === "warn" ? "warn" : "info",
+      };
+      setItems((cur) => [item, ...cur].slice(0, 5));
+    };
+    window.addEventListener(LOCAL_TOAST_EVENT, onLocal);
     return () => {
       alive = false;
       window.clearInterval(t);
       document.removeEventListener("visibilitychange", onShow);
+      window.removeEventListener(LOCAL_TOAST_EVENT, onLocal);
     };
   }, []);
 
@@ -146,7 +172,8 @@ export function NotifyToasts() {
           t={t}
           onOpen={() => {
             if (t.link) window.location.hash = t.link;
-            void api.noticesRead([t.id]).catch(() => undefined);
+            /* 화면이 띄운 것(`local:`)은 알림함에 없다 — 읽음 처리를 보내면 서버가 모르는 id 다 */
+            if (!t.id.startsWith("local:")) void api.noticesRead([t.id]).catch(() => undefined);
             close(t.id);
           }}
           onClose={() => close(t.id)}

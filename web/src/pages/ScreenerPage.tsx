@@ -520,21 +520,20 @@ export function ScreenerPage({
    * 목록은 이 브라우저에만 있다(`useRecentStocks` — localStorage). 문자열로 굳혀서 deps 에 넣는다:
    * 배열을 그대로 넣으면 렌더마다 새 배열이라 **10초 자동 새로고침이 매 렌더마다 다시 걸린다.**
    */
-  const recentCodes = recent.recent.map((r) => r.code).join(",");
+  /*
+   * ⚠️ **「최근조회」를 볼 때만 deps 에 넣는다** (2026-09-22).
+   *
+   * 그냥 넣었더니, 종목을 하나 누를 때마다 최근 목록이 바뀌고 → 이 문자열이 바뀌고 →
+   * **보고 있던 거래대금 상위까지 통째로 다시 조회**했다. 다른 탭에서는 빈 문자열로 굳혀
+   * 목록이 어떻게 바뀌든 흔들리지 않게 한다.
+   */
+  const recentCodes = rankKey === "recent" ? recent.recent.map((r) => r.code).join(",") : "";
   const fetchRank = useCallback(
     (quiet = false) => {
       if (!quiet) setLoading(true);
       setError(null);
       api
-        .rank(
-          rankKey,
-          market,
-          exchange,
-          fetchLimit,
-          chosen,
-          candleOn,
-          rankKey === "recent" ? recentCodes.split(",").filter(Boolean) : undefined,
-        )
+        .rank(rankKey, market, exchange, fetchLimit, chosen, candleOn, recentCodes ? recentCodes.split(",") : undefined)
         .then((r) => setData(r))
         .catch((e: Error) => setError(e.message))
         .finally(() => setLoading(false));
