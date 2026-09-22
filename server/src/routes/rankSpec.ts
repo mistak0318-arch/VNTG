@@ -63,18 +63,40 @@ export interface DayCandle {
 const candleOf = new Map<string, { at: number; v: DayCandle }>();
 const CANDLE_TTL_MS = 20_000;
 
-async function candles(client: KiwoomClient, codes: string[]): Promise<Map<string, DayCandle>> {
+/**
+ * **거래소 단추가 봉도 바꾼다** (2026-09-22 — 벤티지: "저거 옵션 선택하면 봉 모양 바뀌게도
+ * 구현가능한가? 통합 krx nxt 따로 말야").
+ *
+ * 처음엔 통합(`_AL`)으로 박아 뒀는데, 그러면 KRX 를 콕 집어 보는 화면에서 **봉만 통합**이라
+ * 옆 칸의 KRX 등락률과 다른 얘기를 한다 — 상세 화면에서 이미 한 번 겪은 어긋남이다.
+ * `ScreenerPage.tsx:751` 에 적어 둔 원칙(「그 거래소의 값을 보겠다는 뜻이다」)을 봉도 따른다.
+ *
+ * `ka10095` 는 코드 접미로 거래소를 고른다(`alCode.ts` 참고) — **조회 수는 그대로다.**
+ */
+function venueSuffix(exchange: string): string {
+  return exchange === "1" ? "" : exchange === "2" ? "_NX" : "_AL";
+}
+
+async function candles(
+  client: KiwoomClient,
+  codes: string[],
+  /** 1 KRX / 2 NXT / 3 통합 — 화면의 거래소 단추 그대로 */
+  exchange = "3",
+): Promise<Map<string, DayCandle>> {
+  const sfx = venueSuffix(exchange);
+  /* 캐시 열쇠에 거래소를 넣는다 — 안 넣으면 단추를 눌러도 앞서 받은 통합 봉이 그대로 나온다 */
+  const ck = (code: string): string => `${code}${sfx}`;
   const want = [...new Set(codes.filter((c) => /^[0-9A-Z]{6}$/i.test(c)))];
   const now = Date.now();
   const stale = want.filter((c) => {
-    const hit = candleOf.get(c);
+    const hit = candleOf.get(ck(c));
     return !hit || now - hit.at >= CANDLE_TTL_MS;
   });
   const abs = (v: unknown): number => Math.abs(Number(String(v ?? "").replace(/[+,\s]/g, "")) || 0);
   for (let i = 0; i < stale.length; i += 50) {
     const part = stale.slice(i, i + 50);
     const { data } = await client.request<Record<string, unknown>>("/api/dostk/stkinfo", "ka10095", {
-      stk_cd: part.map((c) => `${c}_AL`).join("|"),
+      stk_cd: part.map((c) => `${c}${sfx}`).join("|"),
     });
     for (const r of (data.atn_stk_infr ?? []) as Record<string, unknown>[]) {
       const code = String(r.stk_cd ?? "").replace(/_(AL|NX)$/i, "");
@@ -83,18 +105,20 @@ async function candles(client: KiwoomClient, codes: string[]): Promise<Map<strin
       const l = abs(r.low_pric);
       const c = abs(r.cur_prc);
       const pc = abs(r.base_pric);
-      /* 하나라도 0 이면 봉을 못 그린다 — 안 그리는 편이 거짓 그림보다 낫다 */
-      if (code && o > 0 && h > 0 && l > 0 && c > 0) candleOf.set(code, { at: Date.now(), v: { o, h, l, c, pc: pc > 0 ? pc : o } });
+      /* 하나라도 0 이면 봉을 못 그린다 — 안 그리는 편이 거짓 그림보다 낫다.
+         NXT 단독은 그날 거기서 안 돈 종목이 0 으로 오는데, 그 줄은 봉이 안 나오는 게 맞다 */
+      if (code && o > 0 && h > 0 && l > 0 && c > 0) candleOf.set(ck(code), { at: Date.now(), v: { o, h, l, c, pc: pc > 0 ? pc : o } });
     }
   }
   const out = new Map<string, DayCandle>();
   for (const c of want) {
-    const hit = candleOf.get(c);
+    const hit = candleOf.get(ck(c));
     if (hit) out.set(c, hit.v);
   }
-  /* 메모리라 무한정 두지 않는다 — 오래된 것부터 버린다 */
-  if (candleOf.size > 1500) {
-    const old = [...candleOf.entries()].sort((a, b) => a[1].at - b[1].at).slice(0, 500);
+  /* 메모리라 무한정 두지 않는다 — 오래된 것부터 버린다.
+     열쇠에 거래소가 붙어 한 종목이 최대 세 칸을 쓰므로 그만큼 여유를 뒀다 (2026-09-22) */
+  if (candleOf.size > 4000) {
+    const old = [...candleOf.entries()].sort((a, b) => a[1].at - b[1].at).slice(0, 1500);
     for (const [k] of old) candleOf.delete(k);
   }
   return out;
@@ -1170,7 +1194,8 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
          * 종목 수도 100 으로 끊는다(조회 두 건). 500줄을 받아도 봉 때문에 열 건이 나가지 않게.
          */
         const codes = outRows.slice(0, 100).map((r) => String(r.code ?? ""));
-        const job = candles(client, codes).catch(() => null);
+        /* 거래소 단추를 그대로 넘긴다 — KRX 를 보는 중이면 봉도 KRX 다 (2026-09-22) */
+        const job = candles(client, codes, exchange).catch(() => null);
         const cd = await Promise.race([job, new Promise<null>((r) => setTimeout(() => r(null), 1200))]);
         if (cd) for (const r of outRows) r.cd = cd.get(String(r.code ?? "")) ?? null;
       }

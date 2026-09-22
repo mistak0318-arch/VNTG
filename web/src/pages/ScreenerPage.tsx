@@ -1440,6 +1440,17 @@ export function ScreenerPage({
                * 예전처럼 맨 뒤에 붙인다.
                */
               const candleAfter = shownCols.some((c) => c.key === "flu_rt") ? "flu_rt" : null;
+              /*
+               * **봉도 거래소 단추를 따른다** (2026-09-22 — 벤티지: "저거 옵션 선택하면 봉 모양
+               * 바뀌게도 구현가능한가? 통합 krx nxt 따로 말야"). 서버가 `exchange` 그대로 `ka10095`
+               * 접미를 고른다(`_AL`/없음/`_NX`) — 조회 수는 안 늘어난다.
+               *
+               * 어느 거래소로 그린 봉인지 **머리 칸 툴팁에 적는다.** 같은 종목이 통합에선 양봉,
+               * KRX 단독에선 음봉일 수 있다(SK스퀘어 9/22: 통합 시가 1,146,000 = NXT 08:00 첫 틱,
+               * KRX 시가 1,189,000 = 갭 개장가) — 모양이 달라 보일 때 이유를 바로 알게.
+               */
+              const candleVenue =
+                !data?.spec.exchange || exchange === "3" ? "통합(KRX+NXT)" : exchange === "1" ? "KRX 단독" : "NXT 단독";
               const candleTh = (
                 <SortableTh
                   key="cd"
@@ -1449,14 +1460,26 @@ export function ScreenerPage({
                   accessor={(r: (typeof rows)[number]) => (r.cd && r.cd.l > 0 ? ((r.cd.h - r.cd.l) / r.cd.l) * 100 : -Infinity)}
                   sort={sort}
                   className="num-narrow"
+                  thProps={{ title: `당일 봉 · ${candleVenue} 기준 — 세로는 오늘 고가~저가, 색은 시가 대비` }}
                 />
               );
               /** 셀 배열에 봉 칸을 끼워 넣는다 — 안쪽 `return` 들을 안 건드리려고 뒤에서 자른다 */
               const spliceCandle = (cells: React.ReactNode[], r: (typeof rows)[number]): React.ReactNode[] => {
                 if (!hasCandle) return cells;
+                /*
+                 * **봉의 종가도 실시간으로** (2026-09-22). `cd` 는 `ka10095` 값이라 최대 20초 늦다 —
+                 * 옆 칸 등락률은 1.5초 실시간인데 봉만 늦으면 또 둘이 다른 얘기를 한다.
+                 * 실시간이 붙은 줄은 그 값을 종가로 쓰고, **고·저도 거기까지 늘린다** — 안 늘리면
+                 * 새 고가를 찍은 종목의 몸통이 봉 밖으로 삐져나온다.
+                 */
+                const lv = liveOf(r.code);
+                const d =
+                  r.cd && lv && lv.price > 0
+                    ? { ...r.cd, c: lv.price, h: Math.max(r.cd.h, lv.price), l: Math.min(r.cd.l, lv.price) }
+                    : r.cd;
                 const td = (
                   <td key="cd" className="dcd-cell">
-                    <MiniCandle d={r.cd} />
+                    <MiniCandle d={d} />
                   </td>
                 );
                 const i = candleAfter === null ? -1 : shownCols.findIndex((c) => c.key === candleAfter);
