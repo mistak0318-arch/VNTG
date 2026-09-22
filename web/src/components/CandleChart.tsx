@@ -374,6 +374,28 @@ export function CandleChart({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const tipRef = useRef<HTMLDivElement>(null);
+  /**
+   * **좁은 화면의 값 띠** (2026-09-22 — 벤티지: "모바일모드에서 이게 계속 문제인데 … 뒤에 봉이 안보여").
+   *
+   * 9/21 에 말풍선을 아래로 눕혀 두 칸 격자로 만들었는데도 모자랐다. 폰 차트는 높이가 짧은데
+   * 내용이 열세 줄(종목명·날짜·시고저종·거래량·거래대금·이평 넷)이라, 어디에 붙이든 **차트 위에
+   * 떠 있는 한** 봉을 덮는다 — 58% 상한을 걸어 둔 것이 곧 「봉의 58% 를 가린다」는 뜻이었다.
+   *
+   * 그래서 **차트 밖으로 뺀다.** 캔버스 위가 아니라 그 바깥 흐름에 가로 띠로 놓으면 겹칠 일이
+   * 원천적으로 없다(HTS·트레이딩뷰가 쓰는 방식). 덤이 둘 있다 —
+   *   · 손가락을 떼도 값이 남는다. 예전엔 십자선이 사라지면 말풍선도 같이 사라져 비교를 못 했다.
+   *   · 십자선이 없을 때는 **마지막 봉**을 띄워 둔다. 띠가 빈 채로 자리만 먹지 않는다.
+   */
+  const barRef = useRef<HTMLDivElement>(null);
+  /** 지금 좁은 화면인가 — 띠를 쓸지, 차트 높이에서 띠 몫을 뺄지 여기 하나로 정한다 */
+  const narrowRef = useRef(false);
+  /**
+   * 띠를 채우는 함수 — 차트 effect 안에서 만들어 여기 걸어 둔다.
+   * 리사이저도 이걸 불러야 해서(띠를 막 켰을 때) 클로저 밖으로 꺼낸다.
+   */
+  const fillBarRef = useRef<((i: number) => void) | null>(null);
+  /** 리사이저 — 십자선이 「좁음」 판정이 어긋난 걸 발견하면 여기로 다시 부른다 */
+  const resizeRef = useRef<(() => void) | null>(null);
   const { theme } = useAppearance();
   const { prefs } = useChartPrefs();
   /**
@@ -922,17 +944,98 @@ export function CandleChart({
     };
     const rateCls = (v: number, base: number) => (v > base ? "up" : v < base ? "down" : "");
 
+    /**
+     * 띠를 채운다 — **좁은 화면 전용**. 두 줄이다.
+     *
+     *   ① 날짜 · 시 고 저 종(등락률)      ← 늘 있다
+     *   ② 거래량 · 거래대금 · MA…         ← 설정에서 켠 것만, 없으면 줄 자체가 없다
+     *
+     * 말풍선과 **같은 재료**를 쓰되 격자가 아니라 한 줄로 흘린다. 좁은 화면에서 라벨을 세로로
+     * 쌓으면 곧 열세 줄이 되므로, 여기서는 「시」「고」처럼 한 글자로 줄이고 옆으로 눕힌다.
+     */
+    const fillBar = (i: number): void => {
+      const bar = barRef.current;
+      if (!bar) return;
+      const rows = dataRef.current;
+      const cur = rows[i];
+      if (!cur) {
+        bar.innerHTML = "";
+        return;
+      }
+      const prev = rows[i - 1];
+      const base = prev ? prev.close : cur.open;
+      const pf = prefsRef.current;
+      const cell = (label: string, v: number) =>
+        `<span class="cb-c"><i>${label}</i><b class="${rateCls(v, base)}">${won(v)}</b></span>`;
+      const head =
+        `<span class="cb-d">${tooltipDate(cur.time, intraday)}</span>` +
+        (pf.tip.includes("ohlc") ? cell("시", cur.open) + cell("고", cur.high) + cell("저", cur.low) : "") +
+        cell("종", cur.close) +
+        `<span class="cb-r ${rateCls(cur.close, base)}">${rate(cur.close, base)}</span>`;
+
+      const sub: string[] = [];
+      if (pf.tip.includes("volume")) {
+        sub.push(`<span class="cb-c"><i>거래량</i><b>${Math.round(cur.volume).toLocaleString("ko-KR")}</b></span>`);
+        if (cur.value !== undefined && cur.value > 0) {
+          const eok = cur.value / 100;
+          sub.push(
+            `<span class="cb-c"><i>대금</i><b>${eok >= 10000 ? `${(eok / 10000).toFixed(1)}조` : `${Math.round(eok).toLocaleString("ko-KR")}억`}</b></span>`,
+          );
+        }
+      }
+      if (pf.tip.includes("ma")) {
+        for (const m of pf.ma.filter((x) => x.on)) {
+          const hit = sma(rows, m.period).find((p) => timeValue(p.time) === timeValue(cur.time));
+          if (!hit) continue;
+          sub.push(
+            `<span class="cb-c"><i><em class="ct-dot" style="background:${m.color}"></em>${m.period}</i><b>${won(hit.value)}</b></span>`,
+          );
+        }
+      }
+      /* 내 매매가 있으면 그 봉에서만 덧붙인다 — 복기할 때 가장 먼저 보는 값이다 */
+      const t = tradeInfoRef.current.get(tradeKey(cur.time));
+      if (t?.buy) sub.push(`<span class="cb-c" style="color:${TRADE_COLOR.buy}"><i>B</i><b>${t.buy.toLocaleString("ko-KR")}주</b></span>`);
+      if (t?.sell) sub.push(`<span class="cb-c" style="color:${TRADE_COLOR.sell}"><i>S</i><b>${t.sell.toLocaleString("ko-KR")}주</b></span>`);
+
+      bar.innerHTML = `<div class="cb-line">${head}</div>` + (sub.length > 0 ? `<div class="cb-line cb-sub">${sub.join("")}</div>` : "");
+    };
+    fillBarRef.current = fillBar;
+
     const onMove = (param: { time?: Time; point?: { x: number; y: number } }) => {
       const tip = tipRef.current;
       if (!tip) return;
+      /*
+       * **좁은지는 여기서 다시 잰다** (2026-09-22).
+       *
+       * 리사이저에서만 정하게 했더니 「창은 넓은데 차트 칸만 좁은」 경우(보드 카드)를 놓쳤다 —
+       * 실측: 칸을 697→420 으로 줄여도 띠가 안 켜졌다. ResizeObserver 가 도는지에 판정을 맡긴 탓이다.
+       *
+       * 2026-09-21 까지의 코드는 이 값을 **십자선이 움직일 때마다** 셌기 때문에 늘 최신이었다.
+       * 그 성질을 되살린다 — 두 번 읽을 뿐이라 값이 싸고, 어긋나면 그 자리에서 리사이저를 불러
+       * 띠와 차트 높이까지 맞춘다(자가 치유).
+       */
+      const nowNarrow = window.innerWidth <= 720 || el.clientWidth < 520;
+      if (nowNarrow !== narrowRef.current) resizeRef.current?.();
       const rows = dataRef.current;
       if (!param.time || !param.point || rows.length === 0) {
         tip.style.display = "none";
+        /* 십자선이 없으면 띠는 **마지막 봉**으로 — 자리만 먹는 빈 띠를 만들지 않는다 */
+        if (narrowRef.current) fillBar(rows.length - 1);
         return;
       }
       const i = rows.findIndex((r) => timeValue(r.time) === timeValue(param.time as Time));
       if (i < 0) {
         tip.style.display = "none";
+        if (narrowRef.current) fillBar(rows.length - 1);
+        return;
+      }
+      /*
+       * **좁으면 띠만 쓴다.** 말풍선은 아예 안 띄운다 — 둘 다 띄우면 봉을 가리는 문제가 그대로다.
+       * 넓은 화면은 예전 그대로 구석 말풍선이다(거기서는 가릴 일이 없고, 이미 쓰던 방식이다).
+       */
+      if (narrowRef.current) {
+        tip.style.display = "none";
+        fillBar(i);
         return;
       }
       const cur = rows[i];
@@ -1008,15 +1111,13 @@ export function CandleChart({
         (maRows ? `<div class="ct-sub">가격 이동평균</div>${maRows}` : "");
 
       /*
-       * 좁은 화면은 두 칸 격자로 눕힌다 — **문턱은 여기 한 줄뿐이다.**
+       * 여기 오는 것은 **넓은 화면뿐이다** (2026-09-22). 좁을 때는 위에서 띠로 보내고 돌아갔다.
        *
-       * 처음엔 CSS 가 `@media (max-width:720px)` 로 따로 재는 바람에, 창이 넓고 차트 칸만 좁을 때
-       * (카드 안, clientWidth<520) 자리는 눕히고 격자는 안 걸려 한 줄씩 길게 늘어졌다(2026-09-21 회귀 점검 웹#3).
-       * 이제 `is-narrow` 를 켜 주면 CSS 가 그것만 본다.
+       * 2026-09-21 에는 좁은 화면도 이 상자를 두 칸 격자로 눕혀 바닥에 붙였는데, 상자가 차트 **위에**
+       * 있는 한 가리는 것은 그대로였다(58% 상한 = 봉의 58% 를 가린다는 뜻). 이제 차트 밖 띠가 맡는다.
        */
-      const narrow = window.innerWidth <= 720 || el.clientWidth < 520;
-      tip.classList.toggle("is-narrow", narrow);
-      tip.style.display = narrow ? "grid" : "block";
+      tip.classList.remove("is-narrow");
+      tip.style.display = "block";
       /*
        * ⚠️ **커서를 따라다니지 않는다.**
        *
@@ -1028,29 +1129,12 @@ export function CandleChart({
        * 봉을 보면 왼쪽에 뜨므로 보려는 자리는 언제나 비어 있다. 상자가 안 움직이니
        * 눈이 따라다니지 않아도 되는 것도 덤이다.
        */
-      /*
-       * **좁은 화면에서는 구석이 없다** (2026-09-21 — 벤티지: "차트에서 봉 눌러서 나오는 거 모바일에서는
-       * 아무것도 안 보이네 아주").
-       *
-       * 폰 차트는 폭 350px 남짓인데 말풍선은 OHLC·내 매매·거래량·이동평균까지 열세 줄이라, 어느 구석에
-       * 붙여도 차트를 통째로 덮었다. 게다가 배경이 반투명이라 뒤의 봉이 비쳐 글자까지 읽기 어려웠다.
-       *
-       * 좁을 때는 **아래에 가로로 눕힌다** — CSS 가 두 칸 격자로 바꿔 높이를 반으로 줄이고(아래 미디어
-       * 쿼리), 자리는 거래량 막대가 있는 바닥이라 정작 보려는 봉은 안 가린다. 배경도 불투명으로 바꾼다.
-       */
-      if (narrow) {
-        tip.style.left = "4px";
-        tip.style.right = "4px";
-        tip.style.top = "auto";
-        tip.style.bottom = "6px";
-      } else {
-        tip.style.right = "auto";
-        tip.style.bottom = "auto";
-        const w = tip.offsetWidth;
-        const left = param.point.x < el.clientWidth / 2 ? el.clientWidth - w - 8 : 8;
-        tip.style.left = `${Math.max(4, left)}px`;
-        tip.style.top = "8px";
-      }
+      tip.style.right = "auto";
+      tip.style.bottom = "auto";
+      const w = tip.offsetWidth;
+      const left = param.point.x < el.clientWidth / 2 ? el.clientWidth - w - 8 : 8;
+      tip.style.left = `${Math.max(4, left)}px`;
+      tip.style.top = "8px";
     };
     chart.subscribeCrosshairMove(onMove);
 
@@ -1060,7 +1144,24 @@ export function CandleChart({
      */
     const resize = () => {
       const w = el.clientWidth;
-      chart.applyOptions({ width: w, height: heightRef.current });
+      /*
+       * **좁은지 여기서 한 번만 판정한다** (2026-09-22). 문턱은 9/21 것 그대로다 —
+       * 창이 넓어도 차트 칸이 좁을 수 있어(보드 카드) 창 폭과 칸 폭을 둘 다 본다.
+       *
+       * 띠는 차트 **밖**에 있으므로 그만큼 캔버스를 줄여야 전체 높이가 그대로다. 안 빼면
+       * 전체화면처럼 높이를 화면에 맞춰 준 곳에서 띠 높이만큼 넘쳐 스크롤이 생긴다.
+       */
+      const narrow = window.innerWidth <= 720 || el.clientWidth < 520;
+      narrowRef.current = narrow;
+      const bar = barRef.current;
+      if (bar) {
+        bar.classList.toggle("on", narrow);
+        /* 띠를 막 켰는데 비어 있으면 마지막 봉으로 채운다 — 빈 띠가 자리만 먹지 않게 */
+        if (narrow && !bar.innerHTML) fillBarRef.current?.(dataRef.current.length - 1);
+        if (!narrow) bar.innerHTML = "";
+      }
+      const barH = narrow && bar ? bar.offsetHeight : 0;
+      chart.applyOptions({ width: w, height: Math.max(120, heightRef.current - barH) });
       /*
        * **폭이 크게 달라지면 봉을 다시 채운다** (2026-08-27).
        *
@@ -1078,6 +1179,7 @@ export function CandleChart({
         lastWidthRef.current = w;
       }
     };
+    resizeRef.current = resize;
     lastWidthRef.current = el.clientWidth;
     window.addEventListener("resize", resize);
     /*
@@ -1113,6 +1215,28 @@ export function CandleChart({
       }
     });
     ro.observe(el);
+    /*
+     * **띠도 지켜본다** (2026-09-22).
+     *
+     * 띠는 차트 밖이라 그 높이만큼 캔버스를 줄여야 하는데, 띠 높이는 **나중에 정해진다** —
+     * 차트가 만들어지는 순간에는 봉 데이터가 아직 없어서 띠가 빈 채 0px 이고, 데이터가 들어온
+     * 뒤에야 두 줄이 된다. 그 순간 컨테이너(`el`) 크기는 안 바뀌니 위 RO 는 안 깨어난다.
+     * 실측: 첫 화면에서 띠는 떴는데 차트가 안 줄어 전체가 39px 길어졌다.
+     *
+     * 띠를 같이 관찰하면 채워지는 순간·이평을 켜고 끄는 순간에 알아서 다시 맞는다.
+     * (띠 높이 변화 → 캔버스 높이 변화 → `el` RO → 같은 값이라 한 번에 멎는다.)
+     */
+    if (barRef.current) ro.observe(barRef.current);
+    /*
+     * **한 번은 손으로 부른다** (2026-09-22).
+     *
+     * 리사이저가 띠를 켜고 차트 높이에서 띠 몫을 빼는데, 그때까지는 `createChart` 때의 높이 그대로다.
+     * 실측: 폰 폭으로 새로 열면 **띠가 꺼진 채로 떠 있다가** 창을 한 번 흔들어야 켜졌다 —
+     * ResizeObserver 첫 콜백이 폭 0 일 때는 `wasHidden` 만 세우고 돌아가기 때문이다(그 윗줄).
+     * 관찰만 걸어 두고 첫 상태를 안 맞춘 것이 화근이라, 걸자마자 한 번 맞춘다.
+     * 폭이 아직 0 이면 아무 일도 안 하고, 자리를 잡는 순간 RO 가 다시 부른다.
+     */
+    resize();
 
     fitted.current = false;
     hiLineRef.current = null;
@@ -1580,6 +1704,11 @@ export function CandleChart({
           {locked ? "🔒" : "🔓"}
         </button>
       </div>
+      {/*
+        **값 띠** — 좁은 화면에서만 켜진다(`on` 클래스는 리사이저가 붙인다).
+        차트 **밖**이라 봉을 덮을 수가 없다. 2026-09-22 벤티지: "뒤에 봉이 안보여".
+      */}
+      <div ref={barRef} className="candle-bar" />
       <div className="candle-host">
         <div ref={containerRef} style={{ width: "100%" }} />
         {/* 추세선 캔버스 — 차트 위에 얹되 마우스는 통과시킨다(십자선·클릭은 차트 몫) */}

@@ -6079,6 +6079,52 @@ button.nav-group-toggle {
 /* 거래량·거래대금은 숫자가 길다 — 두 칸에 욱여넣지 않고 한 줄을 다 쓴다 */
 .candle-tip.is-narrow .ct-wide { grid-column: 1 / -1; grid-template-columns: 52px minmax(0, 1fr) 58px; }
 
+/*
+ * ===== 값 띠 (2026-09-22) =====
+ *
+ * 벤티지: "모바일모드에서 이게 계속 문제인데.. 어떻게 뭐 좋은 방법 없나? 뒤에 봉이 안보여".
+ *
+ * 9/21 에 말풍선을 바닥에 눕혀 두 칸으로 만들었는데도 모자랐다. **차트 위에 떠 있는 한** 가린다 —
+ * `max-height: 58%` 를 걸어 둔 것이 곧 「봉의 58% 를 덮는다」는 뜻이었다. 그래서 차트 바깥 흐름으로
+ * 꺼냈다. 겹칠 자리가 없으니 상한을 걸 이유도 없고, 손가락을 떼도 값이 남는다.
+ *
+ * 기본은 `display:none` 이고 리사이저가 좁다고 판정할 때만 `.on` 을 붙인다 — 미디어 쿼리로 재면
+ * 「창은 넓은데 차트 칸만 좁은」 보드 카드를 놓친다(9/21 회귀 점검 웹#3 과 같은 함정).
+ */
+.candle-bar { display: none; }
+.candle-bar.on {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 6px;
+  margin-bottom: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  font-size: 0.74rem;
+  line-height: 1.3;
+}
+/* 한 줄 안에서 옆으로 흐르고, 넘치면 가로로 민다 — 줄바꿈으로 키가 커지면 띠를 뺀 뜻이 없다 */
+.candle-bar .cb-line {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  white-space: nowrap;
+}
+.candle-bar .cb-line::-webkit-scrollbar { display: none; }
+.candle-bar .cb-sub { color: var(--muted); font-size: 0.7rem; }
+.candle-bar .cb-d { color: var(--muted); flex: 0 0 auto; }
+.candle-bar .cb-c { display: inline-flex; align-items: baseline; gap: 3px; flex: 0 0 auto; }
+.candle-bar .cb-c > i { font-style: normal; color: var(--muted); }
+.candle-bar .cb-c > b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.candle-bar .cb-r { font-variant-numeric: tabular-nums; flex: 0 0 auto; }
+.candle-bar .up { color: var(--red); }
+.candle-bar .down { color: var(--blue); }
+/* 이평선 색점 — 말풍선의 `.ct-dot` 과 같은 모양이되 띠 안에서는 `em` 이다 */
+.candle-bar .ct-dot { width: 7px; height: 2px; border-radius: 1px; display: inline-block; }
+
 /* ===== 미국 ↔ 국내 테마 연동 =====
    왼쪽 미국 / 오른쪽 국내를 나란히. 연결은 가설이므로 단정적으로 보이지 않게 둔다 */
 .uk-card {
