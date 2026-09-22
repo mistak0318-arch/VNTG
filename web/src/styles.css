@@ -6104,22 +6104,28 @@ button.nav-group-toggle {
   font-size: 0.74rem;
   line-height: 1.3;
 }
-/* 한 줄 안에서 옆으로 흐르고, 넘치면 가로로 민다 — 줄바꿈으로 키가 커지면 띠를 뺀 뜻이 없다 */
+/*
+ * 넘치면 **다음 줄로 접는다** (2026-09-22 고침 — 벤티지: "하이닉스 띄워봤더니 가격이 너무 길어서
+ * 정보가 쓸만하지 않네"). 처음엔 `overflow-x:auto` 로 가로 스크롤 뒤에 숨겼다 — 일곱 자리 가격은
+ * 폰 폭에서 반이 화면 밖으로 나가 **보이지 않는 정보**가 됐다. 한 줄 더 먹는 편이 낫다. 띠 높이는
+ * 리사이저가 관찰하고 있어 그만큼 차트가 알아서 줄어든다.
+ */
 .candle-bar .cb-line {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 7px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  white-space: nowrap;
+  gap: 2px 9px;
 }
-.candle-bar .cb-line::-webkit-scrollbar { display: none; }
 .candle-bar .cb-sub { color: var(--muted); font-size: 0.7rem; }
 .candle-bar .cb-d { color: var(--muted); flex: 0 0 auto; }
-.candle-bar .cb-c { display: inline-flex; align-items: baseline; gap: 3px; flex: 0 0 auto; }
+.candle-bar .cb-c { display: inline-flex; align-items: baseline; gap: 3px; flex: 0 0 auto; white-space: nowrap; }
 .candle-bar .cb-c > i { font-style: normal; color: var(--muted); }
 .candle-bar .cb-c > b { font-weight: 600; font-variant-numeric: tabular-nums; }
-.candle-bar .cb-r { font-variant-numeric: tabular-nums; flex: 0 0 auto; }
+/* 현재가는 주인공 — 조금 크게, 등락률을 바로 뒤에 붙인다 */
+.candle-bar .cb-now > b { font-size: 0.86rem; }
+/* 등락률은 값 옆에 한 단계 작게 — 네 칸 전부에 붙으니 가격과 같은 크기면 줄이 숫자로만 가득 찬다 */
+.candle-bar .cb-r { font-style: normal; font-variant-numeric: tabular-nums; margin-left: 2px; font-size: 0.68rem; }
+.candle-bar .cb-now > .cb-r { font-size: 0.78rem; }
 .candle-bar .up { color: var(--red); }
 .candle-bar .down { color: var(--blue); }
 /* 이평선 색점 — 말풍선의 `.ct-dot` 과 같은 모양이되 띠 안에서는 `em` 이다 */

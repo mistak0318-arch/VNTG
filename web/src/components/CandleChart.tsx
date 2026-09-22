@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from "react";
 import { setPref } from "../prefs";
 import { chartColors, useAppearance } from "../useAppearance";
 import { useChartPrefs } from "../useChartPrefs";
+import { getTickStrength, peekTickStrength } from "../tickStrength";
 
 export interface Candle {
   /** 일/주/월봉은 BusinessDay, 분봉은 UTCTimestamp(초) */
@@ -947,12 +948,20 @@ export function CandleChart({
     /**
      * 띠를 채운다 — **좁은 화면 전용**. 두 줄이다.
      *
-     *   ① 날짜 · 시 고 저 종(등락률)      ← 늘 있다
-     *   ② 거래량 · 거래대금 · MA…         ← 설정에서 켠 것만, 없으면 줄 자체가 없다
+     *   ① 날짜 · 현재(종)+등락률 · 시 · 고 · 저
+     *   ② 대금 (전일比) · 체결강도(지금) · B/S
      *
-     * 말풍선과 **같은 재료**를 쓰되 격자가 아니라 한 줄로 흘린다. 좁은 화면에서 라벨을 세로로
-     * 쌓으면 곧 열세 줄이 되므로, 여기서는 「시」「고」처럼 한 글자로 줄이고 옆으로 눕힌다.
+     * **무엇을 넣을지는 벤티지가 골랐다** (2026-09-22 — "하이닉스 띄워봤더니 가격이 너무 길어서
+     * 정보가 쓸만하지 않네. 등락률 고가 저가 현재가 시가 거래대금 거래대금 전일대비 이정도만
+     * 보여주면 안될까? 체결강도랑"). 처음엔 말풍선의 설정(pf.tip)을 그대로 따라 거래량·이평 넷까지
+     * 넣었는데, 일곱 자리 가격이 여섯 칸 들어가니 폰 폭에서 넘쳐 **가로 스크롤 밖으로 숨었다** —
+     * 보이지 않는 정보는 없는 정보다. 그래서 띠는 설정과 무관하게 이 목록으로 고정한다.
+     *
+     * 체결강도는 **봉마다 있는 값이 아니라 지금 값**이라, 마지막 봉(오늘)을 짚었을 때만 붙인다.
+     * 지난 봉에 오늘 체결강도를 달면 거짓말이다. 값이 캐시에 없으면 받아 온 뒤 같은 봉이면 다시 그린다.
      */
+    /** 체결강도를 받아 온 뒤 「아직 그 봉인가」를 확인하려고 마지막으로 그린 봉 번호를 기억한다 */
+    let barShownIdx = -1;
     const fillBar = (i: number): void => {
       const bar = barRef.current;
       if (!bar) return;
@@ -962,34 +971,49 @@ export function CandleChart({
         bar.innerHTML = "";
         return;
       }
+      barShownIdx = i;
       const prev = rows[i - 1];
       const base = prev ? prev.close : cur.open;
-      const pf = prefsRef.current;
+      /*
+       * 시·고·저에도 **전일 종가 대비 등락률**을 붙인다 (2026-09-22 — 벤티지: "시고저에도 등락률 표시
+       * 해줘야지"). 고가 +5%·현재 +1% 면 「떴다가 밀렸다」가 숫자 둘로 바로 읽힌다 — 말풍선이
+       * 늘 그렇게 보여 주던 것이고, 띠라고 뺄 이유가 없었다.
+       */
       const cell = (label: string, v: number) =>
-        `<span class="cb-c"><i>${label}</i><b class="${rateCls(v, base)}">${won(v)}</b></span>`;
+        `<span class="cb-c"><i>${label}</i><b class="${rateCls(v, base)}">${won(v)}</b>` +
+        `<em class="cb-r ${rateCls(v, base)}">${rate(v, base)}</em></span>`;
+      /* 날짜는 연도를 뗀다 — 「2026/」 다섯 글자가 일곱 자리 가격 하나 자리를 먹는다 */
+      const dateShort = tooltipDate(cur.time, intraday).replace(/^\d{4}\//, "");
       const head =
-        `<span class="cb-d">${tooltipDate(cur.time, intraday)}</span>` +
-        (pf.tip.includes("ohlc") ? cell("시", cur.open) + cell("고", cur.high) + cell("저", cur.low) : "") +
-        cell("종", cur.close) +
-        `<span class="cb-r ${rateCls(cur.close, base)}">${rate(cur.close, base)}</span>`;
+        `<span class="cb-d">${dateShort}</span>` +
+        `<span class="cb-c cb-now"><i>현재</i><b class="${rateCls(cur.close, base)}">${won(cur.close)}</b>` +
+        `<em class="cb-r ${rateCls(cur.close, base)}">${rate(cur.close, base)}</em></span>` +
+        cell("시", cur.open) +
+        cell("고", cur.high) +
+        cell("저", cur.low);
 
       const sub: string[] = [];
-      if (pf.tip.includes("volume")) {
-        sub.push(`<span class="cb-c"><i>거래량</i><b>${Math.round(cur.volume).toLocaleString("ko-KR")}</b></span>`);
-        if (cur.value !== undefined && cur.value > 0) {
-          const eok = cur.value / 100;
-          sub.push(
-            `<span class="cb-c"><i>대금</i><b>${eok >= 10000 ? `${(eok / 10000).toFixed(1)}조` : `${Math.round(eok).toLocaleString("ko-KR")}억`}</b></span>`,
-          );
-        }
+      if (cur.value !== undefined && cur.value > 0) {
+        const eok = cur.value / 100;
+        const amt = eok >= 10000 ? `${(eok / 10000).toFixed(1)}조` : `${Math.round(eok).toLocaleString("ko-KR")}억`;
+        /* 전일 대비 — 앞 봉 거래대금과 견준다. 첫 봉이거나 앞 봉이 0 이면 못 낸다 */
+        const pv = prev?.value;
+        const vr = pv && pv > 0 ? ((cur.value - pv) / pv) * 100 : null;
+        sub.push(
+          `<span class="cb-c"><i>대금</i><b>${amt}</b>` +
+            (vr === null ? "" : `<em class="cb-r ${vr > 0 ? "up" : vr < 0 ? "down" : ""}">${vr > 0 ? "+" : ""}${vr.toFixed(1)}%</em>`) +
+            `</span>`,
+        );
       }
-      if (pf.tip.includes("ma")) {
-        for (const m of pf.ma.filter((x) => x.on)) {
-          const hit = sma(rows, m.period).find((p) => timeValue(p.time) === timeValue(cur.time));
-          if (!hit) continue;
-          sub.push(
-            `<span class="cb-c"><i><em class="ct-dot" style="background:${m.color}"></em>${m.period}</i><b>${won(hit.value)}</b></span>`,
-          );
+      /* 체결강도(지금) — 마지막 봉일 때만. 캐시에 있으면 바로, 없으면 받아서 다시 그린다 */
+      if (code && i === rows.length - 1) {
+        const s = peekTickStrength(code);
+        if (s === undefined) {
+          void getTickStrength(code).then(() => {
+            if (barShownIdx === i) fillBar(i);
+          });
+        } else if (s !== null) {
+          sub.push(`<span class="cb-c"><i>체결강도</i><b class="${s > 100 ? "up" : s < 100 ? "down" : ""}">${s.toFixed(1)}</b></span>`);
         }
       }
       /* 내 매매가 있으면 그 봉에서만 덧붙인다 — 복기할 때 가장 먼저 보는 값이다 */
