@@ -1901,12 +1901,20 @@ export const api = {
     chosen?: Record<string, string>,
     /** 당일 봉(시·고·저)도 받을까 — 켤 때만 ka10095 가 나간다 (2026-09-22) */
     candle = false,
+    /**
+     * 「최근조회」 탭이 쓰는 종목 코드 (2026-09-22).
+     *
+     * 최근 본 목록은 **이 브라우저의 localStorage 에만** 있다 — 서버는 그 목록을 모른다.
+     * 그래서 화면이 코드를 들고 가야 표를 받을 수 있다. 다른 탭에서는 안 쓴다.
+     */
+    codes?: string[],
   ) => {
     const extra = Object.entries(chosen ?? {})
       .map(([k, v]) => `&${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
       .join("");
+    const codeParam = codes && codes.length > 0 ? `&codes=${encodeURIComponent(codes.join(","))}` : "";
     return getJson<RankResult>(
-      `/api/rank/${key}?market=${market}&exchange=${exchange}&limit=${limit}${extra}${candle ? "&candle=1" : ""}`,
+      `/api/rank/${key}?market=${market}&exchange=${exchange}&limit=${limit}${extra}${candle ? "&candle=1" : ""}${codeParam}`,
     );
   },
   sectorFlow: (subject = "foreign", window = 5) =>

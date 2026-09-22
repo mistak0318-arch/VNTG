@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, normalizeStockCode, type StockSearchResult } from "../api";
-import { useRecentStocks, type RecentStock } from "../useRecentStocks";
+import { RECENT_COMPACT, useRecentStocks, type RecentStock } from "../useRecentStocks";
 import { useListKeys } from "../useListKeys";
 
 /**
@@ -88,10 +88,12 @@ export function QuickStockSearch({
    * 하나로 충분하다. 훅은 `open` 과 무관하게 항상 불러야 한다(아래 접힌 상태 조기
    * return 보다 위에 둔 이유) — 훅 호출을 조건부로 하면 리액트 규칙 위반이다.
    */
-  const showRecent = !query.trim() && recent.recent.length > 0;
+  /* 드롭다운은 짧게 — 저장 상한이 30 으로 늘어 그대로 펴면 화면을 덮는다 (2026-09-22) */
+  const recentShown = recent.recent.slice(0, RECENT_COMPACT);
+  const showRecent = !query.trim() && recentShown.length > 0;
   const showResults = query.trim().length > 0 && results.length > 0;
   const activeList: (RecentStock | StockSearchResult)[] = showRecent
-    ? recent.recent
+    ? recentShown
     : showResults
       ? results
       : [];
@@ -142,7 +144,7 @@ export function QuickStockSearch({
                 비우기
               </button>
             </div>
-            {recent.recent.map((r, i) => (
+            {recentShown.map((r, i) => (
               <div className="qss-recent-row" key={r.code}>
                 <button {...keys.itemProps(i)} onClick={() => go(r.code, r.name)}>
                   <span className="name">{r.name}</span>

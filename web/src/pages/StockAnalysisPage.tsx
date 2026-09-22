@@ -13,7 +13,7 @@ import { StockStatusBanner } from "../components/StockStatusBanner";
 import { RefreshBar } from "../components/RefreshBar";
 import { useWatchedCodes } from "../useWatchedCodes";
 import { useLive } from "../useLive";
-import { useRecentStocks, type RecentStock } from "../useRecentStocks";
+import { RECENT_COMPACT, useRecentStocks, type RecentStock } from "../useRecentStocks";
 import { useListKeys } from "../useListKeys";
 
 /**
@@ -96,10 +96,12 @@ export function StockAnalysisPage({
    * 어느 쪽이 떠 있는지는 매 렌더마다 다시 계산되므로, 고르는 방식(최근 목록은
    * `onSelectStock` 만, 검색 결과는 `pickResult` 로 최근 목록에도 쌓는다)도 그때그때 갈린다.
    */
-  const showRecent = focused && !query.trim() && recent.recent.length > 0;
+  /* 드롭다운은 짧게 — 저장 상한이 30 으로 늘어 그대로 펴면 화면을 덮는다 (2026-09-22) */
+  const recentShown = recent.recent.slice(0, RECENT_COMPACT);
+  const showRecent = focused && !query.trim() && recentShown.length > 0;
   const showResults = query.trim().length > 0 && results.length > 0;
   const activeList: (RecentStock | StockSearchResult)[] = showRecent
-    ? recent.recent
+    ? recentShown
     : showResults
       ? results
       : [];
@@ -160,7 +162,7 @@ export function StockAnalysisPage({
                 비우기
               </button>
             </div>
-            {recent.recent.map((r, i) => (
+            {recentShown.map((r, i) => (
               <div className="qss-recent-row" key={r.code}>
                 <button
                   {...keys.itemProps(i)}

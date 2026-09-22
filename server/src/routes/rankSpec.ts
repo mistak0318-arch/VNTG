@@ -609,6 +609,109 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
     }
   });
 
+  /**
+   * **최근조회** (2026-09-22 — 벤티지: "시세분석 거래대금 상위 앞부분에 최근조회 넣어서 내가
+   * 최근에 조회한 목록 보이게 해줄래? 표구성은 거래대금 상위랑 동일하게").
+   *
+   * 목록 자체는 **브라우저에 있다**(`useRecentStocks`, localStorage) — 기기마다 보는 종목이
+   * 다르니 서버에 둘 이유가 없다. 그래서 화면이 코드를 들고 와야 하고, 이 라우트는 그 코드에
+   * 표를 입히는 일만 한다. 순서도 화면이 준 순서 그대로다(가장 최근이 맨 위).
+   *
+   * 값은 **ka10095 한 번**으로 받는다(50종목까지 `|` 로 묶임). 시황 스냅샷을 쓰지 않는 이유:
+   * 스냅샷은 업종 구성종목으로 만들어서 **ETF·리츠가 빠진다**(시가총액 상위 주석 참고).
+   * 최근 본 종목에는 ETF 가 섞이는 게 당연해서, 빠지면 그 줄만 조용히 사라진다.
+   *
+   * 다른 순위 탭과 **같은 표**가 되도록 `extras`(거래대금·회전율·시총·보통주 여부)와
+   * `withFlow`(수급 칩·🧲 판정), 봉(`candle=1`)을 똑같이 붙인다.
+   */
+  router.get("/recent", async (req, res, next) => {
+    try {
+      const codes = [
+        ...new Set(
+          String(req.query.codes ?? "")
+            .split(",")
+            .map((c) => bare(c.trim()))
+            .filter((c) => /^\d{6}$/.test(c)),
+        ),
+      ].slice(0, 50);
+
+      const market = ["000", "001", "101"].includes(String(req.query.market)) ? String(req.query.market) : "000";
+      const spec = {
+        key: "recent",
+        label: "최근조회",
+        columns: [
+          /* 거래대금 상위의 「순위·전일」 자리 — 여기서는 본 순서다(전일 순위는 뜻이 없다) */
+          { key: "rank", label: "최근", type: "num" as const },
+          { key: "stk_nm", label: "종목명", type: "text" as const },
+          { key: "cur_prc", label: "현재가", type: "price" as const },
+          { key: "flu_rt", label: "등락률", type: "pct" as const },
+          { key: "trde_prica", label: "거래대금", type: "num" as const },
+          { key: "now_trde_qty", label: "거래량", type: "num" as const },
+        ],
+        exchange: false,
+        choices: [],
+        note:
+          "이 기기에서 최근에 연 종목입니다 — 최근에 본 것이 맨 위입니다. 표는 거래대금 상위와 같고, " +
+          "거래대금은 백만원 단위입니다. 목록은 이 브라우저에만 남습니다(서버에 안 보냅니다).",
+      };
+
+      if (codes.length === 0) {
+        res.json({ spec, market, exchange: "3", rows: [], empty: "아직 연 종목이 없습니다 — 종목을 한 번 열면 여기 쌓입니다." });
+        return;
+      }
+
+      const index = await getStockIndex(client).catch(() => new Map());
+      /** 코드 → ka10095 원줄 */
+      const quoteOf = new Map<string, Record<string, unknown>>();
+      for (let i = 0; i < codes.length; i += 50) {
+        const part = codes.slice(i, i + 50);
+        const { data } = await client.request<Record<string, unknown>>("/api/dostk/stkinfo", "ka10095", {
+          stk_cd: part.map((c) => `${c}_AL`).join("|"),
+        });
+        for (const r of (data.atn_stk_infr ?? []) as Record<string, unknown>[]) {
+          const code = bare(r.stk_cd);
+          if (code) quoteOf.set(code, r);
+        }
+      }
+
+      /*
+       * 시장 단추(전체·코스피·코스닥)는 이 화면에 늘 떠 있다. 여기서도 걸러 주지 않으면
+       * **눌러도 아무 일이 없는 단추**가 된다 — 고장으로 보인다.
+       * ETF 처럼 `mkt` 이 비는 줄은 「전체」에서만 보인다(코스피도 코스닥도 아니다).
+       */
+      const wantMkt = market === "001" ? "코스피" : market === "101" ? "코스닥" : null;
+      const drawn = codes
+        .map((code, i) => {
+          const q = quoteOf.get(code);
+          const e = index.get(code);
+          /* 값을 못 받은 줄도 **버리지 않는다** — 이름이라도 남아야 「없어졌나」 헷갈리지 않는다 */
+          const ex = extras(q ?? { cur_prc: "0", now_trde_qty: "0", stk_cd: code }, e);
+          return {
+            code,
+            name: String(q?.stk_nm ?? e?.name ?? code).trim(),
+            rank: i + 1,
+            cur_prc: q ? Math.abs(toNum(q.cur_prc) ?? 0) : null,
+            flu_rt: q ? toNum(q.flu_rt) : null,
+            trde_prica: q ? toNum(q.trde_prica) : null,
+            now_trde_qty: q ? toNum(q.trde_qty) : null,
+            ...ex,
+          };
+        })
+        .filter((r) => (wantMkt ? r.mkt === wantMkt : true));
+
+      const outRows: Record<string, unknown>[] = await withFlow(drawn);
+      /* 봉도 다른 탭과 똑같이 — 거래소 단추가 없는 화면이라 통합으로 그린다 */
+      if (String(req.query.candle ?? "") === "1" && outRows.length > 0) {
+        const cd = await candles(client, codes, "3").catch(() => null);
+        if (cd) for (const r of outRows) r.cd = cd.get(String(r.code ?? "")) ?? null;
+      }
+
+      res.json({ spec, market, exchange: "3", rows: outRows });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.get("/market-cap", async (req, res, next) => {
     try {
       const market = ["000", "001", "101"].includes(String(req.query.market))

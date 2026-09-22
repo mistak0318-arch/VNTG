@@ -18,6 +18,7 @@ import { TableFontButtons, useTableFont } from "../components/TableFont";
 import { ColumnGrip, useColumnWidths } from "../components/ColumnWidths";
 import { useCardOrder } from "../useCardOrder";
 import { useAutoRefresh } from "../useAutoRefresh";
+import { useRecentStocks } from "../useRecentStocks";
 import { useSwipeTabs, visualOrder } from "../useSwipeTabs";
 
 /**
@@ -277,6 +278,15 @@ const RANK_COLS = new Set(["now_rank", "pred_rank", "rank", "prev_rank", "rank_c
  * 없고, 탭 순서는 어차피 끌어서 바꿀 수 있다(「기본 순서」 단추도 있다).
  */
 export const SCREENER_TABS = [
+  /*
+   * **최근조회** (2026-09-22 — 벤티지: "거래대금 상위 앞부분에 최근조회 넣어서 내가 최근에 조회한
+   * 목록 보이게 해줄래? 표구성은 거래대금 상위랑 동일하게"). 맨 앞이 제자리다 — 방금 보던 종목으로
+   * 돌아가는 길이라 한 번 더 누르게 만들 이유가 없다.
+   *
+   * 목록은 이 브라우저의 localStorage 에 있고(`useRecentStocks`), 화면이 코드를 서버로 들고 가
+   * 표를 입혀 받는다. 「순위·전일」 자리에는 **본 순서**가 들어간다 — 전일 순위는 뜻이 없다.
+   */
+  { key: "recent", label: "최근조회", kind: "rank" as const },
   { key: "trade-value", label: "거래대금 상위", kind: "rank" as const },
   /*
    * 실시간 조회순위 (2026-09-09 — 벤티지 "나도 시세 분석에 넣어달라고 하려고 했어").
@@ -318,6 +328,8 @@ export function ScreenerPage({
   onSelectStock?: (code: string, name: string) => void;
 }) {
   const [groups, setGroups] = useState<RankSpecGroup[]>([]);
+  /* 최근 본 종목 — 「최근조회」 탭이 쓴다 (2026-09-22). 어느 화면에서 골랐든 같은 목록이다 */
+  const recent = useRecentStocks();
   const [tab, setTab] = useState<string>("trade-value");
   const [active, setActive] = useState("flu-rate");
   const [market, setMarket] = useState("000");
@@ -502,17 +514,32 @@ export function ScreenerPage({
    */
   const fetchLimit = filterOn ? 500 : limit;
 
+  /*
+   * 「최근조회」가 서버로 들고 갈 코드 (2026-09-22).
+   *
+   * 목록은 이 브라우저에만 있다(`useRecentStocks` — localStorage). 문자열로 굳혀서 deps 에 넣는다:
+   * 배열을 그대로 넣으면 렌더마다 새 배열이라 **10초 자동 새로고침이 매 렌더마다 다시 걸린다.**
+   */
+  const recentCodes = recent.recent.map((r) => r.code).join(",");
   const fetchRank = useCallback(
     (quiet = false) => {
       if (!quiet) setLoading(true);
       setError(null);
       api
-        .rank(rankKey, market, exchange, fetchLimit, chosen, candleOn)
+        .rank(
+          rankKey,
+          market,
+          exchange,
+          fetchLimit,
+          chosen,
+          candleOn,
+          rankKey === "recent" ? recentCodes.split(",").filter(Boolean) : undefined,
+        )
         .then((r) => setData(r))
         .catch((e: Error) => setError(e.message))
         .finally(() => setLoading(false));
     },
-    [rankKey, market, exchange, fetchLimit, chosen, candleOn],
+    [rankKey, market, exchange, fetchLimit, chosen, candleOn, recentCodes],
   );
 
   useEffect(() => {

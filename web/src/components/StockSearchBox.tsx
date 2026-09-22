@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, normalizeStockCode, type StockSearchResult } from "../api";
-import { useRecentStocks, type RecentStock } from "../useRecentStocks";
+import { RECENT_COMPACT, useRecentStocks, type RecentStock } from "../useRecentStocks";
 import { useListKeys } from "../useListKeys";
 
 /**
@@ -124,7 +124,9 @@ export function StockSearchBox({
     onPick(c, name);
   }
 
-  const showRecent = open && !query.trim() && recent.recent.length > 0;
+  /* 드롭다운은 짧게 — 저장 상한이 30 으로 늘어 그대로 펴면 화면을 덮는다 (2026-09-22) */
+  const recentShown = recent.recent.slice(0, RECENT_COMPACT);
+  const showRecent = open && !query.trim() && recentShown.length > 0;
   const showResults = open && results.length > 0;
   /* 아직 아무것도 못 받았을 때 — 빈 화면은 「없다」로 읽힌다. 「찾는 중」이라고 말한다 */
   const showBusy = open && Boolean(query.trim()) && results.length === 0 && searching;
@@ -135,7 +137,7 @@ export function StockSearchBox({
    * 가 있는 줄)은 원래 클릭도 막혀 있었으니 방향키로 짚어 엔터를 눌러도 건너뛴다.
    */
   const activeList: (RecentStock | StockSearchResult)[] = showRecent
-    ? recent.recent
+    ? recentShown
     : showResults
       ? results
       : [];
@@ -171,7 +173,7 @@ export function StockSearchBox({
               비우기
             </button>
           </div>
-          {recent.recent.map((r, i) => (
+          {recentShown.map((r, i) => (
             <div className="ssb-row" key={r.code}>
               <button type="button" {...keys.itemProps(i)} onClick={() => pick(r.code, r.name)}>
                 <b>{r.name}</b>

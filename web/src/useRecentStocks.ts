@@ -12,7 +12,14 @@ import { removePref, setPref } from "./prefs";
  */
 
 const KEY = "vntg.recent.stocks.v1";
-const MAX = 12;
+/*
+ * 12 → 30 (2026-09-22). 시세분석에 「최근조회」 탭이 생기면서 **표로도 보게 됐다** — 12줄은
+ * 드롭다운에는 맞지만 표로는 얇다. 드롭다운 쪽은 각자 `slice` 로 짧게 자른다(길어지면 화면을
+ * 가린다). 코드+이름+시각 30개라 localStorage 로도 가볍다.
+ */
+const MAX = 30;
+/** 검색 드롭다운처럼 **좁은 자리**에서 보여 줄 개수 — 표(최근조회 탭)는 전부 쓴다 */
+export const RECENT_COMPACT = 10;
 
 export interface RecentStock {
   code: string;
