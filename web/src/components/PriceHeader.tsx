@@ -436,9 +436,26 @@ export function PriceHeader({
            */}
           {(() => {
             const n = (v: unknown): number => Math.abs(Number(String(v ?? "").replace(/[+,\s]/g, ""))) || 0;
-            const o = rolled ? n(last?.open) : n(krx?.open) || n(fillOk ? fill(info.open_pric, last?.open) : info.open_pric);
-            const h = rolled ? n(last?.high) : n(krx?.high) || n(fillOk ? fill(info.high_pric, last?.high) : info.high_pric);
-            const l = rolled ? n(last?.low) : n(krx?.low) || n(fillOk ? fill(info.low_pric, last?.low) : info.low_pric);
+            /*
+             * ⚠️ **하루 전체(통합) 로 그린다** (2026-09-22 고침 — 벤티지: "nxt부터 가니깐 이 봉은
+             * 맞긴하지. 근데 등락률이 다르잖아").
+             *
+             * 처음엔 `krx?.open` 을 먼저 써서 **KRX 시고저만**으로 그렸다. 그런데 하루는 08:00 NXT
+             * 프리부터 시작한다 — SK스퀘어는 NXT 시가 1,146,000 으로 출발해 KRX 가 1,189,000 으로
+             * 갭 상승 개장했다. KRX 만 보면 「시가에서 밀린 음봉」인데, **하루로 보면 오른 양봉**이다.
+             * 옆에 붙은 등락률(+2.93%)은 통합 기준이므로, 봉이 KRX 기준이면 **둘이 다른 것을 말한다.**
+             *
+             * 그래서 **`info`(=`_AL`) 의 시·고·저만** 쓴다. 위 126행 주석대로 그 값은 이미 통합 범위다
+             * (통합 시가 = NXT 08:00 첫 틱, 통합 고가 = 둘 중 큰 값 — `cisVerify.ts` 에 실측이 있다).
+             * KRX 단독 조회(`krx`)는 아래 「거래소별」 줄 전용이니 여기서 쓰면 안 된다.
+             *
+             * 시세분석 표의 봉도 같은 자리에서 온다(`rankSpec.ts` 의 `ka10095` `_AL`) — 그래서 이제
+             * **표와 상세의 봉 모양이 같다.** 둘이 달라 보였던 것이 이 KRX/통합 차이였다.
+             */
+            const o = rolled ? n(last?.open) : n(fillOk ? fill(info.open_pric, last?.open) : info.open_pric);
+            const h = rolled ? n(last?.high) : n(fillOk ? fill(info.high_pric, last?.high) : info.high_pric);
+            const l = rolled ? n(last?.low) : n(fillOk ? fill(info.low_pric, last?.low) : info.low_pric);
+            /* 현재가도 통합(`mainPrice`) — 옆의 등락률이 나누는 값과 같아야 봉과 숫자가 한 얘기를 한다 */
             const c = n(mainPrice);
             /* 전일 종가 — 기준가가 있으면 그것(권리락 날은 어제 종가와 다르다) */
             const pc = n(info.base_pric) || (rolled ? n(last?.base) : 0);
