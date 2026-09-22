@@ -21,7 +21,7 @@ process.on("uncaughtException", (err) => {
 import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { networkInterfaces } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -465,6 +465,47 @@ void closeStaleRuns().catch(() => undefined);
  */
 const webDist = path.resolve(serverRoot, "../web/dist");
 if (existsSync(webDist)) {
+  /**
+   * **들어온 길에 따라 앱 이름을 다르게** (2026-09-23 — 벤티지: "VNTG(IP) 이렇게 이름 나오게 하고").
+   *
+   * 이제 앱에 닿는 길이 둘이다 — 평소의 `vntgts.com`(Cloudflare 터널)과, Cloudflare 가 말썽일 때
+   * 쓰는 tailnet 직통(`nucbox-g10.…ts.net`). 둘 다 PWA 로 깔면 **바탕화면에 똑같이 생긴 아이콘이
+   * 둘** 생겨서 어느 것을 누르는지 알 수가 없다.
+   *
+   * 매니페스트의 `name` 을 길에 따라 바꿔 준다 — 직통으로 들어왔으면 「VNTG(IP)」.
+   * `start_url`·`scope` 는 `"./"` 상대경로라 출처마다 알아서 갈린다(그래서 크롬은 둘을 다른 앱으로
+   * 본다) — 손댈 필요가 없다.
+   *
+   * ⚠️ **`express.static` 보다 위에 있어야 한다.** 아래면 정적 파일이 먼저 나가 이 손질이 안 먹는다.
+   *
+   * ⚠️ IP(`http://100.88.182.35:4000`)로는 **크롬이 PWA 설치를 안 해 준다** — 평문 HTTP 는 보안
+   * 컨텍스트가 아니라서다(localhost 만 예외). 설치하려면 Tailscale 이 주는 HTTPS 이름을 쓴다:
+   * `https://nucbox-g10.<tailnet>.ts.net` — 진짜 인증서가 붙어 있어 설치가 된다.
+   */
+  app.get("/manifest.json", (req, res, next) => {
+    try {
+      const raw = readFileSync(path.join(webDist, "manifest.json"), "utf8");
+      const m = JSON.parse(raw) as Record<string, unknown>;
+      const hostname = String(req.headers.host ?? "").split(":")[0].toLowerCase();
+      /* 정식 주소(ALLOWED_ORIGINS)가 아니면 직통으로 들어온 것이다 */
+      const canonical = allowedOrigins.some((o) => {
+        try {
+          return new URL(o).hostname.toLowerCase() === hostname;
+        } catch {
+          return false;
+        }
+      });
+      if (!canonical && hostname) {
+        m.name = "VNTG(IP)";
+        m.short_name = "VNTG(IP)";
+        m.description = `${String(m.description ?? "")} — tailnet 직통(Cloudflare 안 거침)`.trim();
+      }
+      /* 캐시하면 길이 바뀌어도 옛 이름이 남는다 */
+      res.set("Cache-Control", "no-store").type("application/manifest+json").send(JSON.stringify(m));
+    } catch {
+      next(); // 못 읽으면 원본 파일이 그대로 나간다
+    }
+  });
   app.use(express.static(webDist));
   // 해시 라우팅이라 SPA fallback은 index.html 하나면 충분하다
   app.get("*", (req, res, next) => {
