@@ -51,17 +51,28 @@ export interface DayCandle {
  * 순위 TR 은 이 값을 안 준다(ka10032 실측: 칸 13개뿐). 50종목씩 끊어 부르고 10초 캐시를 둔다 —
  * 화면이 자동 새로고침으로 자주 물어도 조회가 그만큼 늘지 않게. 100줄이면 조회 두 번이다.
  */
-const candleCache = new Map<string, { at: number; v: Map<string, DayCandle> }>();
+/**
+ * **종목별로** 캐시한다 (2026-09-22 09:17 고침).
+ *
+ * 처음엔 「종목 묶음 전체」를 열쇠로 썼는데, 장중엔 거래대금 순위가 끊임없이 바뀌어 **한 종목만
+ * 갈려도 100종목을 통째로 다시 받았다.** 종목별로 두면 바뀐 것만 받는다 — 대개 0~2종목이다.
+ *
+ * 수명 20초 — 봉의 시·고·저는 그보다 빨리 안 바뀐다(고가·저가는 하루에 몇 번 갱신될 뿐이고,
+ * 현재가는 어차피 화면이 실시간으로 덧씌운다). 10초 새로고침이면 **두 번에 한 번은 조회 0건**이다.
+ */
+const candleOf = new Map<string, { at: number; v: DayCandle }>();
+const CANDLE_TTL_MS = 20_000;
 
 async function candles(client: KiwoomClient, codes: string[]): Promise<Map<string, DayCandle>> {
   const want = [...new Set(codes.filter((c) => /^[0-9A-Z]{6}$/i.test(c)))];
-  const key = want.slice().sort().join(",");
-  const hit = candleCache.get(key);
-  if (hit && Date.now() - hit.at < 10_000) return hit.v;
-  const out = new Map<string, DayCandle>();
+  const now = Date.now();
+  const stale = want.filter((c) => {
+    const hit = candleOf.get(c);
+    return !hit || now - hit.at >= CANDLE_TTL_MS;
+  });
   const abs = (v: unknown): number => Math.abs(Number(String(v ?? "").replace(/[+,\s]/g, "")) || 0);
-  for (let i = 0; i < want.length; i += 50) {
-    const part = want.slice(i, i + 50);
+  for (let i = 0; i < stale.length; i += 50) {
+    const part = stale.slice(i, i + 50);
     const { data } = await client.request<Record<string, unknown>>("/api/dostk/stkinfo", "ka10095", {
       stk_cd: part.map((c) => `${c}_AL`).join("|"),
     });
@@ -73,13 +84,18 @@ async function candles(client: KiwoomClient, codes: string[]): Promise<Map<strin
       const c = abs(r.cur_prc);
       const pc = abs(r.base_pric);
       /* 하나라도 0 이면 봉을 못 그린다 — 안 그리는 편이 거짓 그림보다 낫다 */
-      if (code && o > 0 && h > 0 && l > 0 && c > 0) out.set(code, { o, h, l, c, pc: pc > 0 ? pc : o });
+      if (code && o > 0 && h > 0 && l > 0 && c > 0) candleOf.set(code, { at: Date.now(), v: { o, h, l, c, pc: pc > 0 ? pc : o } });
     }
   }
-  candleCache.set(key, { at: Date.now(), v: out });
-  if (candleCache.size > 30) {
-    const oldest = [...candleCache.entries()].sort((a, b) => a[1].at - b[1].at)[0];
-    if (oldest) candleCache.delete(oldest[0]);
+  const out = new Map<string, DayCandle>();
+  for (const c of want) {
+    const hit = candleOf.get(c);
+    if (hit) out.set(c, hit.v);
+  }
+  /* 메모리라 무한정 두지 않는다 — 오래된 것부터 버린다 */
+  if (candleOf.size > 1500) {
+    const old = [...candleOf.entries()].sort((a, b) => a[1].at - b[1].at).slice(0, 500);
+    for (const [k] of old) candleOf.delete(k);
   }
   return out;
 }
@@ -1142,7 +1158,20 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
        * **화면이 `candle=1` 로 물을 때만** 부른다 — 칸을 꺼 두면 조회가 안 나간다.
        */
       if (String(req.query.candle ?? "") === "1" && outRows.length > 0) {
-        const cd = await candles(client, outRows.map((r) => String(r.code ?? ""))).catch(() => null);
+        /*
+         * ⚠️ **봉이 표를 붙잡으면 안 된다** (2026-09-22 09:17 — 벤티지: "오늘 새로고침 왜이렇게 느린거야?").
+         *
+         * 처음엔 그냥 `await` 했다. 그런데 개장 직후엔 조회 줄이 초당 4.2건으로 포화라(한도 4.5),
+         * 이 두 건이 줄에서 몇 초씩 기다리는 동안 **표 전체가 안 나갔다.** 봉은 곁들이인데 본문을
+         * 볼모로 잡은 셈이다.
+         *
+         * 이제 **1.2초만 기다리고 없으면 봉 없이 먼저 보낸다.** 받아 온 값은 캐시에 남으므로
+         * 다음 새로고침(10초 캐시 안)에는 곧바로 붙는다 — 한 박자 늦을 뿐 사라지지 않는다.
+         * 종목 수도 100 으로 끊는다(조회 두 건). 500줄을 받아도 봉 때문에 열 건이 나가지 않게.
+         */
+        const codes = outRows.slice(0, 100).map((r) => String(r.code ?? ""));
+        const job = candles(client, codes).catch(() => null);
+        const cd = await Promise.race([job, new Promise<null>((r) => setTimeout(() => r(null), 1200))]);
         if (cd) for (const r of outRows) r.cd = cd.get(String(r.code ?? "")) ?? null;
       }
       /*
