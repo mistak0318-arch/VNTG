@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+﻿import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { api } from "./api";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { RunningJobsBar } from "./components/RunningJobsBar";
@@ -617,9 +617,18 @@ export default function App() {
       return {};
     }
   });
+  /**
+   * **기본은 접힘** (2026-09-22 — 벤티지: "메뉴들 내가 접어놧는데 자꾸 펴지네. 기본 접힘으로
+   * 세팅해줘. 즐겨찾기만 딱 보이게").
+   *
+   * 예전엔 저장된 값이 없으면 `undefined` → 펼침이었다. 그래서 앱 데이터가 지워지거나 다른
+   * 기기에서 열면 **여덟 묶음이 통째로 펴진 채** 시작했다 — 접는 건 사람이 매번 다시 해야 했다.
+   * 이제 **적어 둔 적이 없으면 접힘**이다. 자주 쓰는 메뉴는 묶음 밖이라 늘 보인다.
+   */
+  const navFolded = (group: string): boolean => navFold[group] ?? true;
   function toggleNavFold(group: string) {
     setNavFold((prev) => {
-      const next = { ...prev, [group]: !prev[group] };
+      const next = { ...prev, [group]: !(prev[group] ?? true) };
       try {
         localStorage.setItem("vntg.nav.fold", JSON.stringify(next));
       } catch {
@@ -1168,7 +1177,7 @@ export default function App() {
           )}
           {menu.map((g) => (
             <div
-              className={`nav-group${navFold[g.group] ? " folded" : ""}`}
+              className={`nav-group${navFolded(g.group) ? " folded" : ""}`}
               key={g.group}
               style={{ "--accent": g.accent } as CSSProperties}
             >
@@ -1181,13 +1190,13 @@ export default function App() {
                 type="button"
                 className="nav-group-label nav-group-toggle"
                 onClick={() => toggleNavFold(g.group)}
-                title={navFold[g.group] ? "펼치기" : "접기"}
+                title={navFolded(g.group) ? "펼치기" : "접기"}
               >
                 {g.label}
-                <span className="nav-fold-caret">{navFold[g.group] ? "▸" : "▾"}</span>
+                <span className="nav-fold-caret">{navFolded(g.group) ? "▸" : "▾"}</span>
               </button>
               {g.items
-                .filter((item) => !navFold[g.group] || tab === item.key)
+                .filter((item) => !navFolded(g.group) || tab === item.key)
                 .map((item) => (
                 <button
                   key={item.key}
