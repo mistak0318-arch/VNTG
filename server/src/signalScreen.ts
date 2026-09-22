@@ -138,8 +138,18 @@ export async function tradeValueTop(
   client: KiwoomClient,
   market: string,
   limit: number,
+  /**
+   * **ETF·우선주까지 넣을까** (2026-09-22 — 벤티지: "시세분석에서는 당일 시세를 보는거니깐 표에있는
+   * 것들은 소켓에 붙여서 실시간 볼 수 있게 해줘야지 etf 도 거래할건데").
+   *
+   * 기본은 **보통주만**이다 — 신호등 분석·주도주·백테스트·조건검색이 이 함수로 모집단을 만들고,
+   * 거기에 ETF 를 넣으면 **신호등 대상이 바뀐다**(문턱·무게는 12월 말까지 동결).
+   * 실시간 구독 목록(`realtimeHub`)만 이 문을 연다 — 거래대금 상위에 KODEX 가 4·5위로 올라와도
+   * 화면에 실시간 점이 안 붙던 것이 그 때문이었다. 구독은 신호등 계산과 무관하다.
+   */
+  opts: { includeAll?: boolean } = {},
 ): Promise<Candidate[]> {
-  const common = await getCommonStockCodes(client);
+  const common = opts.includeAll ? null : await getCommonStockCodes(client);
   const out: Candidate[] = [];
   let contYn = "N";
   let nextKey = "";
@@ -176,7 +186,7 @@ export async function tradeValueTop(
 
     for (const r of rows) {
       const code = bare(r.stk_cd);
-      if (!common.has(code)) continue; // ETF·ETN·리츠·우선주
+      if (common && !common.has(code)) continue; // ETF·ETN·리츠·우선주 (`includeAll` 이면 통과)
       out.push({
         code,
         name: String(r.stk_nm ?? "").trim(),

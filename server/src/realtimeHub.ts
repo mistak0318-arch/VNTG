@@ -372,11 +372,24 @@ async function refreshRank(kiwoom: KiwoomClient): Promise<void> {
    * 실패하면 **말하고, `at` 을 0 으로 둬 다음 차례에 곧바로 다시 해 본다.**
    */
   try {
-    // 보통주만 걸러서 준다(ETF·우선주를 실시간으로 물 이유가 없다)
-    // 깊이는 RANK_DEPTH(190) — 2번 연결이 다음 구간(96~190위)을 가져간다
+    /*
+     * **ETF·우선주도 건다** (2026-09-22 — 벤티지: "시세분석에서는 당일 시세를 보는거니깐 표에있는 것들은
+     * 소켓에 붙여서 실시간 볼 수 있게 해줘야지 etf 도 거래할건데").
+     *
+     * 예전 주석: 「보통주만 걸러서 준다(ETF·우선주를 실시간으로 물 이유가 없다)」. 자리가 200 뿐이던 때의
+     * 판단이고, ETF 는 신호등·수급 분석 대상이 아니니 맞는 말이었다. **전제가 바뀌었다** — 벤티지가 ETF 를
+     * 거래하고, 거래대금 상위에 KODEX 200·레버리지가 4·5위로 올라온다. 그런데 화면에서 그 줄만 실시간
+     * 점이 안 떴다(시세분석은 읽기 전용이라 스스로 구독하지 않는다 — 스케줄러가 건 것만 읽는다).
+     *
+     * `includeAll` 은 **이 자리에서만** 쓴다. 같은 함수를 신호등 분석·주도주·백테스트·조건검색도 쓰는데,
+     * 거기 ETF 가 들어가면 신호등 대상이 바뀐다(문턱·무게 12월 말까지 동결). 구독은 그 계산과 무관하다.
+     *
+     * 깊이는 RANK_DEPTH(190) — 2번 연결이 다음 구간(96~190위)을 가져간다. ETF 가 상위에 끼면 보통주
+     * 몇이 1번에서 2번으로 밀릴 뿐 **빠지지는 않는다.**
+     */
     const [kospi, kosdaq] = await Promise.allSettled([
-      tradeValueTop(kiwoom, "001", RANK_DEPTH),
-      tradeValueTop(kiwoom, "101", RANK_DEPTH),
+      tradeValueTop(kiwoom, "001", RANK_DEPTH, { includeAll: true }),
+      tradeValueTop(kiwoom, "101", RANK_DEPTH, { includeAll: true }),
     ]);
     for (const [name, r] of [["코스피", kospi], ["코스닥", kosdaq]] as const) {
       if (r.status === "rejected") {
