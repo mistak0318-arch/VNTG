@@ -842,17 +842,30 @@ async function loadCache(): Promise<void> {
 function rebuild(force: boolean): Promise<UsWatchResult> {
   if (building) return building;
   /*
-   * ⚠️ mtime 은 **시작 전에** 읽는다.
-   * 끝난 뒤에 읽으면, 빌드가 도는 6~8초 사이에 바뀐 원장의 mtime 을 옛 데이터에
-   * 박아 버린다 — 그러면 캐시가 「최신」인 척 굳어서 방금 담은 종목이 사라진다.
-   * 시작 전 값을 박으면 최악이라야 한 번 더 받는 것이고, 그건 안전한 쪽이다.
+   * (2026-08-27) mtime 을 **시작 전에** 읽어 「끝난 뒤 mtime 을 옛 데이터에 박는」 굳음을 막았었다.
+   * 그 방식은 안전했지만 한 번 더 받는 동안 화면에서 줄이 사라졌다 — 아래에서 원장과 구성을 맞추는
+   * 것으로 바꿨다 (2026-09-23). 시작 시각 mtime 은 이제 안 쓴다.
    */
-  const mtimeAtStart = watchlistMtime();
   building = buildGroups(force)
     .then(async (data) => {
-      shot = { at: Date.now(), mtime: await mtimeAtStart, data };
+      /*
+       * **끝나기 전에 원장과 구성을 맞춘다** (2026-09-23 — 벤티지: "종목 검색하고 누르면 밑에 추가되고
+       * 또 다른거 추가하려고 하면 안보이다가 나오고"). 빌드는 6~8초인데 `FRESH_MS` 가 8초라 화면이 폴링하는
+       * 동안 재수집이 거의 늘 진행 중이다. 그 사이에 담으면: 담기는 캐시에 임시 줄을 꽂아 바로 보여 주는데,
+       * 진행 중이던 빌드가 **담기 전 원장**으로 만든 결과를 여기서 통째로 덮어 — 방금 담은 줄이 **사라지고**,
+       * 다음 폴링이 mtime 불일치를 보고 **막고 기다리는** 재수집(6~8초) 뒤에야 다시 나타났다.
+       * 옛 주석의 「최악이라야 한 번 더 받는 것」은 그 한 번이 화면에선 「사라졌다 나타남」이었다.
+       *
+       * 이제 원장을 다시 읽어 빌드 결과에 없는 그룹·종목은 임시 줄로 끼우고, 원장에서 빠진 것은 뺀다.
+       * 구성이 파일과 같아졌으니 mtime 도 **지금 것**을 새긴다. 끼운 줄이 있으면 시세를 채우러 한 번 더 돈다.
+       */
+      /* mtime 은 원장을 읽기 **전에** 잰다 — 그 사이 또 바뀌면 다음 조회가 불일치를 보고 다시 받는다(안전한 쪽) */
+      const mtimeNow = await watchlistMtime();
+      const patched = await reconcileWithLedger(data);
+      shot = { at: Date.now(), mtime: mtimeNow, data };
       await mkdir(DATA_DIR, { recursive: true }).catch(() => undefined);
       await writeFile(CACHE_FILE, JSON.stringify(shot), "utf-8").catch(() => undefined);
+      if (patched) setTimeout(() => void rebuild(false).catch(() => undefined), 500);
       return data;
     })
     .finally(() => {
@@ -975,6 +988,31 @@ export function stubQuoteRow(symbol: string, name: string, addedPrice: number | 
     flag: null,
     source: "yahoo",
   };
+}
+
+/**
+ * 빌드 결과를 **원장(파일)과 맞춘다** — 그룹·종목의 있고 없음·순서·이름·메모는 원장이 정답이다.
+ * 빌드 결과에 없는 종목은 임시 줄(`stubQuoteRow`)로 끼운다. 끼운 줄이 하나라도 있으면 true
+ * (시세를 채우러 한 번 더 돌아야 한다). 시세가 있는 줄은 그대로 둔다.
+ */
+async function reconcileWithLedger(data: UsWatchResult): Promise<boolean> {
+  const ledger = await readAll();
+  let stubbed = false;
+  const byId = new Map(data.groups.map((g) => [g.id, g]));
+  data.groups = ledger.map((lg) => {
+    const g = byId.get(lg.id);
+    const have = new Map((g?.stocks ?? []).map((s) => [s.symbol, s]));
+    const stocks = lg.stocks.map((ls) => {
+      const q = have.get(ls.symbol);
+      if (q) return q;
+      stubbed = true;
+      return stubQuoteRow(ls.symbol, ls.name, ls.addedPrice);
+    });
+    return g
+      ? { ...g, name: lg.name, memo: lg.memo, stocks }
+      : { id: lg.id, name: lg.name, memo: lg.memo, changeRate: null, rising: 0, falling: 0, stocks };
+  });
+  return stubbed;
 }
 
 /** 지금 가격 하나만 — 담을 때 편입가를 채우려고 */

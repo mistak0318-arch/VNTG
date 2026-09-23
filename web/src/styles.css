@@ -5933,6 +5933,26 @@ tr.drag-src td { opacity: 0.45; }
 .uw-add { border-left: 3px solid var(--blue); }
 .uw-add .pt-entry-row { gap: 8px; }
 .uw-add .pt-search { flex: 1; min-width: 16rem; }
+/* 머리줄 — 제목 · 담을 그룹 · ✕ (2026-09-23 개편). 검색줄과 나눠 폰에서도 닫기가 늘 보인다 */
+.uw-add-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.uw-add-head > b { font-size: 0.95rem; }
+.uw-add-to { display: inline-flex; align-items: center; gap: 6px; }
+.uw-add-close { margin-left: auto; }
+.uw-add-search { min-width: 0; width: 100%; }
+.uw-add-search .pt-input { padding-right: 2.2rem; }
+.uw-add-clear {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  width: 1.7rem; height: 1.7rem; border-radius: 999px; border: none;
+  background: var(--panel-2); color: var(--muted); cursor: pointer; font-size: 0.85rem; line-height: 1;
+}
+.uw-add-clear:hover { color: var(--text); }
+.uw-add .pt-results button:disabled { opacity: .55; cursor: default; }
+.uw-add-busy { margin-left: 8px; color: var(--blue); font-size: 0.8rem; }
+@media (max-width: 700px) {
+  .uw-add-head > b { display: none; } /* 폰에선 단추 이름이 이미 「＋ 종목 담기」다 */
+  .uw-add-to { flex: 1; }
+  .uw-add-to .group-select { flex: 1; }
+}
 .uw-add .pt-input {
   width: 100%;
   padding: 10px 12px;

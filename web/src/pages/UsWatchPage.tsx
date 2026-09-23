@@ -290,30 +290,73 @@ export function UsWatchPage() {
     const timer = setTimeout(() => {
       api
         .usWatchSearch(q)
-        .then((r) => setResults(r.results))
-        .catch(() => setResults([]))
+        .then((r) => {
+          setResults(r.results);
+          setResultsFor(q);
+        })
+        .catch(() => {
+          setResults([]);
+          setResultsFor(q);
+        })
         .finally(() => setSearching(false));
     }, 350);
     return () => clearTimeout(timer);
   }, [query]);
+  /** 지금 결과가 **어느 검색어**의 것인가 — 「없음」은 그 검색어의 답이 왔을 때만 말한다(치는 중엔 깜빡이지 않게) */
+  const [resultsFor, setResultsFor] = useState("");
 
-  /** 결과를 눌러 담는다 — 패널은 유지 (연속으로 담는 게 보통이다) */
+  /** 지금 담는 중인 티커 — 눌린 줄에 「담는 중…」을 적고 두 번 눌리지 않게 (2026-09-23) */
+  const [busySym, setBusySym] = useState<string | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  /*
+   * 결과를 눌러 담는다 — 패널은 유지 (연속으로 담는 게 보통이다).
+   *
+   * (2026-09-23 개편 — 벤티지: "종목 검색하고 누르면 밑에 추가되고 또 다른거 추가하려고 하면 안보이다가
+   * 나오고. 그리고 종료버튼이나 이런것도 없고") 담은 뒤에 **검색어와 결과를 비우고 검색칸에 다시 포커스**한다.
+   * 전엔 방금 친 검색어와 결과가 그대로 남아, 다음 것을 치려면 지우고 시작해야 했고 지우는 동안 옛 결과가
+   * 깜빡였다. 서버가 편입가(야후 한 번)를 받는 동안은 눌린 줄이 「담는 중…」이라고 말한다.
+   * 「사라졌다 나타남」 자체는 서버(`usWatchlist.ts` `reconcileWithLedger`)에서 잡았다.
+   */
   async function addStock(r: UsSearchResult) {
+    if (busySym) return;
     const target = addTo || current?.id || groups[0]?.id;
     if (!target) return;
     const gname = groups.find((g) => g.id === target)?.name ?? "";
+    setBusySym(r.symbol);
     try {
       setError(null);
       const res = await api.usWatchStockAdd(target, r.symbol, r.name);
       setGroups(res.groups);
-      setAddedMsg(`✓ ${r.name} → 「${gname}」에 담았습니다`);
-      setTimeout(() => setAddedMsg(null), 3000);
+      setAddedMsg(`✓ ${r.name} (${r.symbol}) → 「${gname}」에 담았습니다`);
+      setTimeout(() => setAddedMsg(null), 4000);
+      setQuery("");
+      setResults([]);
+      searchRef.current?.focus();
     } catch (e) {
       setError(e instanceof Error ? e.message : "담기 실패");
+    } finally {
+      setBusySym(null);
     }
   }
 
-  const searchKeys = useListKeys(results, (r) => void addStock(r), { itemClass: "" });
+  /** 패널을 닫는다 — 검색어도 같이 비운다. 다음에 열 때 옛 검색어가 남아 있으면 안 된다 */
+  function closeAdd() {
+    setAdding(false);
+    setQuery("");
+    setResults([]);
+  }
+
+  const searchKeys = useListKeys(results, (r) => void addStock(r), {
+    itemClass: "",
+    /* Esc: 검색어가 있으면 그것부터 지우고, 비어 있으면 패널을 닫는다 */
+    onEscape: () => {
+      if (query) {
+        setQuery("");
+        setResults([]);
+      } else closeAdd();
+    },
+  });
 
   /** ＋ 그룹 — 편집 모드 없이 그 자리에서 */
   async function addGroup() {
@@ -514,8 +557,11 @@ export function UsWatchPage() {
         <button
           className={`filter-btn ${adding ? "active" : ""}`}
           onClick={() => {
-            setAdding((v) => !v);
-            setAddTo(current?.id ?? "");
+            if (adding) closeAdd();
+            else {
+              setAdding(true);
+              setAddTo(current?.id ?? "");
+            }
           }}
           title="이름으로 검색해서 담습니다 — 한국어로도 됩니다 (테슬라, 도요타, 텐센트…)"
         >
@@ -536,56 +582,85 @@ export function UsWatchPage() {
       */}
       {adding && (
         <section className="pt-entry uw-add">
-          <div className="pt-entry-row">
-            <div className="pt-search">
-              <input
-                className="pt-input"
-                autoFocus
-                placeholder="한국어·영어·티커 (예: 테슬라, 도요타, 텐센트, rocket lab, 7203)"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                {...searchKeys.inputProps}
-              />
-              {(results.length > 0 || searching) && query.trim() && (
-                <ul className="pt-results" role="listbox">
-                  {searching && results.length === 0 && <li className="pt-n uw-searching">찾는 중…</li>}
-                  {results.map((r, i) => (
-                    <li key={r.symbol}>
-                      <button
-                        {...searchKeys.itemProps(i)}
-                        onClick={() => void addStock(r)}
-                        title={`${r.symbol} · ${r.exchange}`}
-                      >
-                        <span className="uw-flag">{flagOf(r)}</span>
-                        <b>{r.name}</b> <span className="pt-n">{r.symbol}</span>
-                        {r.type === "ETF" && <em className="uw-etf-badge">ETF</em>}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <select
-              className="group-select"
-              value={addTo || current?.id || ""}
-              onChange={(e) => setAddTo(e.target.value)}
-              title="어느 그룹에 담을까"
-            >
-              {groups.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.name}
-                </option>
-              ))}
-            </select>
-            <button className="filter-btn" onClick={() => setAdding(false)}>
-              닫기
+          {/*
+            머리줄(그룹 고르개·✕)과 검색줄을 **나눈다** (2026-09-23). 한 줄에 검색칸(16rem)+고르개+닫기를
+            두니 폰에서는 줄바꿈된 닫기가 **펼쳐진 결과 목록 밑에 깔려** 보이지 않았다 — "종료버튼이 없다".
+            ✕ 는 맨 위 오른쪽, 결과 목록은 그 아래 검색칸에만 걸린다.
+          */}
+          <div className="uw-add-head">
+            <b>＋ 종목 담기</b>
+            <label className="uw-add-to">
+              <span className="pt-n">담을 그룹</span>
+              <select
+                className="group-select"
+                value={addTo || current?.id || ""}
+                onChange={(e) => setAddTo(e.target.value)}
+                title="어느 그룹에 담을까"
+              >
+                {groups.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button className="filter-btn uw-add-close" onClick={closeAdd} title="닫기 (Esc)">
+              ✕ 닫기
             </button>
+          </div>
+          <div className="pt-search uw-add-search">
+            <input
+              ref={searchRef}
+              className="pt-input"
+              autoFocus
+              placeholder="한국어·영어·티커 (예: 테슬라, 도요타, 텐센트, rocket lab, 7203)"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              {...searchKeys.inputProps}
+            />
+            {query && (
+              <button
+                type="button"
+                className="uw-add-clear"
+                title="검색어 지우기"
+                onClick={() => {
+                  setQuery("");
+                  setResults([]);
+                  searchRef.current?.focus();
+                }}
+              >
+                ✕
+              </button>
+            )}
+            {query.trim() && (results.length > 0 || searching || resultsFor === query.trim()) && (
+              <ul className="pt-results" role="listbox">
+                {searching && results.length === 0 && <li className="pt-n uw-searching">찾는 중…</li>}
+                {!searching && results.length === 0 && resultsFor === query.trim() && (
+                  <li className="pt-n uw-searching">「{query.trim()}」 — 찾은 종목이 없습니다. 영어 이름이나 티커로 다시</li>
+                )}
+                {results.map((r, i) => (
+                  <li key={r.symbol}>
+                    <button
+                      {...searchKeys.itemProps(i)}
+                      onClick={() => void addStock(r)}
+                      disabled={busySym !== null}
+                      title={`${r.symbol} · ${r.exchange}`}
+                    >
+                      <span className="uw-flag">{flagOf(r)}</span>
+                      <b>{r.name}</b> <span className="pt-n">{r.symbol}</span>
+                      {r.type === "ETF" && <em className="uw-etf-badge">ETF</em>}
+                      {busySym === r.symbol && <span className="uw-add-busy">담는 중…</span>}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
           {addedMsg ? (
             <div className="alert-note">{addedMsg} — 계속 검색해서 더 담을 수 있습니다</div>
           ) : (
             <span className="tg-ctl-hint">
-              결과를 누르면 바로 담깁니다 · 편입가는 지금 가격으로 자동 · 일본·홍콩·중국·유럽도 검색됩니다
+              결과를 누르면 바로 담깁니다(↑↓ 엔터도 됩니다) · 편입가는 지금 가격으로 자동 · 일본·홍콩·중국·유럽도 검색됩니다
             </span>
           )}
         </section>
