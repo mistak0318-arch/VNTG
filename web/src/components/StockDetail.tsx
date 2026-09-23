@@ -117,8 +117,20 @@ export function StockDetail({
     sheetRef.current?.scrollTo({ top: 0 });
   }, [code]);
 
+  /*
+   * **곁가지는 한 박자 늦게** (2026-09-23 — 벤티지: "각 종목 눌렀을때 뜨는게 많아서 그런가 약간 로딩이 있는데").
+   * 시트가 열리며 키움 TR 이 22개쯤 한꺼번에 나간다 — 통(8개)을 넘긴 나머지는 4.5/s 로 줄을 선다. 신용(4 TR)·
+   * 추정(3 TR)은 머리·종합·당일 흐름보다 뒤에 봐도 되는 값이라 1.2초 뒤에 부른다. 총량은 같고 **먼저 보이는 것이
+   * 먼저** 온다. 서버(`kiwoomClient.request`)는 같은 TR 이 겹치면 한 번만 부르게 따로 고쳤다.
+   */
+  const [late, setLate] = useState(false);
+  useEffect(() => {
+    setLate(false);
+    const t = setTimeout(() => setLate(true), 1200);
+    return () => clearTimeout(t);
+  }, [code]);
   /* 신용 칩 — 개별종목분석과 **같은 것** (2026-09-08, 벤티지 "클릭하고 나오는 창에는 안 뜨는구나") */
-  const credit = useStockCredit(code);
+  const credit = useStockCredit(late ? code : null);
   /*
    * 종목 상태 배너 (2026-09-10 — 벤티지 "종목 열면 종목 상단에 표시를 해주거나 … 증권플러스에서
    * 하고 있는 거 보이지?"). 한투 시세2(당일 낮 반영) + 키움 auditInfo + KIND 공시를 서버가 합친다.
@@ -382,7 +394,7 @@ export function StockDetail({
           </div>
           {/* 한 장 요약 — 탭을 고르기 전에 「지금 어떤가」가 먼저 보여야 한다 */}
           <div className="sd-blk" style={{ order: cards.orderOf("summary") }}>
-            <InvestorEstimate code={code} />
+            {late && <InvestorEstimate code={code} />}
             <StockSummaryPanel code={code} />
           </div>
 

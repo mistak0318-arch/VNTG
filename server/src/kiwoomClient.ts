@@ -185,6 +185,19 @@ export class KiwoomClient {
    * KRX/NXT/통합 셀렉터가 있어 `noAl` 로 빠진다 — 사용자가 고른 시장을 서버가
    * 덮어쓰면 안 된다.
    */
+  /**
+   * **같은 조회가 겹치면 한 번만** (2026-09-23 — 벤티지: "각 종목 눌렀을때 뜨는게 많아서 그런가 약간 로딩이 있는데").
+   *
+   * 종목 상세 하나가 열리며 패널들이 TR 을 22개쯤 동시에 쏘는데, 세어 보니 **같은 TR·같은 종목이 두 번씩**인
+   * 쌍이 여섯이었다 — 요약줄·종합·당일흐름·체결강도가 각자 `ka10007`·`ka10003`·`ka10080`·`ka10081`·`ka10059`
+   * 를 부른다. 통(8개)을 넘긴 나머지가 4.5/s 로 줄을 서니 겹친 여섯이 곧 1.3초다.
+   * 조회(`ka*`)만, 첫 장(연속조회 아님)만: 같은 몸통이 **진행 중이면** 그것을 같이 기다리고, 끝난 뒤 0.5초 안에
+   * 오면 그 결과를 준다(1초 폴링이 묵은 값을 받지 않게 짧다 — 버스트는 어차피 진행 중에 겹친다).
+   * 계좌·주문(`kt*`)은 절대 안 나눈다. 결과는 복사해서 준다 — 받은 쪽이 고쳐 써도 옆 패널이 안 흔들리게.
+   */
+  private shared = new Map<string, { done: number | null; p: Promise<{ data: unknown; contYn: string; nextKey: string }> }>();
+  private static readonly SHARE_MS = 500;
+
   async request<T = Record<string, unknown>>(
     resourceUrl: string,
     apiId: string,
@@ -194,6 +207,40 @@ export class KiwoomClient {
     if (!opts.noAl && AL_TRS.has(apiId) && typeof body.stk_cd === "string" && /^\d{6}$/.test(body.stk_cd)) {
       body = { ...body, stk_cd: `${body.stk_cd}_AL` };
     }
+    const shareable = /^ka\d+$/.test(apiId) && (opts.contYn ?? "N") === "N" && !opts.nextKey;
+    if (!shareable) return this.requestRaw<T>(resourceUrl, apiId, body, opts);
+    const key = `${apiId}|${resourceUrl}|${JSON.stringify(body)}`;
+    const hit = this.shared.get(key);
+    if (hit && (hit.done === null || Date.now() - hit.done < KiwoomClient.SHARE_MS)) {
+      const r = await hit.p;
+      return { ...r, data: structuredClone(r.data) as T };
+    }
+    const p = this.requestRaw<T>(resourceUrl, apiId, body, opts) as Promise<{ data: unknown; contYn: string; nextKey: string }>;
+    const entry = { done: null as number | null, p };
+    this.shared.set(key, entry);
+    p.then(
+      () => {
+        entry.done = Date.now();
+        const t = setTimeout(() => {
+          if (this.shared.get(key) === entry) this.shared.delete(key);
+        }, KiwoomClient.SHARE_MS);
+        t.unref?.();
+      },
+      /* 실패는 나누지 않는다 — 다음 호출이 새로 부른다 */
+      () => {
+        if (this.shared.get(key) === entry) this.shared.delete(key);
+      },
+    );
+    const r = await p;
+    return { ...r, data: structuredClone(r.data) as T };
+  }
+
+  private async requestRaw<T = Record<string, unknown>>(
+    resourceUrl: string,
+    apiId: string,
+    body: Record<string, unknown>,
+    opts: { contYn?: string; nextKey?: string; noAl?: boolean },
+  ): Promise<{ data: T; contYn: string; nextKey: string }> {
     let token = await this.getToken();
     const maxRetries = 6;
     /* 주문(kt100xx)은 통을 안 거친다 — 아래 주석 */
