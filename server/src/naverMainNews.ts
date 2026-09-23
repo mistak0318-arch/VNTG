@@ -173,25 +173,52 @@ async function fetchSectionBatch(sid2: string, pageNo: number, next?: string): P
  * 받아 둔 장을 순서대로 쌓아 두면, 다음 쪽 요청은 늘 **마지막 장의 커서 하나**로 끝난다.
  * 캐시가 식었거나 깊은 쪽을 바로 부르면 1장부터 걸어가되 **20장에서 멈춘다**(720건).
  */
-const chainOf = new Map<string, { at: number; pages: SectionBatch[] }>();
+const chainOf = new Map<string, { at: number; pages: SectionBatch[]; refreshing: Promise<void> | null }>();
 const CHAIN_TTL = 5 * 60_000;
 const MAX_PAGES = 20;
 
+/** 커서를 따라 `want` 장까지 채운다 — 앞 장이 「다음 없음」이거나 빈 장이면 멈춘다 */
+async function walk(sid2: string, want: number, pages: SectionBatch[]): Promise<void> {
+  while (pages.length < want) {
+    const prev = pages[pages.length - 1];
+    if (prev && !prev.hasNext) break;
+    const got = await fetchSectionBatch(sid2, pages.length + 1, prev?.cursor ?? undefined);
+    if (got.items.length === 0) break;
+    pages.push(got);
+  }
+}
+
+/*
+ * **식어도 옛 장을 먼저 준다** (2026-09-23 — 벤티지: "뉴스 … 갑자기 로딩이 엄청 느렸었다").
+ * 전엔 5분이 지나면 장을 버리고 1장부터 다시 걸었다 — 8쪽을 보고 있었으면 그 새로고침 한 번에 네이버를
+ * 여덟 번 순서대로(장당 0.3~0.5초) 불러 몇 초가 걸렸고, 그게 5분마다 한 번씩 「갑자기」였다.
+ * 이제 식으면 옛 장을 그대로 주고 **뒤에서** 같은 깊이까지 새로 걸어 바꿔 끼운다. 못 받으면 옛 장이 남는다.
+ */
 async function fetchSection(sid2: string, page: number): Promise<{ items: MainNewsItem[]; hasMore: boolean }> {
   const want = Math.max(1, Math.min(page, MAX_PAGES));
   let chain = chainOf.get(sid2);
-  if (!chain || Date.now() - chain.at >= CHAIN_TTL) {
-    chain = { at: Date.now(), pages: [] };
+  if (!chain) {
+    chain = { at: Date.now(), pages: [], refreshing: null };
     chainOf.set(sid2, chain);
   }
-  while (chain.pages.length < want) {
-    const prev = chain.pages[chain.pages.length - 1];
-    /* 앞 장이 「다음 없음」이라고 했으면 더 안 부른다 */
-    if (prev && !prev.hasNext) break;
-    const got = await fetchSectionBatch(sid2, chain.pages.length + 1, prev?.cursor ?? undefined);
-    if (got.items.length === 0) break;
-    chain.pages.push(got);
+  if (Date.now() - chain.at >= CHAIN_TTL && chain.pages.length > 0 && !chain.refreshing) {
+    const c = chain;
+    const depth = Math.max(c.pages.length, want);
+    c.refreshing = (async () => {
+      const fresh: SectionBatch[] = [];
+      await walk(sid2, depth, fresh);
+      if (fresh.length > 0) {
+        c.pages = fresh;
+        c.at = Date.now();
+      }
+    })()
+      .catch(() => undefined)
+      .finally(() => {
+        c.refreshing = null;
+      });
   }
+  if (chain.pages.length === 0) chain.at = Date.now(); // 처음(또는 빈 채 식음) — 지금부터 5분
+  await walk(sid2, want, chain.pages);
   const hit = chain.pages[want - 1];
   if (!hit) return { items: [], hasMore: false };
   return { items: hit.items, hasMore: hit.hasNext && want < MAX_PAGES };
