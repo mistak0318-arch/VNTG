@@ -250,9 +250,21 @@ export function StockAnalysisPage({
             })()}
           </div>
 
+          {/* 시트(StockDetail)와 같은 「뼈대 먼저, 한 번에 펼치기」 (2026-09-23) — 시세 머리가 올 때까지 뼈대 */}
+          {!info && !live.error && (
+            <div className="sd-skel" aria-hidden="true">
+              <i style={{ height: 56 }} />
+              <i style={{ height: 180 }} />
+              <i style={{ height: 40 }} />
+              <i style={{ height: 120 }} />
+            </div>
+          )}
+          <div className={`sd-body${info ? " sd-ready" : " sd-wait"}`}>
+          <div className="sd-blk">
           {/* 투자주의·경고·공매도 과열… 상태 배너 — 시트와 같은 것 (2026-09-10 벤티지 "표시가 안 되어 있네") */}
           <StockStatusBanner code={stock.code} />
           <PriceHeader info={info} code={stock.code} onLastSession={setLastSession} />
+          </div>
           {/*
             가격 바로 아래다 — **견줄 선은 견줄 값 옆에 있어야** 한다.
             탭 안에 넣으면 눌러야 보이는데, 이건 늘 보면서 판단하는 값이다.
@@ -263,19 +275,28 @@ export function StockAnalysisPage({
             여기도 같은 자리라야 세 화면이 같아진다. 기준가가 0 이면 등락률 축이 안 선다.
           */}
           {Math.abs(Number(info?.base_pric)) > 0 && (
-            <IntradayFlow code={stock.code} basePrice={Math.abs(Number(info?.base_pric))} />
+            <div className="sd-blk">
+              <IntradayFlow code={stock.code} basePrice={Math.abs(Number(info?.base_pric))} />
+            </div>
           )}
-          <IntradayLevelsBar code={stock.code} key={`idl-${stock.code}-${reloadKey}`} />
+          <div className="sd-blk">
+            <IntradayLevelsBar code={stock.code} key={`idl-${stock.code}-${reloadKey}`} />
+          </div>
           {/* 한 장 요약 — 시트와 같은 자리, 같은 컴포넌트 */}
-          <StockSummaryPanel code={stock.code} />
+          <div className="sd-blk">
+            <StockSummaryPanel code={stock.code} />
+          </div>
 
-          <StockTabsSection
-            code={stock.code}
-            name={shownName}
-            info={info}
-            onSelectStock={onSelectStock}
-            reloadKey={reloadKey}
-          />
+          <div className="sd-blk">
+            <StockTabsSection
+              code={stock.code}
+              name={shownName}
+              info={info}
+              onSelectStock={onSelectStock}
+              reloadKey={reloadKey}
+            />
+          </div>
+          </div>
         </>
       )}
     </div>

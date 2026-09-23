@@ -269,6 +269,12 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
    * 안 보이는 시계를 위해 30초마다 조회가 나가고 있었다.
    */
   const tabActive = useTabActive();
+  /* 첫 0.7초 뼈대 — 아래 격자 주석. 한 번 펼친 뒤엔 다시 안 접는다 */
+  const [settled, setSettled] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setSettled(true), 700);
+    return () => clearTimeout(t);
+  }, []);
   useEffect(() => {
     if (!tabActive) return;
     api.marketStatus().then(setStatus).catch(() => {});
@@ -379,7 +385,20 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
         ))}
       </div>
 
-      <div className="ov-grid" ref={gridRef}>
+      {/*
+        **처음 열 때 0.7초는 뼈대, 그다음 한 번에** (2026-09-23 — 벤티지: "다른 메뉴들도 다다다닥 뜨는 부분들이
+        있는데"). 카드 열몇 개가 각자 조회해 도착 순서대로 커지고, 벽돌쌓기 격자가 그때마다 재배치돼 화면이
+        들썩였다. 서버 캐시라 대부분 0.7초 안에 오니 그동안은 뼈대 격자를 보이고 한 번에 편다. 페이지는 숨긴 채
+        남으므로(display:none) 다시 올 때는 즉시다. 늦게 오는 카드 몸통은 `.ov-card-b > *` 페이드(styles.css).
+      */}
+      {!settled && (
+        <div className="ov-grid sd-skel-grid" aria-hidden="true">
+          {[180, 120, 220, 160, 140, 200].map((h, i) => (
+            <div key={i} className="sd-skel"><i style={{ height: h }} /></div>
+          ))}
+        </div>
+      )}
+      <div className={`ov-grid${settled ? " sd-ready" : " sd-wait"}`} ref={gridRef}>
         {/* ---------------- 요약 ---------------- */}
         {/*
           미국 전광판. 다른 탭과 달리 **넓은 화면에서도 따로 둔다**(`show` 를 안 쓴다) —
