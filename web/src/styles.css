@@ -18471,7 +18471,9 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 }
 @keyframes sd-shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
 /* 시트 밖(개별종목분석·시황 카드)에서도 같은 클래스를 쓴다 — `.sd-body` 는 자리만 정한다 */
-.sd-body { display: flex; flex-direction: column; min-width: 0; }
+.sd-body { min-width: 0; }
+/* 공용 <Unveil> 안의 직계 자식 — 늦게 오는 덩어리는 투명도만으로 부드럽게 (transform 없음: 안에 sticky 가 있을 수 있다) */
+.sd-body > * { animation: sd-soft .25s ease-out both; }
 .sd-wait { height: 0; overflow: hidden; opacity: 0; }
 .sd-ready { animation: sd-reveal .28s ease-out both; }
 @keyframes sd-reveal { from { opacity: 0; } to { opacity: 1; } }
@@ -18487,7 +18489,7 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .ov-card-b > * { animation: sd-soft .25s ease-out both; }
 @keyframes sd-soft { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
-  .sd-skel i, .sd-ready, .sd-blk > *, .ov-card-b > * { animation: none; }
+  .sd-skel i, .sd-ready, .sd-blk > *, .sd-body > *, .ov-card-b > * { animation: none; }
 }
 .sheet-order { margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); }
 

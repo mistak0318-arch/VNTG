@@ -14,6 +14,7 @@ import {
 } from "../api";
 import { MarketSignalPanel } from "../components/MarketSignalPanel";
 import { RotationStrip, useMarketLens } from "../components/MarketLensPanel";
+import { Unveil } from "../components/Unveil";
 
 /**
  * 장전 브리핑룸 (2026-08-27 전수 점검에서 제안) — **아침 루틴을 한 화면으로.**
@@ -118,6 +119,8 @@ export function MorningPage() {
         )}
       </div>
 
+      {/* 뼈대 먼저, 한 번에 (2026-09-23 전수) — 카드 여섯이 각자 「불러오는 중」에서 채워지며 격자가 들썩이던 것 */}
+      <Unveil bars={[140, 140, 140, 140]}>
       <div className="mrn-grid">
         {/* ── 시장 신호등 — 공용 패널 그대로 ── */}
         <section className="card mrn-card">
@@ -436,6 +439,7 @@ export function MorningPage() {
           ))}
         </section>
       </div>
+      </Unveil>
     </div>
   );
 }

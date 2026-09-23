@@ -23,6 +23,7 @@ import { WatchStar } from "../useWatchedCodes";
 import { SuperMark } from "../useSuperMarks";
 import { WatchButton } from "../components/WatchButton";
 import { useListKeys } from "../useListKeys";
+import { Unveil } from "../components/Unveil";
 
 /**
  * 종목발굴 — **넘기기 바 + 개별종목분석.**
@@ -446,7 +447,8 @@ export function StockDiscoveryPage({
       )}
 
       {code && (
-        <>
+        /* 뼈대 먼저, 한 번에 (2026-09-23 전수) — 시트·개별종목분석과 같은 문. 종목을 넘기면(code) 다시 닫힌다 */
+        <Unveil ready={info != null} resetKey={code} bars={[64, 180, 40, 120]}>
           {/* ---------------- 종목 머리 ---------------- */}
           <section className="card sd-head">
             <div className="sd-head-top">
@@ -510,7 +512,7 @@ export function StockDiscoveryPage({
             ← → 방향키로 앞뒤 종목을 넘길 수 있습니다 · 넘겨도 <b>보던 탭이 그대로 유지</b>됩니다 ·
             목록 위치는 모집단을 바꾸면 처음으로 돌아갑니다
           </div>
-        </>
+        </Unveil>
       )}
     </div>
   );

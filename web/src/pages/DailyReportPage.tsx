@@ -46,6 +46,7 @@ import { RefreshBar } from "../components/RefreshBar";
 import { ReviewPanel } from "../components/ReviewPanel";
 import { useSection } from "../useSection";
 import { WatchStar } from "../useWatchedCodes";
+import { Unveil } from "../components/Unveil";
 
 /**
  * 데일리 리포트 — 하루치 시황을 한 장으로 훑는 화면.
@@ -485,6 +486,8 @@ export function DailyReportPage({
         기준 시점이 다른 값이 한 줄에 섞이면 안 되므로 국내 마감과 밤사이를 갈라
         각자의 기준을 적는다 — 자세한 이유는 ReportGlance 안에.
       */}
+      {/* 뼈대 먼저, 한 번에 (2026-09-23 전수) — 한눈·요약·섹션 스무 개가 각자 도착하며 밀어내던 것. 판(edition)을 바꾸면 다시 */}
+      <Unveil wait={800} resetKey={edition} bars={[72, 120, 160, 200, 160]}>
       <ReportGlance idx={idx} g={g} f={f} />
 
       {/* 읽어주기 — 출근길에 AI 정리를 귀로. 브라우저 내장 음성이라 키·비용이 없다 */}
@@ -514,6 +517,7 @@ export function DailyReportPage({
           {sectionBodies[s.key]}
         </Section>
       ))}
+      </Unveil>
 
       {target && (
         <ConstituentSheet

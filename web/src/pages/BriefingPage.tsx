@@ -27,6 +27,7 @@ import {
 } from "../components/overview/FuturesDetailSheet";
 import { RotationStrip, ThermoChips, useMarketLens } from "../components/MarketLensPanel";
 import { useSection } from "../useSection";
+import { Unveil } from "../components/Unveil";
 
 /**
  * 마켓 브리핑 — **열자마자 3초 안에 「오늘 시장이 어떤가」.**
@@ -309,6 +310,8 @@ export function BriefingPage({
       <div className="bf-top bf-top-slim">
         <RefreshBar onRefresh={refreshAll} updatedAt={indices.updatedAt} />
       </div>
+      {/* 뼈대 먼저, 한 번에 (2026-09-23 전수) — 온도계·체온·주제·격자가 각자 도착하며 밀어내던 것. 지수가 오면 연다 */}
+      <Unveil ready={indices.data != null} bars={[96, 32, 60, 260]}>
       <Thermometer
         indices={indices.data}
         global={global.data}
@@ -430,6 +433,7 @@ export function BriefingPage({
           <LiveTicker events={events} eventDay={eventDay} onSelectStock={onSelectStock} />
         </section>
       </div>
+      </Unveil>
 
       {indexDetail && (
         <IndexDetailSheet code={indexDetail} onClose={() => setIndexDetail(null)} />
