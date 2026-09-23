@@ -261,12 +261,13 @@ export function AfterClosePanel() {
                 <b>{s.label}</b>
                 {s.heavy && <i className="ac-heavy">{s.heavy}</i>}
                 {/*
-                  **언제 · 성공 · 몇 건.** 지난 회차 것이면 날짜를 앞에 적는다 — 어제 성적을
-                  오늘 것으로 읽으면 「돌았구나」 하고 넘어가게 된다.
+                  **언제 · 성공 · 몇 건.** 날짜는 **모든 줄에** 적는다 (2026-09-23 — 벤티지: "얘네 한거야 안한거야?
+                  알수가없네"). 전엔 지난 회차 것에만 적었는데, 마지막 회차가 20:10 마무리(⑫~⑭)면 그 셋만
+                  「이번 회차」라 날짜가 빠지고 ①~⑪ 에는 붙어서 — 정작 방금 돈 셋이 언제 것인지 안 보였다.
                 */}
                 {d && !nowHere && (
                   <i className={d.ok ? "ac-done" : "ac-fail"} title={d.error ?? d.note ?? ""}>
-                    {d.ok ? "✅" : "⚠️"} {old ? `${when(d.at) || (d as { day?: string }).day || ""} · ` : ""}
+                    {d.ok ? "✅" : "⚠️"} {`${when(d.at) || (old ? "" : when(st?.startedAt)) || (d as { day?: string }).day || ""} · `}
                     {dur(d.ms)}
                     {d.note ? ` — ${d.note}` : ""}
                     {d.error ? ` — ${d.error}` : ""}
