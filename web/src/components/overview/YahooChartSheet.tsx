@@ -345,13 +345,17 @@ export function YahooChartSheet({
    * 넘어가므로 「오늘」이 아니라 「9/2 야간 세션」으로 밝힌다. 다른 봉 단위로 옮겨도 남는다.
    */
   const [futDay, setFutDay] = useState<{ t: string; open: number; high: number; low: number; close: number; prevClose: number | null } | null>(null);
+  /* 오늘 밤 야간 세션이 없는 날(다음 거래일 휴장) — 서버가 알려 준다 (2026-09-23 추석 전날) */
+  const [nightClosed, setNightClosed] = useState(false);
   useEffect(() => {
     if (!futures) return;
     let alive = true;
     api
       .futuresChart(target.symbol, "D", 10, target.futMarket ?? "CM")
       .then((r) => {
-        if (!alive || r.candles.length === 0) return;
+        if (!alive) return;
+        setNightClosed(Boolean(r.nightClosed));
+        if (r.candles.length === 0) return;
         const c = r.candles[r.candles.length - 1];
         const p = r.candles[r.candles.length - 2];
         setFutDay({ t: c.t, open: c.open, high: c.high, low: c.low, close: c.close, prevClose: p?.close ?? null });
@@ -669,6 +673,12 @@ export function YahooChartSheet({
                 : "전일 종가"
             }
           />
+        )}
+        {futures && nightClosed && (
+          <div className="page-note">
+            🌙 <b>오늘 밤은 야간 세션이 없습니다</b> — 다음 거래일이 휴장이라 야간 파생시장이 열리지 않습니다. 위 값은
+            주간 마감(정산)가이고 다음 거래일 18:00 까지 움직이지 않습니다.
+          </div>
         )}
 
         {usStock && (

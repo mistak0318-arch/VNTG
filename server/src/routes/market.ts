@@ -1409,7 +1409,18 @@ export function createMarketRouter(client: KiwoomClient): Router {
         : "D";
       /* 월봉은 10년쯤 받아야 칸이 스물몇 개 나온다 — 상한을 800일에서 늘렸다 */
       const days = Math.min(Math.max(Number(req.query.days) || 120, 10), 4000);
-      res.json({ code, market, period, ...(await futuresCandles(code, market, period, days)) });
+      /*
+       * **오늘 밤 야간 세션이 없는 날** (2026-09-23 21:28 — 벤티지: "야간선물 값이 안 움직이는데 이거 맞아 지금?").
+       * 추석 전날이었다. 야간 파생은 **다음 거래일의 일부**라 다음 날이 휴장이면 열리지 않는데, 화면은 시·고·저·종이
+       * 전부 같은 값(주간 정산가)인 채 아무 말이 없었다. 18:00 뒤에 다음 날이 휴장이면, 또는 05:00 전에 오늘이
+       * 휴장이면 `nightClosed` 를 같이 보낸다 — 시트가 한 줄 적는다.
+       */
+      const kst = new Date(Date.now() + 9 * 3600_000);
+      const hh = kst.getUTCHours();
+      const dayAt = (d: number) => new Date(`${new Date(kst.getTime() + d * 86_400_000).toISOString().slice(0, 10)}T12:00:00+09:00`);
+      const nightClosed =
+        market === "CM" && ((hh >= 18 && !isTradingDay(dayAt(1))) || (hh < 5 && !isTradingDay(dayAt(0))));
+      res.json({ code, market, period, nightClosed, ...(await futuresCandles(code, market, period, days)) });
     } catch (err) {
       next(err);
     }

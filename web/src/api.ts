@@ -1770,6 +1770,8 @@ export const api = {
       code: string;
       candles: { t: string; open: number; high: number; low: number; close: number; volume: number }[];
       error: string | null;
+      /** 오늘 밤 야간 세션이 없다(다음 거래일이 휴장) — 시트가 한 줄 적는다 (2026-09-23) */
+      nightClosed?: boolean;
     }>(
       `/api/market/futures-chart?code=${encodeURIComponent(code)}&period=${period}&days=${days}&market=${market}`,
     ),
