@@ -18457,6 +18457,27 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .sheet-body { display: flex; flex-direction: column; }
 /* 감싼 한 겹이 자식의 폭·여백을 먹지 않게 — 상자는 자리만 정한다 */
 .sd-blk { min-width: 0; display: flex; flex-direction: column; }
+/*
+ * 뼈대 먼저, 한 번에 펼치기 (2026-09-23 — "다다닥 표시되는게 부자연스러운데"). StockDetail.tsx 주석 참고.
+ *   · `.sd-wait`  — 시세 머리가 오기 전. 몸통은 마운트돼 조회를 시작하되 자리를 차지하지 않는다
+ *   · `.sd-ready` — 한 번에 페이드로 편다
+ *   · `.sd-blk > *` — 늦게 오는 패널은 살짝 떠오르며 나타난다(툭 튀지 않게)
+ */
+.sd-skel { display: flex; flex-direction: column; gap: 12px; padding: 6px 0 14px; }
+.sd-skel i {
+  display: block; border-radius: 8px;
+  background: linear-gradient(90deg, var(--panel-2) 25%, var(--border) 40%, var(--panel-2) 55%);
+  background-size: 400% 100%; animation: sd-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes sd-shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+.sheet-body.sd-wait { height: 0; overflow: hidden; opacity: 0; }
+.sheet-body.sd-ready { animation: sd-reveal .28s ease-out both; }
+@keyframes sd-reveal { from { opacity: 0; } to { opacity: 1; } }
+.sd-blk > * { animation: sd-in .3s ease-out both; }
+@keyframes sd-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .sd-skel i, .sheet-body.sd-ready, .sd-blk > * { animation: none; }
+}
 .sheet-order { margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); }
 
 /*

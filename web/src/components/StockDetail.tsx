@@ -377,7 +377,22 @@ export function StockDetail({
           싸야 그 값을 줄 수 있다. JSX 를 재배열하지 않으므로 차례를 바꿔도 차트·스크롤
           자리가 살아 있다(카드가 다시 만들어지지 않는다).
         */}
-        <div className="sheet-body">
+        {/*
+          **뼈대 먼저, 한 번에 펼치기** (2026-09-23 — 벤티지: "화면에 다다닥 표시되는게 좀 부자연스러운데").
+          패널 대부분이 값이 오기 전엔 null 을 그려서, 도착 순서대로 툭툭 나타나며 아래를 밀어냈다.
+          시세 머리(`info`, 첫 조회)가 올 때까지는 회색 뼈대를 보여 주고, 오면 몸통을 한 번에 페이드로 편다.
+          그 뒤에 오는 것(신용·추정·탭 안쪽)은 `.sd-blk > *` 의 떠오르는 페이드가 받는다(styles.css).
+        */}
+        {!info && !error && (
+          <div className="sd-skel" aria-hidden="true">
+            <i style={{ height: 22, width: "55%" }} />
+            <i style={{ height: 56 }} />
+            <i style={{ height: 180 }} />
+            <i style={{ height: 40 }} />
+            <i style={{ height: 120 }} />
+          </div>
+        )}
+        <div className={`sheet-body${info ? " sd-ready" : " sd-wait"}`}>
           <div className="sd-blk" style={{ order: cards.orderOf("price") }}>
             {/* 상태 배너 + 예탁원 이벤트 — 개별종목분석·보드·종목발굴과 같은 컴포넌트 (2026-09-10) */}
             <StockStatusBanner code={code} />
