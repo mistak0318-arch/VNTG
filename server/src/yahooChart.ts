@@ -264,9 +264,19 @@ export async function yahooChart(symbol: string, key = "6mo"): Promise<YahooChar
           name: meta.longName ?? meta.shortName ?? "",
         }
       : null,
-    error: candles.length === 0 ? "봉이 하나도 없습니다" : null,
+    /*
+     * 장중 빈 것은 「없다」가 아니라 「아직」이다 (2026-09-23 22:46 — 벤티지: CAPA 1일·분봉 "봉이 하나도 없습니다").
+     * 개장 16분 뒤 거래가 뜸한 ETF 는 5분봉이 0개인 게 정상이다. 그 말을 하고, **캐시에 넣지 않는다** — 빈 결과를
+     * 넣어 두면 체결이 시작돼도 캐시가 식을 때까지 빈 채였다.
+     */
+    error:
+      candles.length === 0
+        ? intraday
+          ? "오늘 아직 체결된 봉이 없습니다 — 거래가 뜸한 종목은 장 초반에 비어 있습니다. 5일·일봉을 보세요"
+          : "봉이 하나도 없습니다"
+        : null,
   };
-  cache.set(cacheKey, { data, at: Date.now() });
+  if (!(intraday && candles.length === 0)) cache.set(cacheKey, { data, at: Date.now() });
   return data;
 }
 

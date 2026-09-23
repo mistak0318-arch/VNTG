@@ -53,3 +53,21 @@ export function liveMean(
   if (rates.length === 0) return null;
   return rates.reduce((a, b) => a + b, 0) / rates.length;
 }
+
+/** ▲▼ 도 같은 값으로 센다 — 평균은 실시간인데 ▲17▼2 가 서버(15분 지연) 것이면 또 갈린다 (2026-09-23) */
+export function liveUpDown(
+  stocks: { symbol: string; changeRate: number | null }[],
+  fast: Record<string, FastQuote>,
+): { rising: number; falling: number } | null {
+  let rising = 0;
+  let falling = 0;
+  let seen = 0;
+  for (const s of stocks) {
+    const r = fast[s.symbol]?.changeRate ?? s.changeRate;
+    if (typeof r !== "number" || !Number.isFinite(r)) continue;
+    seen += 1;
+    if (r > 0) rising += 1;
+    else if (r < 0) falling += 1;
+  }
+  return seen === 0 ? null : { rising, falling };
+}

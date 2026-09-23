@@ -209,13 +209,22 @@ export function UsWatchTable({
   };
 
   /* 머리 라벨·설명 — 세션 이름(프리장/애프터장/주간거래)이 시각 따라 바뀌어 여기서 만든다 */
+  /*
+   * 정규장엔 괄호를 안 단다 (2026-09-23 22:45 실측: 09:45 ET 인데 머리가 「(시간외)」). `sideQuote` 가 정규장에선
+   * null 이라 `sideNameOf` 의 **폴백 문자열 「시간외」** 가 그대로 머리에 찍혔다 — 정규장 값에 시간외라고 적은 셈.
+   */
+  const regularNow = sessionAt() === "regular";
   const headLabel: Record<UsColKey, React.ReactNode> = {
-    price: (
+    price: regularNow ? (
+      "현재가"
+    ) : (
       <>
         현재가 <span className="uw-day-h">({sideName})</span>
       </>
     ),
-    rate: (
+    rate: regularNow ? (
+      "등락률"
+    ) : (
       <>
         등락률 <span className="uw-day-h">({sideName})</span>
       </>
@@ -228,8 +237,8 @@ export function UsWatchTable({
     ret: "편입 대비",
   };
   const headTitle: Partial<Record<UsColKey, string>> = {
-    price: `괄호는 ${sideName} — 정규장 밖에서 도는 세션입니다`,
-    rate: `전일 종가 대비 등락률입니다. 괄호는 ${sideName} 변동(정규장 종가 대비)`,
+    price: regularNow ? "정규장 현재가 — 실시간(3초)이 붙은 줄은 초록 점" : `괄호는 ${sideName} — 정규장 밖에서 도는 세션입니다`,
+    rate: regularNow ? "전일 종가 대비 등락률입니다" : `전일 종가 대비 등락률입니다. 괄호는 ${sideName} 변동(정규장 종가 대비)`,
   };
 
   return (

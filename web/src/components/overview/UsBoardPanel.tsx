@@ -2,6 +2,8 @@ import { GroupTiles } from "../GroupTiles";
 import { useCallback, useEffect, useState } from "react";
 import { useTabActive } from "../../tabActive";
 import { removePref, setPref } from "../../prefs";
+import { sessionAt } from "../../usSession";
+import { liveMean, liveUpDown, useUsAllFast } from "../../useUsAllFast";
 import {
   api,
   fmtNum,
@@ -729,7 +731,17 @@ function UsBoardWatch({ onOpen }: { onOpen: (symbol: string, label: string) => v
    * 같은 방식 그대로: 지금 보는 그룹만 야후 spark 배치로 3초(장중) 폴링해
    * 현재가·등락률을 덧씌운다. 탭이 뒤에 있으면 쉰다.
    */
-  const openMarket = groups.some((g) => g.stocks.some((s) => (s.state ?? "").includes("실시간")));
+  /*
+   * 정규장(ET 09:30~16:00)은 시계로 연다 — 한투 `state` 는 정규장에도 「지연」이라 닫힌 것으로 남았다
+   * (2026-09-23 22:45, UsWatchPage 의 같은 자리 주석). 그룹 칩도 **실시간 평균·▲▼** 로: 전엔 늘 서버(한투) 값이라
+   * 칩은 반도체 +1.83% ▲17▼2, 표는 NVDA −0.08%·SKHY −1.88%… — 같은 카드가 두 값을 말했다.
+   */
+  const openMarket =
+    sessionAt() === "regular" || groups.some((g) => g.stocks.some((s) => (s.state ?? "").includes("실시간")));
+  const allFast = useUsAllFast(
+    openMarket ? groups.flatMap((g) => g.stocks.map((s) => s.symbol)) : [],
+    openMarket,
+  );
   const [fast, setFast] = useState<Record<string, { price: number; changeRate: number | null; at: number }>>({});
   const fastSymbols = current?.stocks.map((s) => s.symbol).join(",") ?? "";
   useEffect(() => {
@@ -818,15 +830,19 @@ function UsBoardWatch({ onOpen }: { onOpen: (symbol: string, label: string) => v
           길이가 제각각인 칩을 흘려 놓아 포도송이처럼 엉겼다. 해외 관심종목과 같은 타일 격자를 쓴다.
         */}
         <GroupTiles
-          groups={groups.map((g) => ({
-            id: g.id,
-            name: g.name,
-            rate: g.changeRate,
-            count: g.stocks.length,
-            rising: g.rising,
-            falling: g.falling,
-            title: g.memo || undefined,
-          }))}
+          groups={groups.map((g) => {
+            /* 장중엔 표와 같은 실시간 값으로 — 평균도 ▲▼ 도 (위 openMarket 주석) */
+            const ud = openMarket ? liveUpDown(g.stocks, allFast) : null;
+            return {
+              id: g.id,
+              name: g.name,
+              rate: openMarket ? (liveMean(g.stocks, allFast) ?? g.changeRate) : g.changeRate,
+              count: g.stocks.length,
+              rising: ud?.rising ?? g.rising,
+              falling: ud?.falling ?? g.falling,
+              title: g.memo || undefined,
+            };
+          })}
           activeId={current?.id}
           onPick={pickGroup}
         />

@@ -2,12 +2,12 @@ import { GroupTiles } from "../components/GroupTiles";
 import { useEffect, useRef, useState } from "react";
 import { api, type UsSearchResult, type UsWatchGroup , type UsQuoteRow } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
-import { liveQuote, usSideSession } from "../usSession";
+import { liveQuote, sessionAt, usSideSession } from "../usSession";
 import { UsWatchTable } from "../components/UsWatchTable";
 import { useDragOrder } from "../useDragOrder";
 import { YahooChartSheet, type ChartTarget } from "../components/overview/YahooChartSheet";
 import { useListKeys } from "../useListKeys";
-import { liveMean, useUsAllFast } from "../useUsAllFast";
+import { liveMean, liveUpDown, useUsAllFast } from "../useUsAllFast";
 import { TableFontButtons, useTableFont } from "../components/TableFont";
 
 /**
@@ -171,7 +171,14 @@ export function UsWatchPage() {
    *
    * 탭이 뒤에 있으면 아예 쉰다 — 안 보는 화면 때문에 한도를 쓰지 않는다.
    */
-  const openMarket = groups.some((g) => g.stocks.some((s) => (s.state ?? "").includes("실시간")));
+  /*
+   * ⚠️ **시계로도 연다** (2026-09-23 22:45 — 벤티지: 칩 반도체 +1.83% ▲17▼2 인데 표는 NVDA −0.08%·SKHY −1.88%…
+   * "그룹이랑 안 맞는 이유"). 한투 `state` 에 「실시간」이 있어야만 열린 것으로 봤는데, 정규장 09:45 ET 에도 한투가
+   * 「지연」이라 닫힌 것으로 남았다. 그러면 칩은 한투(15분 지연·개장 직후 반영 전) 평균, 표는 야후 3초 값이라
+   * **같은 그룹이 두 값을 말했다.** ET 정규장(09:30~16:00)이면 한투가 뭐라 하든 연 것이다.
+   */
+  const openMarket =
+    sessionAt() === "regular" || groups.some((g) => g.stocks.some((s) => (s.state ?? "").includes("실시간")));
 
   /*
    * 빠른 시세 오버레이 (2026-08-25 — 「5초 갱신뿐이라 느리다」).
@@ -195,6 +202,9 @@ export function UsWatchPage() {
   );
   const chipRate = (g: UsWatchGroup): number | null =>
     openMarket ? (liveMean(g.stocks, allFast) ?? g.changeRate) : g.changeRate;
+  /* ▲▼ 도 같은 값으로 — 평균만 실시간이고 ▲17▼2 가 서버 것이면 또 갈린다 (2026-09-23) */
+  const chipUpDown = (g: UsWatchGroup): { rising: number; falling: number } =>
+    (openMarket ? liveUpDown(g.stocks, allFast) : null) ?? { rising: g.rising, falling: g.falling };
   /* 표 글자 크기 — 시세분석과 같은 단추 (벤티지 "얘도 +/- 달아주고") */
   const font = useTableFont("vntg.uswatch.font");
   useEffect(() => {
@@ -471,15 +481,18 @@ export function UsWatchPage() {
       */}
       {!editing && (
         <GroupTiles
-          groups={groups.map((g) => ({
-            id: g.id,
-            name: g.name,
-            rate: chipRate(g),
-            count: g.stocks.length,
-            rising: g.rising,
-            falling: g.falling,
-            title: g.memo || undefined,
-          }))}
+          groups={groups.map((g) => {
+            const ud = chipUpDown(g);
+            return {
+              id: g.id,
+              name: g.name,
+              rate: chipRate(g),
+              count: g.stocks.length,
+              rising: ud.rising,
+              falling: ud.falling,
+              title: g.memo || undefined,
+            };
+          })}
           activeId={current?.id}
           onPick={setOpenGroup}
         />
@@ -702,7 +715,7 @@ export function UsWatchPage() {
             {current.memo && <span className="pt-n"> {current.memo}</span>}
             <span className={`uw-grate big ${cls(chipRate(current))}`}>{pct(chipRate(current))}</span>
             <span className="pt-n">
-              ▲{current.rising} / ▼{current.falling} · {current.stocks.length}종목
+              ▲{chipUpDown(current).rising} / ▼{chipUpDown(current).falling} · {current.stocks.length}종목
             </span>
           </div>
 
