@@ -670,8 +670,8 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
         exchange: false,
         choices: [],
         note:
-          "이 기기에서 최근에 연 종목입니다 — 최근에 본 것이 맨 위입니다. 표는 거래대금 상위와 같고, " +
-          "거래대금은 억원입니다. 목록은 이 브라우저에만 남습니다(서버에 안 보냅니다).",
+          "최근에 연 종목입니다 — 어느 기기에서 열었든 한 목록이고(2026-09-23), 최근에 본 것이 맨 위입니다. " +
+          "표는 거래대금 상위와 같고, 거래대금은 억원입니다. 거르기 조건은 이 탭에 적용되지 않습니다.",
       };
 
       if (codes.length === 0) {

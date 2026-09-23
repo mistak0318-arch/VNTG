@@ -597,7 +597,15 @@ export function ScreenerPage({
   const hasCapCol = all.some((r) => r.cap !== null);
   const hasTvCol = all.some((r) => r.tv !== null);
 
+  /*
+   * **최근조회는 거르지 않는다** (2026-09-23 — 벤티지: "검색해서 본 종목에 대해서는 또 안나오네?").
+   * 거르기 조건은 탭을 옮겨도 남는데(그게 편한 점), 최근조회는 「내가 연 종목」의 목록이지 조건 검색이
+   * 아니다. 거래대금 상위에서 켜 둔 「거래대금 ≥ N억」·「보통주만」이 검색으로 연 작은 종목·ETF 를
+   * 조용히 지웠다 — 목록에는 있는데 표에 없으니 「안 쌓인다」로 보였다.
+   */
+  const noFilter = rankKey === "recent";
   const rows = all.filter((r) => {
+    if (noFilter) return true;
     if (filter.commonOnly && !r.common) return false;
     if (filter.etfOnly && !r.etf) return false;
     if (filter.twinOnly && !isTwin(r)) return false;
@@ -2092,6 +2100,9 @@ export function ScreenerPage({
                 필터에 걸리는 종목이 없습니다 — <b>{all.length}건</b>이 전부 걸러졌습니다.
                 조건을 풀어 보세요.
               </div>
+            )}
+            {noFilter && on && (
+              <div className="table-note">거르기 조건은 이 탭에서 쉽니다 — 최근조회는 연 종목을 전부 보여 줍니다.</div>
             )}
             {data.spec.note && <div className="table-note">{data.spec.note}</div>}
           </>
