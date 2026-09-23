@@ -1,6 +1,7 @@
 ﻿import { useEffect, useRef, useState } from "react";
 import { api, fmtAbsNum, fmtNum, type ExchangeQuote, type MarkWhy, type RawRecord } from "../api";
 import { useTabActive } from "../tabActive";
+import { useMarketOpen } from "../useLive";
 import { PeriodReturns, type LastSession } from "./PeriodReturns";
 import { MiniCandle } from "./MiniCandle";
 import { afterMarketEra, krPhase, type KrPhase } from "../marketSession";
@@ -164,6 +165,14 @@ export function PriceHeader({
    * 돌아오면 effect 가 다시 걸려 곧바로 한 번 읽는다 — 묵은 값을 보여 주지 않는다.
    */
   const tabActive = useTabActive();
+  /*
+   * **장 밖에선 60초, 브라우저 탭이 안 보이면 건너뛴다** (2026-09-23 — 벤티지: "종목 상세 들어갈때도 로딩이
+   * 심하고"). health.json 실측: 오늘 08:20 전에 `ka10007` 이 11,051콜 — 아래 거래소별 조회가 **한 번에
+   * 3콜**이고 10초마다라, 밤새 종목 상세를 열어 둔 기기 하나가 시간당 1,080콜을 썼다. 값이 안 바뀌는
+   * 시간에 키움 대기열만 채운 셈이다. `live`(NXT 프리·애프터 포함)면 10초, 아니면 60초.
+   */
+  const marketOpen = useMarketOpen();
+  const pollMs = marketOpen ? 10_000 : 60_000;
   useEffect(() => {
     if (!code || !tabActive) return;
     let cancelled = false;
@@ -176,12 +185,15 @@ export function PriceHeader({
         .catch(() => undefined);
     void load();
     // 장중에는 계속 바뀐다. 요약줄이라 자주 볼 값이다
-    const t = setInterval(() => void load(), 10_000);
+    const t = setInterval(() => {
+      if (document.visibilityState === "hidden") return;
+      void load();
+    }, pollMs);
     return () => {
       cancelled = true;
       clearInterval(t);
     };
-  }, [code, tabActive]);
+  }, [code, tabActive, pollMs]);
 
   /** KRX 몫 거래대금 — 조회에서 직접 받는다(일봉은 개장 전에 어제 값을 준다) */
   const [krxValue, setKrxValue] = useState<number | null>(null);
@@ -223,12 +235,15 @@ export function PriceHeader({
         })
         .catch(() => undefined);
     void load();
-    const t = setInterval(() => void load(), 10_000);
+    const t = setInterval(() => {
+      if (document.visibilityState === "hidden") return;
+      void load();
+    }, pollMs);
     return () => {
       cancelled = true;
       clearInterval(t);
     };
-  }, [code, tabActive]);
+  }, [code, tabActive, pollMs]);
 
   if (!info) return null;
 
