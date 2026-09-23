@@ -759,6 +759,17 @@ export function ScreenerPage({
    * 자른 뒤에 하므로, 열 이름을 눌러도 표에 담긴 종목은 그대로고 순서만 바뀐다.
    */
   const sort = useSortableTable(capped);
+  /*
+   * **조회를 옮기면 정렬은 원래 순서로** (2026-09-23 — 벤티지: "최근조회 탭에서는 조회순으로 보여줘야지
+   * 거래대금 순으로 정렬하니깐 내가 최근에 조회한게 밑으로 내려가네"). 머리를 눌러 건 정렬이 훅에 남아
+   * 다음 탭까지 따라갔다 — 최근조회의 「본 순서」가 거래대금 ▼ 에 덮였다. 조회마다 제 순서(순위)가
+   * 있으니 옮기면 그 순서로 시작하고, 정렬은 그 표에서 다시 건다.
+   */
+  const { reset: resetSort } = sort;
+  useEffect(() => {
+    resetSort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rankKey]);
 
   /*
    * 한 장씩 잘라 그린다. **거른 뒤·정렬한 뒤**에 자른다 — 거르기 전에 자르면

@@ -7,6 +7,8 @@ export interface SortState<T> {
   sortKey: string | null;
   sortDir: SortDir;
   toggle: (columnKey: string, accessor: (row: T) => string | number) => void;
+  /** 원래 순서로 — 조회(탭)가 바뀔 때 부른다. 다른 표의 정렬이 새 표를 덮으면 안 된다 (2026-09-23) */
+  reset: () => void;
 }
 
 /**
@@ -59,7 +61,12 @@ export function useSortableTable<T>(rows: T[]): SortState<T> {
     });
   }, [rows, key, dir, accessors]);
 
-  return { sorted, sortKey: key, sortDir: dir, toggle };
+  function reset() {
+    setKey(null);
+    setDir(null);
+  }
+
+  return { sorted, sortKey: key, sortDir: dir, toggle, reset };
 }
 
 /** 정렬 가능한 표 헤더 셀 */
