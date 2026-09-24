@@ -104,7 +104,19 @@ export function installApiGuard(): void {
     }
   };
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const res = await orig(input, init);
+    let res: Response;
+    try {
+      res = await orig(input, init);
+    } catch (e) {
+      /* 직접 fetch 하는 컴포넌트도 「Failed to fetch」 대신 사람 말을 받는다 (2026-09-24, api.ts req 와 같은 말) */
+      if (pathOf(input).startsWith("/api/") && e instanceof TypeError) {
+        noteFetchFailure();
+        throw new Error(
+          "서버에 닿지 못했습니다 — 회선이 끊겼거나 로그인이 풀렸을 수 있습니다. 새로고침해 보세요 (IP 주소로 붙었다면 Tailscale 이 켜져 있는지)",
+        );
+      }
+      throw e;
+    }
     if (!pathOf(input).startsWith("/api/")) return res;
     if (!/text\/html/i.test(res.headers.get("content-type") ?? "")) return res;
     if (res.ok) {

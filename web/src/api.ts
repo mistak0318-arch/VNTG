@@ -43,6 +43,17 @@ async function req(path: string, init?: RequestInit): Promise<Response> {
     return res;
   } catch (e) {
     noteFetchFailure();
+    /*
+     * 「Failed to fetch」는 사람 말이 아니다 (2026-09-24 10:22 — 벤티지 폰 캡처: 주요뉴스 탭에 그 한 줄뿐).
+     * 브라우저의 TypeError 는 **서버에 닿지 못했다**는 뜻 하나다 — 회선이 끊겼거나, Cloudflare 로그인이 풀려
+     * 리다이렉트를 CORS 가 막았거나, IP 주소로 붙었는데 Tailscale 이 꺼졌거나. 어느 쪽인지는 위 `noteFetchFailure`
+     * 가 한 번 더 두드려 가려 준다(풀렸으면 띠가 선다). 여기서는 그 셋을 한 줄로 말하고 새로고침을 권한다.
+     */
+    if (e instanceof TypeError) {
+      throw new Error(
+        "서버에 닿지 못했습니다 — 회선이 끊겼거나 로그인이 풀렸을 수 있습니다. 새로고침해 보세요 (IP 주소로 붙었다면 Tailscale 이 켜져 있는지)",
+      );
+    }
     throw e;
   }
 }
