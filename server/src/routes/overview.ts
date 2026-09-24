@@ -12,6 +12,7 @@ import {
   type SectionName,
 } from "../marketOverview.js";
 import { krxAfterMarket, sessionOf, type Session } from "../marketHours.js";
+import { isTradingDay } from "../tradingDay.js";
 
 /**
  * 장 상태 판정 (한국 시간 기준, 공휴일은 판별하지 않음).
@@ -47,8 +48,11 @@ function marketStatus(): {
   session: Session;
 } {
   const now = new Date();
-  const day = now.getDay();
-  if (day === 0 || day === 6)
+  /*
+   * 주말만 보고 있었다 — **KRX 휴장표는 안 봤다** (2026-09-24 추석 10:26 실측: 시황이 「● 장중 · 정규장」에
+   * 어제 값을 띄웠다. 벤티지 캡처). `tradingDay` 는 서버 어디서나 쓰는 달력인데 이 라벨만 빠져 있었다.
+   */
+  if (!isTradingDay(now))
     return { state: "holiday", label: "휴장", live: false, venue: "none", session: "마감" };
 
   const minutes = now.getHours() * 60 + now.getMinutes();
