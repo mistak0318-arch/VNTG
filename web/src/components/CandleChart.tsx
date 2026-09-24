@@ -352,9 +352,15 @@ export function CandleChart({
   fitKey = "",
   lockScope,
   trades,
+  digits = 0,
+  prevClose = null,
 }: {
   candles: Candle[];
   intraday?: boolean;
+  /** 띠·말풍선의 소수 자릿수 — 원화 0, 달러·지수 2 (2026-09-24) */
+  digits?: number;
+  /** 전일 종가 — 있으면 분봉 하루 묶음의 기준이 시가가 아니라 이것(「전일대비」). 해외 시트가 야후 meta 로 준다 */
+  prevClose?: number | null;
   /** 내 체결 — 있으면 봉에 매수▲·매도▼ 를 붙인다 (복기) */
   trades?: TradeMark[];
   /** 자물쇠를 이 차트만의 것으로 — 보드 카드가 인스턴스 id 를 준다. 없으면 전역 */
@@ -408,6 +414,11 @@ export function CandleChart({
    * 리사이저도 이걸 불러야 해서(띠를 막 켰을 때) 클로저 밖으로 꺼낸다.
    */
   const fillBarRef = useRef<((i: number, whole?: boolean) => void) | null>(null);
+  /* 자릿수·전일 종가는 렌더마다 갱신되는 ref 로 — 차트 effect 를 다시 만들지 않고 띠가 최신 값을 본다 */
+  const digitsRef = useRef(digits);
+  digitsRef.current = digits;
+  const prevCloseRef = useRef<number | null>(prevClose);
+  prevCloseRef.current = prevClose;
   /** 리사이저 — 십자선이 「좁음」 판정이 어긋난 걸 발견하면 여기로 다시 부른다 */
   const resizeRef = useRef<(() => void) | null>(null);
   const { theme } = useAppearance();
@@ -950,7 +961,11 @@ export function CandleChart({
      * 이동평균은 값과 함께 `(MA − 종가) / 종가` 이격을 보여준다. 종가가 이평선에서
      * 얼마나 떨어져 있는지가 이평선 값 자체보다 판단에 쓰인다.
      */
-    const won = (v: number) => Math.round(v).toLocaleString("ko-KR");
+    /* 소수 자릿수는 부르는 쪽이 정한다 — 원화 0, 달러·지수 2 (2026-09-24: 해외 띠가 185.34 를 「185」로 적었다) */
+    const won = (v: number) => {
+      const d = digitsRef.current;
+      return d > 0 ? v.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }) : Math.round(v).toLocaleString("ko-KR");
+    };
     const rate = (v: number, base: number) => {
       if (!base) return "";
       const r = ((v - base) / base) * 100;
@@ -1010,7 +1025,13 @@ export function CandleChart({
           }
         : one;
       const prev = whole ? undefined : rows[i - 1];
-      const base = prev ? prev.close : cur.open;
+      /*
+       * 기준: 봉 하나면 앞 봉 종가. 하루를 묶을 때는 **전일 종가가 있으면 그것**(해외 시트가 야후 meta 로 준다 —
+       * 2026-09-24 SKHY 캡처: 큰 숫자는 −2.08% 전일 대비인데 띠는 −0.09% 시가대비라 "하나도 안 맞는" 것으로 보였다),
+       * 없으면 첫 봉 시가(국내 분봉 — 전일 종가를 이 자리에서 모른다).
+       */
+      const pc = prevCloseRef.current;
+      const base = prev ? prev.close : whole && pc != null && pc > 0 ? pc : cur.open;
       /*
        * 시·고·저에도 **전일 종가 대비 등락률**을 붙인다 (2026-09-22 — 벤티지: "시고저에도 등락률 표시
        * 해줘야지"). 고가 +5%·현재 +1% 면 「떴다가 밀렸다」가 숫자 둘로 바로 읽힌다 — 말풍선이
@@ -1024,7 +1045,7 @@ export function CandleChart({
        * 묶어서 볼 때는 **시각이 아니라 날짜**를 적고, 기준이 시가라는 것을 밝힌다.
        */
       const dateShort = whole
-        ? `${tooltipDate(rows[rows.length - 1].time, false).replace(/^\d{4}\//, "")} 시가대비`
+        ? `${tooltipDate(rows[rows.length - 1].time, false).replace(/^\d{4}\//, "")} ${pc != null && pc > 0 ? "전일대비" : "시가대비"}`
         : tooltipDate(cur.time, intraday).replace(/^\d{4}\//, "");
       const head =
         `<span class="cb-d">${dateShort}</span>` +
@@ -1051,8 +1072,9 @@ export function CandleChart({
       if (code && i === rows.length - 1) {
         const s = peekTickStrength(code);
         if (s === undefined) {
+          /* `whole` 을 그대로 — 여기서 빠뜨려서 하루 묶음이 마지막 봉 하나로 바뀌었다 (2026-09-24 SKHY 캡처) */
           void getTickStrength(code).then(() => {
-            if (barShownIdx === i) fillBar(i);
+            if (barShownIdx === i) fillBar(i, whole);
           });
         } else if (s !== null) {
           sub.push(`<span class="cb-c"><i>체결강도</i><b class="${s > 100 ? "up" : s < 100 ? "down" : ""}">${s.toFixed(1)}</b></span>`);
@@ -1734,6 +1756,11 @@ export function CandleChart({
      * 그래서 차트를 다시 만드는 조건을 여기에도 그대로 적는다.
      */
   }, [candles, fitKey, showExtremes, maKey, prefs.bbOn, prefs.bbPeriod, prefs.bbStdDev, trades, intraday]);
+
+  /* 전일 종가·자릿수가 봉보다 늦게 오면 띠만 다시 그린다 (2026-09-24) */
+  useEffect(() => {
+    if (narrowRef.current) fillBarRef.current?.(dataRef.current.length - 1, intraday);
+  }, [prevClose, digits, intraday]);
 
   if (candles.length === 0) {
     return <div className="empty">차트 데이터 없음</div>;

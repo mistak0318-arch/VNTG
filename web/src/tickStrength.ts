@@ -13,7 +13,13 @@ const TTL_MS = 10_000;
 const cache = new Map<string, { at: number; v: number | null }>();
 const inflight = new Map<string, Promise<number | null>>();
 
+/** 국내 6자리 코드만 있는 값이다 — 해외 심볼(SKHY·^NDX)로 키움을 두드리면 헛조회다 (2026-09-24) */
+export function hasTickStrength(code: string): boolean {
+  return /^\d{6}$/.test(code.replace(/_(AL|NX)$/i, ""));
+}
+
 export function getTickStrength(code: string): Promise<number | null> {
+  if (!hasTickStrength(code)) return Promise.resolve(null);
   const hit = cache.get(code);
   if (hit && Date.now() - hit.at < TTL_MS) return Promise.resolve(hit.v);
   const going = inflight.get(code);
@@ -33,6 +39,7 @@ export function getTickStrength(code: string): Promise<number | null> {
 
 /** 캐시에 있는 값만 — 그리는 쪽이 동기로 먼저 쓰고, 없으면 `getTickStrength` 를 걸어 둔다 */
 export function peekTickStrength(code: string): number | null | undefined {
+  if (!hasTickStrength(code)) return null;
   const hit = cache.get(code);
   return hit && Date.now() - hit.at < TTL_MS ? hit.v : undefined;
 }

@@ -871,6 +871,9 @@ export function YahooChartSheet({
                 fitKey={`${target.symbol}:${range}:${longRange ? "L" : "S"}:${futSpanDays ?? ""}`}
                 name={target.label}
                 code={target.symbol}
+                /* 달러·지수는 소수 둘 · 띠의 하루 묶음 기준은 야후 전일 종가 (2026-09-24 SKHY 캡처: 185.34 가 「185 −0.09%」였다) */
+                digits={digits}
+                prevClose={range === "1d" ? (data?.prevClose ?? null) : null}
               />
             ) : null}
 
