@@ -5,7 +5,7 @@
  *   업종·동종(키움) · 국내 연동(우리 것). 출처를 칸마다 적고, 못 받은 조각은 「못 받음」으로 남긴다.
  */
 import { useEffect, useState } from "react";
-import { api, signClass, type UsRich, type FinPeriod } from "../../api";
+import { api, signClass, type UsRich, type FinPeriod, type UsConsensus } from "../../api";
 
 export type UsRichTab = "fin" | "value" | "flow" | "news" | "sector" | "kr";
 
@@ -260,9 +260,25 @@ function FinTable({ rows }: { rows: FinPeriod[] }) {
 function ValueTab({ data, Missing }: { data: UsRich; Missing: MissingC }) {
   const op = data.opinion;
   const ex = data.extra;
+  /*
+   * **두 번째 눈 — 네이버(리피니티브) 컨센서스** (2026-09-24 네이버 맞대기). 야후와 같은 것을 다른 집계로 준다:
+   * 목표가 평균·최고·최저, 의견 평균(1~5, **5 가 적극매수** — 야후와 반대 척도). 둘이 갈리면 그게 정보다.
+   */
+  const [nv, setNv] = useState<UsConsensus | null>(null);
+  useEffect(() => {
+    let alive = true;
+    api
+      .usConsensus(data.symbol)
+      .then((r) => alive && setNv(r.consensus))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [data.symbol]);
   if (!op) return <Missing part="야후 의견·실적" />;
   const recKo: Record<string, string> = { strong_buy: "적극 매수", buy: "매수", hold: "보유", underperform: "비중 축소", sell: "매도" };
   const upside = op.currentPrice && op.targetMean ? ((op.targetMean - op.currentPrice) / op.currentPrice) * 100 : null;
+  const nvUp = op.currentPrice && nv?.targetMean ? ((nv.targetMean - op.currentPrice) / op.currentPrice) * 100 : null;
   const t0 = op.trend[0];
   const tot = t0 ? t0.strongBuy + t0.buy + t0.hold + t0.sell + t0.strongSell : 0;
   return (
@@ -271,6 +287,15 @@ function ValueTab({ data, Missing }: { data: UsRich; Missing: MissingC }) {
         <Card label="애널리스트 목표가(평균)" v={op.targetMean !== null ? `$${numf(op.targetMean)}` : "-"} sub={upside !== null ? `지금 대비 ${pct(upside)} · ${op.analysts ?? "?"}명` : ""} src="야후" cls={signClass(upside ?? 0)} />
         <Card label="목표가 범위" v={op.targetLow !== null && op.targetHigh !== null ? `$${numf(op.targetLow, 0)} ~ $${numf(op.targetHigh, 0)}` : "-"} sub={op.targetMedian !== null ? `중앙값 $${numf(op.targetMedian, 0)}` : ""} src="야후" />
         <Card label="투자의견" v={recKo[op.recommendationKey] ?? op.recommendationKey ?? "-"} sub={op.recommendationMean !== null ? `평점 ${op.recommendationMean.toFixed(2)} (1 적극매수 ~ 5 매도)` : ""} src="야후" />
+        {nv && (
+          <Card
+            label="목표가 · 의견 (다른 집계)"
+            v={nv.targetMean !== null ? `$${numf(nv.targetMean)}` : "-"}
+            sub={`${nvUp !== null ? `지금 대비 ${pct(nvUp)} · ` : ""}${nv.targetLow !== null && nv.targetHigh !== null ? `$${numf(nv.targetLow, 0)} ~ $${numf(nv.targetHigh, 0)} · ` : ""}${nv.recommMean !== null ? `의견 ${nv.recommMean.toFixed(2)}/5 (5 적극매수)` : ""}${nv.createDate ? ` · ${nv.createDate.slice(5)}` : ""}`}
+            src="네이버·리피니티브"
+            cls={signClass(nvUp ?? 0)}
+          />
+        )}
         <Card label="선행 PER · PEG" v={`${numf(op.forwardPE, 1)} · ${numf(op.peg, 2)}`} sub={`후행 PER ${numf(op.trailingPE, 1)}`} src="야후" />
         <Card label="베타 · 숏" v={`β ${numf(op.beta, 2)}`} sub={`숏 비율 ${numf(op.shortRatio, 1)}일 · 유동주식의 ${pct(op.shortPctFloat, 1, true)}`} src="야후" />
         <Card label="EV / EBITDA" v={numf(op.evToEbitda, 1)} sub={`EV ${usd(op.enterpriseValue)} · FCF ${usd(op.freeCashflow)}`} src="야후" />

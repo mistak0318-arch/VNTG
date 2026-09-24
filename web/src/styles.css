@@ -2631,6 +2631,14 @@ body {
 .ss-none { font-size: 0.75rem; color: var(--muted); }
 .ss-sep { height: 1px; background: var(--border); margin: 0.4rem 0; }
 .ss-note { font-size: 0.7rem; color: var(--muted); margin-top: 0.3rem; line-height: 1.5; }
+/* 앞을 보는 값 — 네이버 컨센서스 한 덩어리 (2026-09-24) */
+.ss-outlook { margin-top: 0.6rem; padding-top: 0.5rem; border-top: 1px dashed var(--border); }
+.ss-outlook-row { display: flex; flex-wrap: wrap; gap: 0.35rem 0.9rem; font-size: 0.8rem; line-height: 1.6; }
+.ss-outlook-row + .ss-outlook-row { margin-top: 0.15rem; }
+.ss-outlook-row b { font-weight: 700; }
+.ss-outlook-row em { font-style: normal; font-weight: 600; }
+.ss-outlook-row i { font-style: normal; color: var(--muted); font-size: 0.72rem; }
+.ss-outlook-k { color: var(--muted); font-size: 0.72rem; align-self: center; }
 
 .ss-flow { display: grid; grid-template-columns: 3.4rem 1fr 5.2rem; align-items: center; gap: 0.4rem; padding: 0.12rem 0; }
 .ss-flow-k { font-size: 0.75rem; color: var(--muted); }

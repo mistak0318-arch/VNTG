@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, fmtNum, signClass, type StockSummaryData } from "../api";
+import { api, fmtNum, signClass, type KrOutlook, type StockSummaryData } from "../api";
 import { useTabActive } from "../tabActive";
 
 /**
@@ -467,9 +467,99 @@ export function StockSummaryPanel({ code }: { code: string }) {
         </div>
       </div>
 
+      {/* 앞을 보는 값 — 네이버 컨센서스·추정치 (2026-09-24) */}
+      <OutlookStrip code={code} price={typeof (d as unknown as { price?: unknown }).price === "number" ? (d as unknown as { price: number }).price : null} />
+
       {/* 못 받은 조각은 **못 받았다고 적는다** — 0 으로 보이면 「안 움직였다」로 읽힌다 */}
       {d.missing.length > 0 && (
         <div className="ss-note">⚠️ {d.missing.join(" · ")} 을(를) 못 받았습니다.</div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * **앞을 보는 값 한 줄** (2026-09-24 네이버 맞대기 — 「우리에 없는 것」). 여태 이 화면은 전부 지나간 값(수급·실적)이었다.
+ * 네이버 컨센서스: 목표주가 평균(지금 대비)·투자의견(1~5, 5 적극매수)·**추정 PER/EPS**·다음 해 추정 매출·영업이익·순이익
+ * (마지막 실적 해 대비 %) · 같은 업종 종목의 오늘 등락. 6시간 캐시라 조회 부담 없음. 못 받으면 줄 자체가 없다.
+ */
+function OutlookStrip({ code, price }: { code: string; price: number | null }) {
+  const [o, setO] = useState<KrOutlook | null>(null);
+  useEffect(() => {
+    let alive = true;
+    setO(null);
+    api
+      .naverOutlook(code)
+      .then((r) => alive && setO(r.outlook))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [code]);
+  if (!o) return null;
+  const won = (v: number | null) => (v === null ? "-" : Math.round(v).toLocaleString("ko-KR"));
+  /** 억원 → 조/억 */
+  const eok = (v: number | null) => (v === null ? "-" : Math.abs(v) >= 10_000 ? `${(v / 10_000).toFixed(v >= 100_000 ? 0 : 1)}조` : `${Math.round(v).toLocaleString("ko-KR")}억`);
+  const growth = (a: number | null, b: number | null) => (a !== null && b !== null && b !== 0 ? `${a - b >= 0 ? "+" : ""}${(((a - b) / Math.abs(b)) * 100).toFixed(0)}%` : null);
+  const up = price && o.targetMean ? ((o.targetMean - price) / price) * 100 : null;
+  const cls = (v: number | null) => (v === null ? "" : v > 0 ? "positive" : v < 0 ? "negative" : "");
+  const hasAny = o.targetMean !== null || o.estPer !== null || o.est !== null || o.peers.length > 0;
+  if (!hasAny) return null;
+  return (
+    <div className="ss-outlook">
+      <div className="ss-sub">
+        앞을 보는 값 <i>네이버 컨센서스{o.consensusDate ? ` · ${o.consensusDate.slice(5)}` : ""}</i>
+      </div>
+      <div className="ss-outlook-row num">
+        {o.targetMean !== null && (
+          <span title="증권사 목표주가 평균 — 지금 가격 대비">
+            목표주가 <b>{won(o.targetMean)}</b>
+            {up !== null && <em className={cls(up)}> {up > 0 ? "+" : ""}{up.toFixed(0)}%</em>}
+          </span>
+        )}
+        {o.recommMean !== null && (
+          <span title="투자의견 평균 — 1 매도 ~ 5 적극매수">
+            의견 <b>{o.recommMean.toFixed(1)}</b>/5
+          </span>
+        )}
+        {o.estPer !== null && (
+          <span title={`추정 EPS 기준 PER${o.per !== null ? ` — 지금 PER ${o.per}배` : ""}`}>
+            추정 PER <b>{o.estPer}</b>배{o.per !== null && <i> (현 {o.per})</i>}
+          </span>
+        )}
+        {o.estEps !== null && (
+          <span title={`추정 EPS${o.eps !== null ? ` — 최근 EPS ${won(o.eps)}원` : ""}`}>
+            추정 EPS <b>{won(o.estEps)}</b>
+          </span>
+        )}
+      </div>
+      {o.est && (
+        <div className="ss-outlook-row num">
+          <span className="ss-outlook-k">{o.est.year} 추정</span>
+          <span title={o.last ? `${o.last.year} 실적 ${eok(o.last.sales)}` : undefined}>
+            매출 <b>{eok(o.est.sales)}</b>
+            {o.last && growth(o.est.sales, o.last.sales) && <em className={cls(o.est.sales! - o.last.sales!)}> {growth(o.est.sales, o.last.sales)}</em>}
+          </span>
+          <span title={o.last ? `${o.last.year} 실적 ${eok(o.last.op)}` : undefined}>
+            영업이익 <b>{eok(o.est.op)}</b>
+            {o.last && growth(o.est.op, o.last.op) && <em className={cls(o.est.op! - o.last.op!)}> {growth(o.est.op, o.last.op)}</em>}
+          </span>
+          <span title={o.last ? `${o.last.year} 실적 ${eok(o.last.net)}` : undefined}>
+            순이익 <b>{eok(o.est.net)}</b>
+            {o.last && growth(o.est.net, o.last.net) && <em className={cls(o.est.net! - o.last.net!)}> {growth(o.est.net, o.last.net)}</em>}
+          </span>
+          {o.last && <i className="pt-n">({o.last.year} 실적 대비)</i>}
+        </div>
+      )}
+      {o.peers.length > 0 && (
+        <div className="ss-outlook-row">
+          <span className="ss-outlook-k">같은 업종</span>
+          {o.peers.map((p) => (
+            <span key={p.code} className="num" title={p.marketCap !== null ? `시총 ${eok(p.marketCap / 100)}` : undefined}>
+              {p.name} <em className={cls(p.changeRate)}>{p.changeRate === null ? "-" : `${p.changeRate > 0 ? "+" : ""}${p.changeRate.toFixed(2)}%`}</em>
+            </span>
+          ))}
+        </div>
       )}
     </div>
   );

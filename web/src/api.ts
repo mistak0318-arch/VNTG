@@ -1770,6 +1770,9 @@ export const api = {
       candles: { t: string; open: number; high: number; low: number; close: number; volume: number }[];
       error: string | null;
     }>(`/api/market/us-chart/${encodeURIComponent(symbol)}?period=${period}`),
+  /** 네이버 컨센서스·추정치 (2026-09-24) — 국내: 추정 PER·EPS·목표주가·다음 해 추정·같은 업종 / 미국: 목표주가 평균·최고·최저 */
+  naverOutlook: (code: string) => getJson<{ outlook: KrOutlook | null }>(`/api/market/naver-outlook/${encodeURIComponent(code)}`),
+  usConsensus: (symbol: string) => getJson<{ consensus: UsConsensus | null }>(`/api/market/us-consensus/${encodeURIComponent(symbol)}`),
   /** `I` = 당일 1분봉 (2026-09-01). 나머지는 기간별시세 일·주·월봉 */
   futuresChart: (
     code: string,
@@ -4593,6 +4596,37 @@ export interface EstimateResult {
   opinion: string | null;
   estimatedAt: string | null;
   columns: EstimateColumn[];
+}
+
+/** 네이버 국내 컨센서스·추정치 (서버 naverOutlook.ts 와 같은 모양) */
+export interface KrOutlook {
+  code: string;
+  per: number | null;
+  pbr: number | null;
+  eps: number | null;
+  bps: number | null;
+  dividendYield: number | null;
+  estPer: number | null;
+  estEps: number | null;
+  targetMean: number | null;
+  /** 1~5, 5 가 적극매수 */
+  recommMean: number | null;
+  consensusDate: string | null;
+  /** 억원 */
+  est: { year: string; sales: number | null; op: number | null; net: number | null } | null;
+  last: { year: string; sales: number | null; op: number | null; net: number | null } | null;
+  /** 시총은 백만원 */
+  peers: { code: string; name: string; changeRate: number | null; marketCap: number | null }[];
+}
+export interface UsConsensus {
+  reuters: string;
+  /** 1 매도 ~ 5 적극매수 (리피니티브 척도) */
+  recommMean: number | null;
+  targetMean: number | null;
+  targetHigh: number | null;
+  targetLow: number | null;
+  currency: string;
+  createDate: string;
 }
 
 export interface FinanceResult {

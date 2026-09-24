@@ -41,6 +41,7 @@ import {
   themesOfStock,
 } from "../naverThemes.js";
 import { futuresCandles } from "../kospiFutures.js";
+import { krOutlook, usConsensus } from "../naverOutlook.js";
 import { usCandles, usDetail } from "../usDetail.js";
 import { orderBook } from "../orderBook.js";
 import { brokerFlow } from "../brokerFlow.js";
@@ -1389,6 +1390,26 @@ export function createMarketRouter(client: KiwoomClient): Router {
         return;
       }
       res.json(await usEtfHoldings(symbol));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /*
+   * 네이버 컨센서스·추정치 (2026-09-24 네이버 맞대기 — 「우리에 없는 것」). 조회 0회, 6시간 캐시.
+   *   /naver-outlook/:code    국내 — 추정 PER·EPS, 목표주가·의견, 다음 해 추정 매출·영업이익·순이익, 같은 업종
+   *   /us-consensus/:symbol   미국 — 투자의견·목표주가 평균/최고/최저 (리피니티브)
+   */
+  router.get("/naver-outlook/:code", async (req, res, next) => {
+    try {
+      res.json({ outlook: await krOutlook(String(req.params.code)) });
+    } catch (err) {
+      next(err);
+    }
+  });
+  router.get("/us-consensus/:symbol", async (req, res, next) => {
+    try {
+      res.json({ consensus: await usConsensus(String(req.params.symbol)) });
     } catch (err) {
       next(err);
     }
