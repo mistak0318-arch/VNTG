@@ -1,1 +1,0 @@
-import { fetchQuotes } from "../src/globalMarket.js"; const m = await fetchQuotes(["^NDX","^SOX","^GSPC","^RUT"]); for (const [k,v] of m) console.log(k, v.price, v.changeRate?.toFixed(2)); process.exit(0);
