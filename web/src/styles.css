@@ -8535,6 +8535,8 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
  * 떨어뜨려 놓으면 쓸모가 없다. 작고 흐리게 둬서 정규장 값이 먼저 읽히게 한다.
  */
 .uw-day { font-size: 0.7333rem; opacity: .75; }
+/* 등락률 칸 안의 당일 봉 (2026-09-24) — 숫자 오른쪽에 붙이고 세로 가운데 */
+.uw-cd { display: inline-flex; align-items: center; vertical-align: middle; margin-left: 6px; }
 .uw-day-h { font-size: 0.6667rem; opacity: .6; font-weight: 400; }
 
 /*

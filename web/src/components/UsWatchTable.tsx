@@ -1,4 +1,5 @@
 import type { UsQuoteRow } from "../api";
+import { MiniCandle } from "./MiniCandle";
 import { sessionAt, sideQuote, usFeActive, usSideSession } from "../usSession";
 import { flagOfSymbol } from "../yahooFlag";
 import { useDragOrder } from "../useDragOrder";
@@ -448,7 +449,18 @@ export function UsWatchTable({
                       여기에 「지금 살아 있는 세션」을 쓰면 왼쪽 가격은 정규장인데 등락률만
                       시간외가 되어 짝이 어긋난다. 괄호로 둘 다 보여주므로 나눌 필요가 없다.
                     */
-                    case "rate":
+                    case "rate": {
+                      /*
+                       * **당일 봉** (2026-09-24 — 벤티지: "해외주식도 등락률 옆에 봉좀 표시해줘"). 국내 시세분석과 같은
+                       * `MiniCandle`. 시·고·저는 한투 본 시세(정규장), 종가는 지금 값(빠른 시세가 붙었으면 그것)이고 고·저도
+                       * 거기까지 늘린다. 전일 종가는 정규장 현재가와 등락률에서 되짚는다. 시·고·저가 없으면(임시 줄) 「-」.
+                       */
+                      const cNow = shownPrice ?? s.price;
+                      const pc = s.price != null && s.changeRate != null && s.changeRate > -100 ? s.price / (1 + s.changeRate / 100) : 0;
+                      const cd =
+                        s.open != null && s.high != null && s.low != null && cNow != null
+                          ? { o: s.open, h: Math.max(s.high, cNow), l: Math.min(s.low, cNow), c: cNow, pc }
+                          : null;
                       return (
                         <td
                           key={c.key}
@@ -464,8 +476,12 @@ export function UsWatchTable({
                               ({pct(side.changeRate)})
                             </span>
                           )}
+                          <span className="uw-cd" title="당일 봉 — 세로는 오늘 고가~저가, 색은 시가 대비, 점선은 전일 종가">
+                            <MiniCandle d={cd} />
+                          </span>
                         </td>
                       );
+                    }
                     case "won":
                       return (
                         <td key={c.key} className="num pt-n">
