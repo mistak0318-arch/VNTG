@@ -1,4 +1,5 @@
 import { recordApiCall } from "./apiUsage.js";
+import { sparkPrevClose } from "./usFastQuotes.js";
 
 /**
  * 줄 단위 경고.
@@ -471,12 +472,18 @@ async function fetchOne(target: {
       let cur = ts.length - 1;
       while (cur >= 0 && ts[cur] > mt + 60) cur--;
       const from = cur >= 0 && mt - ts[cur] < 24 * 3600 ? cur - 1 : cur;
-      for (let i = from; i >= 0; i--) {
-        const c = closes[i];
-        if (c === null || c === undefined || !Number.isFinite(c)) continue;
-        prev = c;
-        break;
-      }
+      /*
+       * ⚠️ **바로 앞 봉이 비면 더 거슬러 가지 않는다** (2026-09-24 10:29 — 벤티지: 네이버 나스닥100 −0.85%·SOX −1.23%
+       * 인데 우리는 −0.04%·+0.81%). 야후 5일 일봉이 9/22 를 `close=null` 로 줬고(네 지수 전부), 이 루프가 그걸
+       * 건너뛰어 **9/21 종가**를 전일로 잡았다. S&P 는 9/21≈9/22 라 우연히 맞아 보였고 나머지는 틀어졌다.
+       * 「그제」는 전일이 아니다 — 앞 봉이 비면 spark 의 `previousClose`(실측: 네이버와 소수점까지 같다)로 간다.
+       */
+      const c0 = from >= 0 ? closes[from] : undefined;
+      if (c0 !== null && c0 !== undefined && Number.isFinite(c0)) prev = c0;
+    }
+    if (!Number.isFinite(prev)) {
+      const spark = await sparkPrevClose(target.symbol);
+      if (spark !== null) prev = spark;
     }
     if (!Number.isFinite(prev)) prev = Number(meta.chartPreviousClose ?? meta.previousClose);
     if (Number.isFinite(price)) base.price = price;

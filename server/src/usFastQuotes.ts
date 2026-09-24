@@ -85,3 +85,29 @@ export async function usFastQuotes(symbols: string[]): Promise<Map<string, FastQ
   }
   return out;
 }
+
+/*
+ * **전일 종가 하나만** — 5일 일봉의 앞 봉이 `null` 로 올 때의 대체 (2026-09-24, globalMarket.ts 참조).
+ * spark 의 `previousClose` 는 실측으로 네이버와 소수점까지 같았다(^NDX 30732.396 · ^SOX 12689.82).
+ * 5분 캐시 — 전일 종가는 하루에 한 번 바뀐다.
+ */
+const prevCache = new Map<string, { at: number; v: number | null }>();
+export async function sparkPrevClose(symbol: string): Promise<number | null> {
+  const hit = prevCache.get(symbol);
+  if (hit && Date.now() - hit.at < 5 * 60_000) return hit.v;
+  let v: number | null = null;
+  try {
+    const qs = new URLSearchParams({ symbols: symbol, range: "1d", interval: "5m" });
+    const res = await fetch(`${SPARK}?${qs}`, { headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(6000) });
+    void recordApiCall("yahoo", "spark", res.ok ? "ok" : res.status === 429 ? "rateLimited" : "failed");
+    if (res.ok) {
+      const body = (await res.json()) as Record<string, { previousClose?: number }>;
+      const p = Number(body[symbol]?.previousClose);
+      if (Number.isFinite(p) && p > 0) v = p;
+    }
+  } catch {
+    /* 없으면 없는 대로 — 부르는 쪽이 다음 후보로 간다 */
+  }
+  prevCache.set(symbol, { at: Date.now(), v });
+  return v;
+}
