@@ -101,6 +101,12 @@ const STEPS: { key: string; label: string; why: string; heavy?: string }[] = [
     label: "⑭ 애프터 반응 기록 (20:10)",
     why: "오늘 편입된 초록이 애프터(16:00~20:00)에서 어떻게 갔나 — 정규장 종가 대비 애프터 종가. 12월 검증 재료, 조회 0회",
   },
+  {
+    key: "naverAudit",
+    label: "⑮ 네이버 대조 (20:10)",
+    why: "표본 300종목의 오늘 일봉(애프터 종가·고저·거래량)·어제 정규장 종가·오늘 수급을 네이버 일별표와 맞댑니다. 우리 값이 맞는지를 매일 재는 자리, 조회 0회",
+    heavy: "약 1분",
+  },
 ];
 
 function dur(ms: number): string {
@@ -181,7 +187,7 @@ export function AfterClosePanel() {
       ? STEPS.filter((s) => steps.includes(s.key))
           .map((s) => s.label)
           .join(" · ")
-      : "전체 (①~⑪ · 마무리 ⑫~⑭는 20:10 에 따로)";
+      : "전체 (①~⑪ · 마무리 ⑫~⑮는 20:10 에 따로)";
     if (!window.confirm(`${names} 을(를) 지금 돌립니다.\n\n장중에는 다른 화면이 느려집니다. 진행할까요?`)) {
       return;
     }

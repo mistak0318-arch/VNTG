@@ -9,6 +9,7 @@ import { buildStockMarks, loadStockMarks, marksProgress } from "./stockMarks.js"
 import { runAutoPresets } from "./condAuto.js";
 import { doneToday, markToday } from "./dayMark.js";
 import { recordAfterReaction } from "./afterReaction.js";
+import { auditNote, runNaverAudit } from "./naverAudit.js";
 import { runSuperSignal } from "./superSignal.js";
 import { runListTrack } from "./listTrack.js";
 import { marketPulse } from "./marketPulse.js";
@@ -111,10 +112,11 @@ const STEPS: { key: string; label: string }[] = [
   { key: "barsFinal", label: "일봉 마무리" },
   { key: "ledgerFinal", label: "공매도·대차 확정" },
   { key: "afterReaction", label: "애프터 반응 기록" },
+  { key: "naverAudit", label: "네이버 대조" },
 ];
 
 /** 마무리 회차에서만 도는 단계 — 정규 회차(`only` 없이 부를 때)에서는 빠진다 */
-const WRAP_KEYS = new Set(["barsFinal", "ledgerFinal", "afterReaction"]);
+const WRAP_KEYS = new Set(["barsFinal", "ledgerFinal", "afterReaction", "naverAudit"]);
 
 export interface StepResult {
   key: string;
@@ -830,6 +832,13 @@ export async function runAfterClose(
       return r.rows === 0 ? "오늘 편입 없음" : `${r.rows}종목 · 애프터 값 ${r.withAfter}${r.avgAfterPct !== null ? ` · 평균 ${r.avgAfterPct > 0 ? "+" : ""}${r.avgAfterPct}%` : ""}`;
     });
 
+  /*
+   * ⑮ **네이버 대조** (2026-09-24) — 마무리 회차 맨 끝. 오늘 일봉(애프터 종가·고저·거래량)·어제 정규장 종가·오늘 수급을
+   * 네이버 일별표와 맞댄다. 조회 0회. 우리 값이 맞는지를 **우리가 매일 재는** 자리 — 밖에서는 문단속 뒤라 못 잰다.
+   */
+  if (want("naverAudit"))
+    await step("naverAudit", "네이버 대조", async () => auditNote(await runNaverAudit(day)));
+
   run.running = false;
   run.finishedAt = new Date().toISOString();
   run.at = undefined;
@@ -962,6 +971,7 @@ export function startAfterCloseScheduler(client: KiwoomClient): void {
        */
       if (!regularPending && !(await doneToday("wrapDone"))) {
         const last = await afterCloseLastByStep().catch(() => ({}) as Record<string, StepResult & { day: string }>);
+        /* 네이버 대조는 도장 조건에 안 넣는다 — 네이버가 막혀도 마무리는 끝난 것이다 */
         const done = ["barsFinal", "ledgerFinal", "afterReaction"].every((k) => last[k]?.day === day && last[k]?.ok);
         if (done) {
           await markToday("wrapDone");
@@ -971,7 +981,7 @@ export function startAfterCloseScheduler(client: KiwoomClient): void {
            * 시작 텔레그램이 자정까지 열두 번 간다 — 예컨대 ②원장이 아직 도는 중이라 ledgerFinal 이 던지는 날.
            */
           wrapTry = { day, n: wrapTry.day === day ? wrapTry.n + 1 : 1, at: Date.now() };
-          const r = await runAfterClose(client, true, ["barsFinal", "ledgerFinal", "afterReaction"], "마무리 회차 (일봉·공매도·대차 확정값)").catch(
+          const r = await runAfterClose(client, true, ["barsFinal", "ledgerFinal", "afterReaction", "naverAudit"], "마무리 회차 (일봉·공매도·대차 확정값)").catch(
             (e) => {
               console.error("[afterClose] 마무리 회차 실패 —", e instanceof Error ? e.message : e);
               return null;

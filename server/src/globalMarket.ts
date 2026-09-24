@@ -406,7 +406,7 @@ async function fetchOne(target: {
      * 어제 세션의 등락을 통째로 오늘 것처럼 보였다(ES 실측: 그제 7556.5 → 지금 7697.75 = +1.87%, 인베스팅은
      * 어제 정산가 대비 −). 일봉으로는 「ET 17:00 마감 종가」를 집을 수 없어 시간봉에서 직접 집는다.
      */
-    const is24h = /=F$/i.test(target.symbol) || /^DX-Y\.NYB$/i.test(target.symbol);
+    const is24h = /=F$/i.test(target.symbol) || /^DX-Y\.NYB$/i.test(target.symbol) || /=X$/i.test(target.symbol);
     const url = `${YAHOO_BASE}/${encodeURIComponent(target.symbol)}?range=5d&interval=${is24h ? "60m" : "1d"}`;
     const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
     if (!res.ok) {
@@ -450,6 +450,16 @@ async function fetchOne(target: {
     const closes = r0?.indicators?.quote?.[0]?.close ?? [];
     if (mt && is24h) {
       /*
+       * **정산가가 먼저** (2026-09-24 네이버 맞대기). 아래 시간봉 방식은 「ET 17:00 마지막 체결」을 기준으로 삼는데,
+       * 시장 관례(네이버·인베스팅)는 **정산가**(CME 14:30 ET) 대비다. 실측: WTI 우리 −1.40%(기준 92.71) vs 네이버
+       * −0.73%(기준 92.16); 구리는 부호까지 반대(−0.33 vs +0.23). spark 의 `previousClose` 가 정확히 그 정산가였다
+       * (CL 92.16 · GC 4318.4 · HG 6.7535). 환율(=X)도 24시간물이라 같은 길로. 못 받으면 시간봉 방식으로 떨어진다.
+       */
+      const sp = await sparkPrevClose(target.symbol);
+      if (sp !== null) prev = sp;
+    }
+    if (mt && is24h && !Number.isFinite(prev)) {
+      /*
        * 세션 시작 = 체결 시각 이전의 가장 가까운 **ET 18:00** (서머타임은 Intl 이 안다). 그 앞 마지막 시간봉의
        * 종가가 직전 세션 종가다(ET 16:00 봉 = 16~17시). 주말엔 체결 시각이 금요일 마감이라 목요일 종가가 잡힌다.
        */
@@ -468,7 +478,7 @@ async function fetchOne(target: {
         prev = c;
         break;
       }
-    } else if (mt) {
+    } else if (mt && !is24h) {
       let cur = ts.length - 1;
       while (cur >= 0 && ts[cur] > mt + 60) cur--;
       const from = cur >= 0 && mt - ts[cur] < 24 * 3600 ? cur - 1 : cur;
