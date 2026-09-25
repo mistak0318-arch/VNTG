@@ -42,6 +42,7 @@ import {
 } from "../naverThemes.js";
 import { futuresCandles } from "../kospiFutures.js";
 import { krOutlook, usConsensus } from "../naverOutlook.js";
+import { stockReports } from "../naverResearch.js";
 import { usCandles, usDetail } from "../usDetail.js";
 import { orderBook } from "../orderBook.js";
 import { brokerFlow } from "../brokerFlow.js";
@@ -1403,6 +1404,14 @@ export function createMarketRouter(client: KiwoomClient): Router {
   router.get("/naver-outlook/:code", async (req, res, next) => {
     try {
       res.json({ outlook: await krOutlook(String(req.params.code)) });
+    } catch (err) {
+      next(err);
+    }
+  });
+  /* 종목별 증권사 리포트 — 본문 요약·PDF·목표주가 변경 (2026-09-25, naverResearch.ts) */
+  router.get("/reports/:code", async (req, res, next) => {
+    try {
+      res.json({ reports: await stockReports(String(req.params.code), Math.min(Number(req.query.limit) || 8, 20)) });
     } catch (err) {
       next(err);
     }

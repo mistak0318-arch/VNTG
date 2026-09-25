@@ -2631,6 +2631,27 @@ body {
 .ss-none { font-size: 0.75rem; color: var(--muted); }
 .ss-sep { height: 1px; background: var(--border); margin: 0.4rem 0; }
 .ss-note { font-size: 0.7rem; color: var(--muted); margin-top: 0.3rem; line-height: 1.5; }
+/* 증권사 리포트 목록 (2026-09-25) — 머리는 단추(펼치기), 본문은 문단 */
+.rp { margin-top: 14px; }
+.rp-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.rp-item { border: 1px solid var(--border); border-radius: 10px; background: var(--panel); overflow: hidden; }
+.rp-item.open { border-color: var(--blue); }
+.rp-head { display: grid; grid-template-columns: 9.5rem 1fr auto; gap: 6px 12px; align-items: center; width: 100%; padding: 9px 12px; background: none; border: none; color: var(--text); text-align: left; cursor: pointer; font: inherit; }
+.rp-head:hover { background: var(--panel-2); }
+.rp-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; font-size: 0.8rem; }
+.rp-meta i { font-style: normal; color: var(--muted); font-size: 0.72rem; }
+.rp-op { font-style: normal; font-size: 0.7rem; font-weight: 700; padding: 1px 6px; border-radius: 999px; background: var(--panel-2); }
+.rp-title { font-size: 0.88rem; font-weight: 600; line-height: 1.35; }
+.rp-goal { font-size: 0.8rem; white-space: nowrap; }
+.rp-goal i { font-style: normal; font-size: 0.72rem; }
+.rp-goal em { font-style: normal; font-weight: 700; }
+.rp-body { padding: 4px 14px 12px; border-top: 1px dashed var(--border); font-size: 0.84rem; line-height: 1.65; }
+.rp-body p { margin: 6px 0; }
+.rp-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+@media (max-width: 700px) {
+  .rp-head { grid-template-columns: 1fr; gap: 3px; }
+  .rp-goal { white-space: normal; }
+}
 /* 앞을 보는 값 — 네이버 컨센서스 한 덩어리 (2026-09-24) */
 .ss-outlook { margin-top: 0.6rem; padding-top: 0.5rem; border-top: 1px dashed var(--border); }
 .ss-outlook-row { display: flex; flex-wrap: wrap; gap: 0.35rem 0.9rem; font-size: 0.8rem; line-height: 1.6; }

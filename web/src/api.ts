@@ -1772,6 +1772,8 @@ export const api = {
     }>(`/api/market/us-chart/${encodeURIComponent(symbol)}?period=${period}`),
   /** 네이버 컨센서스·추정치 (2026-09-24) — 국내: 추정 PER·EPS·목표주가·다음 해 추정·같은 업종 / 미국: 목표주가 평균·최고·최저 */
   naverOutlook: (code: string) => getJson<{ outlook: KrOutlook | null }>(`/api/market/naver-outlook/${encodeURIComponent(code)}`),
+  /** 종목별 증권사 리포트 — 본문 요약·PDF·목표주가 변경 (2026-09-25) */
+  stockReports: (code: string, limit = 8) => getJson<{ reports: StockReport[] }>(`/api/market/reports/${encodeURIComponent(code)}?limit=${limit}`),
   usConsensus: (symbol: string) => getJson<{ consensus: UsConsensus | null }>(`/api/market/us-consensus/${encodeURIComponent(symbol)}`),
   /** `I` = 당일 1분봉 (2026-09-01). 나머지는 기간별시세 일·주·월봉 */
   futuresChart: (
@@ -4617,6 +4619,20 @@ export interface KrOutlook {
   last: { year: string; sales: number | null; op: number | null; net: number | null } | null;
   /** 시총은 백만원 */
   peers: { code: string; name: string; changeRate: number | null; marketCap: number | null }[];
+}
+/** 증권사 리포트 한 건 (서버 naverResearch.ts) */
+export interface StockReport {
+  id: number;
+  broker: string;
+  title: string;
+  date: string;
+  reads: number | null;
+  opinion: string | null;
+  goal: number | null;
+  prevGoal: number | null;
+  priceAt: number | null;
+  pdf: string | null;
+  body: string;
 }
 export interface UsConsensus {
   reuters: string;

@@ -9,6 +9,7 @@ import { type PeriodReturns } from "./CompanySnapshot";
 import { InvestorTrendTable } from "./InvestorTrendTable";
 import { NewsDisclosurePanel } from "./NewsDisclosurePanel";
 import { OpinionPanel } from "./OpinionPanel";
+import { ReportsPanel } from "./ReportsPanel";
 import { RawJson } from "./RawJson";
 import { StockBoardPanel } from "./StockBoardPanel";
 import { SectorMoodPanel } from "./SectorMoodPanel";
@@ -85,7 +86,7 @@ export const STOCK_TABS: { key: StockTab; label: string }[] = [
   { key: "strength", label: "체결강도" },
   { key: "tradeSize", label: "체결금액대" },
   { key: "daily", label: "일별상세" },
-  { key: "opinion", label: "목표주가" },
+  { key: "opinion", label: "목표주가·리포트" },
   { key: "supply", label: "외국인·공매도·대차" },
   { key: "notes", label: "메모" },
   { key: "sector", label: "테마" },
@@ -346,7 +347,13 @@ export function StockTabsSection({
         {tab === "strength" && <StrengthPanel code={code} />}
         {tab === "tradeSize" && <TradeSizePanel code={code} />}
         {tab === "daily" && <DailyDetailPanel code={code} />}
-        {tab === "opinion" && <OpinionPanel code={code} />}
+        {tab === "opinion" && (
+          <>
+            <OpinionPanel code={code} />
+            {/* 숫자(한투) 아래에 글(네이버 리포트) — 왜 그 목표주가인지 (2026-09-25) */}
+            <ReportsPanel code={code} />
+          </>
+        )}
         {tab === "supply" && <SupplyDetailPanel code={code} />}
         {tab === "notes" && <StockNotes code={code} name={name} currentPrice={curPrice} />}
         {tab === "sector" && <SectorMoodPanel code={code} onSelectStock={onSelectStock} />}
