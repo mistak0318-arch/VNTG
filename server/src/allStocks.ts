@@ -232,6 +232,23 @@ function preScore(f: Feat, closes: number[], cfg: SignalConfig): { score: number
  * @param minValue 최소 거래대금(억). **못 사는 종목을 후보에 넣지 않는다** —
  *                 신호가 맞아도 하루 3억 도는 종목은 들어갈 수가 없다
  */
+type Universe = { rows: AllStockRow[]; scanned: number; skippedThin: number };
+
+/**
+ * **같은 모집단을 두 번 만들지 않는다** (2026-10-07 — 서버가 느려지다 죽던 두 번째 원인).
+ *
+ * 이 함수는 **전 종목(2,844)의 일봉을 훑어 이동평균을 새로 만든다.** 한 번이 수백 MB·수 초짜리 일인데
+ * 캐시가 없어서 **부를 때마다 처음부터** 했다. 신호등이 이걸 쓰고, 화면을 여러 개 띄우면 그만큼 겹친다 —
+ * 실측(10/07 00:49): health 가 heap 1,107MB 를 찍은 20초 뒤 `rss 3,612MB · heap 3,169/3,776MB (84%)`.
+ * 벤티지: "여러개 하다보니 느려지는 구간이 확실히 있어. 지금 삼성중공업 클릭했는데도 느려졌어."
+ *
+ * 30초 캐시 + 단일 비행. 모집단은 그 사이 거의 안 변하고(시세 스냅샷부터 40초 캐시다), 무엇보다
+ * **동시에 들어온 열 번이 한 번으로 합쳐진다.** 행 배열은 얕게 복사해 준다 — 받은 쪽이 정렬·자르기를 해도
+ * 캐시가 더럽혀지지 않게.
+ */
+const uniCache = new Map<string, { at: number; p: Promise<Universe> }>();
+const UNI_TTL_MS = 30_000;
+
 export async function allStocksUniverse(
   client: KiwoomClient,
   market: string,
@@ -243,7 +260,29 @@ export async function allStocksUniverse(
     /** 종목 → ETF 뒷배 등락률 */
     etf?: Map<string, number>;
   },
-): Promise<{ rows: AllStockRow[]; scanned: number; skippedThin: number }> {
+): Promise<Universe> {
+  /* 렌즈는 호출마다 다른 Map 이라 열쇠로 못 삼는다 — 렌즈를 쓴 호출은 캐시를 안 탄다(드물다) */
+  if (lenses) return computeUniverse(client, market, limit, minValue, lenses);
+  const key = `${market}|${limit}|${minValue}`;
+  const hit = uniCache.get(key);
+  const share = (u: Universe): Universe => ({ ...u, rows: u.rows.slice() });
+  if (hit && Date.now() - hit.at < UNI_TTL_MS) return share(await hit.p);
+  const p = computeUniverse(client, market, limit, minValue);
+  uniCache.set(key, { at: Date.now(), p });
+  p.catch(() => uniCache.delete(key));
+  return share(await p);
+}
+
+async function computeUniverse(
+  client: KiwoomClient,
+  market: string,
+  limit: number,
+  minValue = 10,
+  lenses?: {
+    theme?: Map<string, number>;
+    etf?: Map<string, number>;
+  },
+): Promise<Universe> {
   const [{ closes }, snap, cfg] = await Promise.all([
     loadCloses(),
     getMarketSnapshot(client),
