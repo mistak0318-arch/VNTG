@@ -2631,6 +2631,23 @@ body {
 .ss-none { font-size: 0.75rem; color: var(--muted); }
 .ss-sep { height: 1px; background: var(--border); margin: 0.4rem 0; }
 .ss-note { font-size: 0.7rem; color: var(--muted); margin-top: 0.3rem; line-height: 1.5; }
+/* 수동계좌 CSV 들여오기 (2026-10-07) — 양식 받기 → 파일 → 미리보기 → 적용 */
+.mi { margin-bottom: 12px; }
+.mi-toggle { background: none; border: none; color: var(--text); font: inherit; font-weight: 700; cursor: pointer; padding: 0; }
+.mi-body { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.mi-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.mi-file { position: relative; overflow: hidden; }
+.mi-file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.mi-plan { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--panel-2); }
+.mi-plan-h { font-weight: 700; font-size: 0.85rem; margin-bottom: 8px; }
+.mi-acc { padding: 8px 0; border-top: 1px dashed var(--border); }
+.mi-acc:first-of-type { border-top: none; }
+.mi-new { font-style: normal; font-size: 0.7rem; font-weight: 700; margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: var(--blue); color: #fff; }
+.mi-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 3px; font-size: 0.82rem; }
+.mi-list em { font-style: normal; font-weight: 700; margin-right: 6px; }
+.mi-skip { margin-top: 8px; font-size: 0.78rem; color: var(--muted); }
+.mi-skip ul { margin: 6px 0 0; padding-left: 18px; }
+
 /* 증권사 리포트 목록 (2026-09-25) — 머리는 단추(펼치기), 본문은 문단 */
 .rp { margin-top: 14px; }
 .rp-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }

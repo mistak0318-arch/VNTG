@@ -713,6 +713,12 @@ export const api = {
   manualAccountAdd: (broker: string, name: string) =>
     postJson<{ accounts: EvaluatedAccount[] }>("/api/account/manual", { broker, name }),
   /** 계좌 차례 — id 를 보이고 싶은 순서대로 (2026-09-16) */
+  /**
+   * CSV 로 수동계좌 한꺼번에 들여오기 (2026-10-07). `dryRun` 이면 **무엇이 바뀌는지만** 받는다 —
+   * 사람이 보고 나서 적용한다.
+   */
+  manualImport: (csv: string, mode: "merge" | "replace", dryRun: boolean) =>
+    postJson<{ plan: ManualImportPlan; accounts?: EvaluatedAccount[] }>("/api/account/manual/import", { csv, mode, dryRun }),
   manualAccountOrder: (ids: string[]) => putJson<{ accounts: EvaluatedAccount[] }>("/api/account/manual/order", { ids }),
   manualAccountRemove: (id: string) =>
     deleteJson<{ accounts: EvaluatedAccount[] }>(`/api/account/manual/${id}`),
@@ -4620,6 +4626,22 @@ export interface KrOutlook {
   /** 시총은 백만원 */
   peers: { code: string; name: string; changeRate: number | null; marketCap: number | null }[];
 }
+/** CSV 들여오기 미리보기 (서버 manualImport.ts 와 같은 모양) */
+export interface ManualImportPlan {
+  mode: "merge" | "replace";
+  accounts: {
+    broker: string;
+    name: string;
+    isNew: boolean;
+    add: { code: string; name: string; qty: number; avgPrice: number }[];
+    update: { code: string; name: string; qty: number; avgPrice: number; wasQty: number; wasAvg: number }[];
+    remove: { code: string; name: string; qty: number }[];
+    cash: number | null;
+  }[];
+  skipped: { line: number; why: string; text: string }[];
+  rows: number;
+}
+
 /** 증권사 리포트 한 건 (서버 naverResearch.ts) */
 export interface StockReport {
   id: number;

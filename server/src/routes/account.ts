@@ -12,6 +12,7 @@ import {
   reorderAccounts,
 } from "../manualAccounts.js";
 import { allHistory, dropHistory, recordSnapshot } from "../manualHistory.js";
+import { applyImport, parseCsv, planImport } from "../manualImport.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { MIN, krxAfterMarket } from "../marketHours.js";
 import { isTradingDay } from "../tradingDay.js";
@@ -351,6 +352,35 @@ export function createAccountRouter(client: KiwoomClient): Router {
         boughtAt: /^\d{4}-\d{2}-\d{2}$/.test(String(boughtAt ?? "")) ? String(boughtAt) : undefined,
       });
       res.json({ accounts: await evaluate() });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /*
+   * **CSV 로 한꺼번에 들여오기** (2026-10-07). 증권사 앱을 캡처해 AI 에게 양식대로 시킨 파일을 올린다.
+   * `dryRun` 이면 **무엇이 바뀌는지만** 돌려준다 — 잘못 만든 파일 하나로 계좌가 뒤집히지 않게 사람이 먼저 본다.
+   */
+  router.post("/manual/import", async (req, res, next) => {
+    try {
+      const csv = String(req.body?.csv ?? "");
+      const mode = req.body?.mode === "replace" ? "replace" : "merge";
+      const dryRun = req.body?.dryRun !== false;
+      if (!csv.trim()) {
+        res.status(400).json({ error: "CSV 내용이 비어 있습니다." });
+        return;
+      }
+      const { rows, skipped } = parseCsv(csv);
+      if (rows.length === 0) {
+        res.status(400).json({ error: "읽을 줄이 없습니다. 양식을 내려받아 견줘 보세요.", plan: planImport([], skipped, await listAccounts(), mode) });
+        return;
+      }
+      if (dryRun) {
+        res.json({ plan: planImport(rows, skipped, await listAccounts(), mode) });
+        return;
+      }
+      const { plan } = await applyImport(rows, mode);
+      res.json({ plan: { ...plan, skipped }, accounts: await evaluate() });
     } catch (err) {
       next(err);
     }

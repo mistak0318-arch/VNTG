@@ -11,6 +11,7 @@ import {
 import { useListKeys } from "../useListKeys";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { CollapsibleCard } from "../components/CollapsibleCard";
+import { ManualImportPanel } from "../components/ManualImportPanel";
 import { RefreshBar } from "../components/RefreshBar";
 
 /**
@@ -556,8 +557,13 @@ export function ManualAccountPage({
         </div>
       </CollapsibleCard>
 
+      {/* 한 종목씩 손으로 넣는 대신 — 증권사 화면을 캡처해 AI 가 만든 CSV 로 (2026-10-07) */}
+      <ManualImportPanel onApplied={setAccounts} />
+
       {!loading && accounts.length === 0 && (
-        <div className="page-note">등록된 수동 계좌가 없습니다. 위에서 증권사를 골라 추가하세요.</div>
+        <div className="page-note">
+          등록된 수동 계좌가 없습니다. 위에서 증권사를 골라 추가하거나, <b>CSV 로 한꺼번에</b> 넣으세요.
+        </div>
       )}
 
       {accounts.map((a, idx) => {
