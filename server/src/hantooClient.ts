@@ -187,7 +187,51 @@ function slot(): Promise<void> {
  *
  * @param feature 과금·호출 집계용 이름 (어느 메뉴에서 썼는지)
  */
+/**
+ * **같은 조회가 겹치면 한 번만** (2026-10-07 — 키움에 넣은 것과 같은 처방, 여기는 네 배 비싸다).
+ *
+ * 한투 줄은 **초당 2.5건**이다. 보드에서 종목을 바꾸면 카드 여럿이 **같은 종목의 같은 조회**를 각자 부르는데,
+ * 그 하나하나가 400ms 씩 줄을 늘린다. 진행 중인 것을 공유하고 끝난 뒤 3초는 그 답을 그대로 주면,
+ * 같은 순간에 들어온 열 번이 한 번이 된다 — 줄이 짧아지는 만큼 **모든 카드가 같이 빨라진다.**
+ *
+ * 3초로 짧게 잡은 까닭은 시세성 조회(현재가·야간선물)도 이 문을 지나기 때문이다. 재무·목표주가처럼
+ * 느리게 변하는 것은 부르는 쪽이 이미 제 캐시(목표주가는 6시간)를 갖고 있다.
+ * 받는 쪽이 고쳐 써도 서로 안 흔들리게 **복사해서** 준다. 한투는 조회 전용이라 주문이 섞일 일이 없다.
+ */
+const shared = new Map<string, { done: number | null; p: Promise<unknown> }>();
+const SHARE_MS = 3_000;
+
 export async function hantooGet<T = Record<string, unknown>>(
+  path: string,
+  trId: string,
+  params: Record<string, string>,
+  feature: string,
+): Promise<T> {
+  const key = `${trId}|${path}|${JSON.stringify(params)}`;
+  const hit = shared.get(key);
+  if (hit && (hit.done === null || Date.now() - hit.done < SHARE_MS)) {
+    return structuredClone(await hit.p) as T;
+  }
+  const p = hantooGetRaw<T>(path, trId, params, feature);
+  const entry = { done: null as number | null, p: p as Promise<unknown> };
+  shared.set(key, entry);
+  p.then(
+    () => {
+      entry.done = Date.now();
+      const t = setTimeout(() => {
+        if (shared.get(key) === entry) shared.delete(key);
+      }, SHARE_MS);
+      t.unref?.();
+    },
+    /* 실패는 나누지 않는다 — 다음 호출이 새로 부른다 */
+    () => {
+      if (shared.get(key) === entry) shared.delete(key);
+    },
+  );
+  return structuredClone(await p) as T;
+}
+
+async function hantooGetRaw<T = Record<string, unknown>>(
   path: string,
   trId: string,
   params: Record<string, string>,
