@@ -248,7 +248,8 @@ async function writeOnceInner(): Promise<void> {
     },
     저장소: health,
     /* 키움 REST 토큰버킷에서 기다린 것 — 개수·ms 뿐 (2026-09-16). 크면 15:40~16:10 겹침이 그만큼이다 */
-    키움조회대기: KiwoomClient.rateLimitStats(),
+    /* `줄` 은 **지금 통 앞에 선 수** — 이게 수십이면 화면이 느린 이유가 메모리가 아니라 조회 적체다 (2026-10-07) */
+    키움조회대기: { ...KiwoomClient.rateLimitStats(), 줄: KiwoomClient.queueDepth() },
     /* 화면이 실시간을 실제로 받아 가고 있나 — 미니창이 따로 여는 스트림이 여기 잡힌다 */
     화면스트림: {
       open: streamStats.open,

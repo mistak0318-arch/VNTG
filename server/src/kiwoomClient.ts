@@ -105,6 +105,23 @@ export class KiwoomClient {
   static rateLimitStats(): { calls: number; waitedMs: number; maxWaitMs: number } {
     return { ...KiwoomClient.waited };
   }
+  /**
+   * **줄이 너무 길면 서지 않는다** (2026-10-07 — 「한 번 느려지면 그 뒤로 계속 느리다」의 정체).
+   *
+   * 실측: 요청 하나가 **234초**(`GET /089970 234535ms`). 통이 비면 저마다 `waitMs` 만큼 자는데, 자는 놈이
+   * 백 개면 깨어나서 또 경합한다 — 그래서 **뒤로 갈수록 끝없이 밀린다.** 화면은 「불러오는 중」인 채 몇 분,
+   * 그 사이 요청은 계속 쌓이므로 **한 번 막히면 스스로 풀리지 않는다.** 벤티지가 겪은 그대로다.
+   *
+   * 기다리는 수를 세어 **내 차례가 언제인지 먼저 가늠하고**, 그게 `MAX_QUEUE_WAIT_MS` 를 넘으면 **즉시 포기**한다.
+   * 포기는 실패가 아니라 **빨리 알리는 것**이다 — 카드 하나가 「지금 붐빔」이라 말하고 다음에 다시 받는 쪽이,
+   * 모든 카드가 4분씩 매달려 서버 전체를 묶어 두는 것보다 낫다. 대기열이 짧아지니 앞쪽 요청도 제때 끝난다.
+   */
+  private static readonly MAX_QUEUE_WAIT_MS = 20_000;
+  private static waiting = 0;
+  /** 지금 통 앞에 선 수 — health 가 적는다 */
+  static queueDepth(): number {
+    return KiwoomClient.waiting;
+  }
   private async takeToken(): Promise<void> {
     const now = Date.now();
     this.bucket.tokens = Math.min(KiwoomClient.BUCKET_CAP, this.bucket.tokens + ((now - this.bucket.at) / 1000) * KiwoomClient.BUCKET_PER_SEC);
@@ -113,11 +130,25 @@ export class KiwoomClient {
       this.bucket.tokens -= 1;
       return;
     }
+    /* 내 앞에 선 수로 차례를 가늠한다 — 통은 초당 4.5개를 흘린다 */
+    const etaMs = ((KiwoomClient.waiting + 1) / KiwoomClient.BUCKET_PER_SEC) * 1000;
+    if (etaMs > KiwoomClient.MAX_QUEUE_WAIT_MS) {
+      throw new KiwoomApiError(
+        429,
+        `조회가 몰려 있습니다 — 앞에 ${KiwoomClient.waiting}건 (약 ${Math.round(etaMs / 1000)}초). 잠시 뒤 다시 받습니다`,
+        { queued: KiwoomClient.waiting },
+      );
+    }
     const waitMs = Math.ceil(((1 - this.bucket.tokens) / KiwoomClient.BUCKET_PER_SEC) * 1000);
     KiwoomClient.waited.calls += 1;
     KiwoomClient.waited.waitedMs += waitMs;
     if (waitMs > KiwoomClient.waited.maxWaitMs) KiwoomClient.waited.maxWaitMs = waitMs;
-    await sleep(waitMs);
+    KiwoomClient.waiting += 1;
+    try {
+      await sleep(waitMs);
+    } finally {
+      KiwoomClient.waiting -= 1;
+    }
     this.bucket.tokens = Math.max(0, this.bucket.tokens + (waitMs / 1000) * KiwoomClient.BUCKET_PER_SEC - 1);
     this.bucket.at = Date.now();
   }
