@@ -138,12 +138,46 @@ const MIN_GAP_MS = 400;
 let lastAt = 0;
 let queue: Promise<void> = Promise.resolve();
 
+/**
+ * **줄이 너무 길면 서지 않는다** (2026-10-07 — 「신호등·재무·목표주가 카드가 먹통」의 정체).
+ *
+ * 이 줄은 **초당 2.5건**이고 상한이 없었다. 보드에 카드를 여러 개 띄우면 한투 요청이 수백 개 들어오는데,
+ * 뒤에 선 것은 그 수를 2.5 로 나눈 만큼 — 실측 **142~153초** — 기다렸다. 화면에는 「불러오는 중」만 남고,
+ * 그동안 새 요청이 또 쌓이니 **한 번 막히면 스스로 풀리지 않는다.** 재무·목표주가·섹터·신호등 근거·공시 조치,
+ * 야간선물 차트까지 한투를 쓰는 것이 전부 같은 줄에 선다(벤티지가 하나씩 짚어 준 그대로다).
+ *
+ * 그래서 **차례를 미리 가늠해 20초를 넘길 것 같으면 즉시 포기**한다. 포기는 실패가 아니라 빨리 알리는 것이다 —
+ * 카드가 「지금 붐빔」이라 말하고 다음 새로고침에 받는 쪽이, 모든 카드가 2분씩 매달려 있는 것보다 낫다.
+ * 줄이 짧아지니 앞쪽도 제때 끝난다. 한투는 **조회 전용**이라 포기해도 잃는 것은 그 화면 한 칸뿐이다.
+ */
+const MAX_QUEUE_WAIT_MS = 20_000;
+const MAX_QUEUED = Math.floor(MAX_QUEUE_WAIT_MS / MIN_GAP_MS); // 50건
+let queued = 0;
+
+/** 지금 한투 줄에 선 수 — health 가 적는다 */
+export function hantooQueueDepth(): number {
+  return queued;
+}
+
 function slot(): Promise<void> {
-  const mine = queue.then(async () => {
-    const wait = lastAt + MIN_GAP_MS - Date.now();
-    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-    lastAt = Date.now();
-  });
+  if (queued >= MAX_QUEUED) {
+    return Promise.reject(
+      new HantooError(
+        "QUEUE_FULL",
+        `한투 조회가 몰려 있습니다 — 앞에 ${queued}건 (약 ${Math.round((queued * MIN_GAP_MS) / 1000)}초). 잠시 뒤 다시 받습니다`,
+      ),
+    );
+  }
+  queued += 1;
+  const mine = queue
+    .then(async () => {
+      const wait = lastAt + MIN_GAP_MS - Date.now();
+      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+      lastAt = Date.now();
+    })
+    .finally(() => {
+      queued -= 1;
+    });
   queue = mine.catch(() => undefined);
   return mine;
 }

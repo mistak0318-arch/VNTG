@@ -12,6 +12,7 @@ import { lifeSummary, noteLife, selfHeal } from "./lifecycle.js";
 import { dropSamplesCache } from "./signalSamples.js";
 import { peekRealtime, subscribedCount } from "./realtimeHub.js";
 import { hantooRealtimeStatus } from "./hantooRealtime.js";
+import { hantooQueueDepth } from "./hantooClient.js";
 import { afterCloseStatus, afterCloseStateSummary } from "./afterClose.js";
 import { tradingDayStatus } from "./tradingDay.js";
 import { getUsage } from "./apiUsage.js";
@@ -250,6 +251,8 @@ async function writeOnceInner(): Promise<void> {
     /* 키움 REST 토큰버킷에서 기다린 것 — 개수·ms 뿐 (2026-09-16). 크면 15:40~16:10 겹침이 그만큼이다 */
     /* `줄` 은 **지금 통 앞에 선 수** — 이게 수십이면 화면이 느린 이유가 메모리가 아니라 조회 적체다 (2026-10-07) */
     키움조회대기: { ...KiwoomClient.rateLimitStats(), 줄: KiwoomClient.queueDepth() },
+    /* 한투는 초당 2.5건짜리 한 줄이다 — 느린 카드(재무·목표주가·신호등 근거·야간선물)가 전부 여기 선다 */
+    한투조회줄: hantooQueueDepth(),
     /* 화면이 실시간을 실제로 받아 가고 있나 — 미니창이 따로 여는 스트림이 여기 잡힌다 */
     화면스트림: {
       open: streamStats.open,
