@@ -17,8 +17,13 @@ REM  죽었는데, 그때마다 사람이 미니PC 에 원격으로 들어가 �
 REM  이 감시자는 **이미 1분마다 돌고 있으므로** 여기 네 줄이면 사람 손이 필요 없어진다.
 REM
 REM  살아 있음의 기준은 `/api/health` 응답이다(프로세스가 떠 있어도 먹통이면 소용없다).
-REM  ⚠️ **한 번 실패로 재시작하지 않는다** — 빌드 중·부팅 직후·일시적 지연이 있다.
-REM  연속 세 번(약 15초) 응답이 없을 때만, 그리고 **배포 중이 아닐 때만** 되살린다.
+REM
+REM  ⚠️ **성급하면 멀쩡한 서버를 죽인다** (2026-10-07 실측, 처음엔 4초×3회=15초로 잡았다가 당한 것).
+REM  서버는 일봉 파일(84MB)을 파싱하는 동안 **이벤트 루프가 몇 초 막힌다** — 그동안 health 도 대답을 못 한다.
+REM  그걸 죽은 걸로 보고 끊으면 캐시가 비니까 다시 뜰 때 또 파싱하고, 또 막히고, 또 끊고 — **맴돌이**가 된다.
+REM  00:38:23 과 00:39:06 에 연달아 끊은 것이 그것이다(그때 heap 은 상한의 30% 로 멀쩡했다).
+REM  그래서 **10초씩 여섯 번(약 60초)** 내리 묵묵부답일 때만 끊는다. 진짜 죽은 것은 영영 대답이 없으므로
+REM  1분 늦게 살아나도 되고, 느린 것을 죽이지 않는 편이 훨씬 중요하다.
 REM  되살릴 때는 `/End` 로 먼저 끊는다 — 프로세스가 살아 있는데 먹통이면 `/Run` 이 무시되기 때문.
 REM  한 일은 `restart.log` 에 남긴다(공유 폴더라 밖에서 읽힌다).
 REM
@@ -50,19 +55,19 @@ REM 배포 중에는 서버가 내려가 있는 게 정상이므로 건너뛴다
 if exist "%DROP%\deploy.lock" (
   set /a DEAD=0
 ) else (
-  curl -s -f -m 4 -o nul http://localhost:4000/api/health
+  curl -s -f -m 10 -o nul http://localhost:4000/api/health
   if errorlevel 1 (set /a DEAD+=1) else (set /a DEAD=0)
 )
 
-if %DEAD% GEQ 3 (
+if %DEAD% GEQ 6 (
   REM ⚠️ 한글로 적지 않는다 — cmd 의 echo 는 CP949 로 쓰는데 이 파일을 읽는 쪽은 UTF-8 이라 깨진다(10/07 실측)
   echo %date% %time% health no-response x%DEAD% - restarting>> "%DROP%\restart.log"
   schtasks /End /TN "VNTG HTS" >nul 2>&1
   timeout /t 2 /nobreak >nul
   schtasks /Run /TN "VNTG HTS" >nul 2>&1
   set /a DEAD=0
-  REM 뜨는 데 시간이 걸린다 — 다음 판정까지 20초 준다
-  timeout /t 20 /nobreak >nul
+  REM 뜨는 데 시간이 걸리고, 뜬 뒤에도 큰 파일을 올리느라 한동안 대답이 늦다 — 90초는 묻지 않는다
+  timeout /t 90 /nobreak >nul
 )
 
 set /a N+=1

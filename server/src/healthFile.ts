@@ -9,7 +9,6 @@ import { join } from "node:path";
 import os from "node:os";
 import v8 from "node:v8";
 import { lifeSummary, noteLife, selfHeal } from "./lifecycle.js";
-import { dropClosesCache } from "./dailyCloses.js";
 import { dropSamplesCache } from "./signalSamples.js";
 import { peekRealtime, subscribedCount } from "./realtimeHub.js";
 import { hantooRealtimeStatus } from "./hantooRealtime.js";
@@ -131,11 +130,14 @@ function processStats(): Record<string, unknown> {
     }
   })();
   /* 숨이 가빠지면 스스로 손을 쓴다 — 캐시를 놓고, 그래도 안 되면 깨끗이 내려간다 (lifecycle.selfHeal) */
-  selfHeal(mb(m.heapUsed), limit, () => {
-    const codes = dropClosesCache();
-    const samples = dropSamplesCache();
-    return `일봉 ${codes}종목${samples ? " · 표본" : ""}`;
-  });
+  /*
+   * ⚠️ **일봉 캐시는 놓지 않는다** (2026-10-07 — 넣자마자 거둬들인 조항).
+   * 놓으면 다음 요청이 84MB 를 다시 읽고 파싱하는데, 그게 **이벤트 루프를 몇 초 막는다.** 그동안 health 가
+   * 대답을 못 해 감시자가 죽은 줄 알고 끊고, 다시 뜨면 또 파싱하고 — 메모리를 아끼려다 맴돌이를 만든다.
+   * 메모리 폭주의 진짜 원인은 캐시가 아니라 **동시 파싱**이었고 그건 단일 비행으로 막았다.
+   * 여기서는 다시 읽어도 싼 표본(38MB)만 놓는다.
+   */
+  selfHeal(mb(m.heapUsed), limit, () => (dropSamplesCache() ? "표본" : "놓을 것 없음"));
   noteHourlyMem();
   return {
     rssMB: mb(m.rss),

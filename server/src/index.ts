@@ -86,7 +86,7 @@ import { startHantooScheduleSync } from "./hantooSchedule.js";
 import { startFillStore } from "./fillStore.js";
 import { startEtfHoldersScheduler } from "./etfHolders.js";
 import { startThemeScheduler } from "./naverThemes.js";
-import { startClosesScheduler } from "./dailyCloses.js";
+import { loadCloses, startClosesScheduler } from "./dailyCloses.js";
 import { createAiRouter } from "./routes/ai.js";
 import { createAskRouter } from "./routes/ask.js";
 import { createSysRouter } from "./routes/sys.js";
@@ -580,6 +580,18 @@ app.listen(port, host, () => {
   console.log(`VNTG HTS server listening on ${host}:${port}`);
   if (host === "0.0.0.0") for (const ip of localIPv4()) console.log(`  http://${ip}:${port}`);
   if (allowedOrigins.length > 0) console.log(`  CORS 허용: ${allowedOrigins.join(", ")}`);
+  /*
+   * **일봉을 미리 올려 둔다** (2026-10-07). `dailyCloses.json`(84MB)은 올리는 데 몇 초가 걸리고 그동안
+   * **이벤트 루프가 막힌다.** 그걸 사용자의 첫 요청이 뒤집어쓰면 화면 하나가 통째로 멈춘 것처럼 보이고,
+   * 감시자까지 health 응답을 못 받아 멀쩡한 서버를 끊었다(10/07 00:38·00:39 실측).
+   * 아무도 안 보는 기동 직후에 치른다 — 감시자도 재시작 뒤 90초는 묻지 않는다.
+   */
+  setTimeout(() => {
+    const t0 = Date.now();
+    void loadCloses()
+      .then((s) => console.log(`[dailyCloses] 예열 완료 — ${Object.keys(s.bars ?? {}).length}종목 · ${Date.now() - t0}ms`))
+      .catch(() => undefined);
+  }, 2000).unref?.();
 });
 for (const extra of extraHosts) {
   /*
