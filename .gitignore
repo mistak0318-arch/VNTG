@@ -74,3 +74,6 @@ server/data/flowIntraday.json
 server/data/afterCloseHistory.json
 server/data/krxNotices/
 server/data/rankLast/
+
+# 변경 이력 — scripts/build-changelog.mjs 가 빌드 때마다 굽는다 (2026-10-07). 커밋하면 미니PC 빌드 결과와 충돌한다
+web/src/changelog.ts

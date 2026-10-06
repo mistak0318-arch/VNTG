@@ -31,11 +31,21 @@ const OUT = join(root, "web", "src", "changelog.ts");
 const MAX = 400;
 
 const SEP = "";
-const raw = execFileSync(
-  "git",
-  ["log", `-${MAX}`, "--date=format:%Y-%m-%d", `--pretty=%ad${SEP}%h${SEP}%s`],
-  { cwd: root, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 },
-);
+/*
+ * ⚠️ **git 이 없어도 빌드는 굴러가야 한다** (2026-10-07). 이 스크립트가 이제 `npm run build` 안에 들어갔으므로
+ * 여기서 던지면 **배포 전체가 멈춘다.** 저장소가 아닌 자리에서 빌드하거나 git 이 PATH 에 없을 때가 그렇다.
+ * 그런 때는 이력을 비워 두고 넘어간다 — 정보 탭이 비는 것이 서버가 안 뜨는 것보다 낫다.
+ */
+let raw = "";
+try {
+  raw = execFileSync(
+    "git",
+    ["log", `-${MAX}`, "--date=format:%Y-%m-%d", `--pretty=%ad${SEP}%h${SEP}%s`],
+    { cwd: root, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 },
+  );
+} catch (e) {
+  console.warn(`changelog: git log 를 못 읽었다 — 이력을 비워 둔다 (${e instanceof Error ? e.message : e})`);
+}
 
 /** 자동 커밋·되돌림처럼 읽을 값이 없는 줄은 뺀다 */
 function skip(subject) {
