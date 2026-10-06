@@ -11,11 +11,21 @@ process.env.TZ = "Asia/Seoul";
  * 거부되면 소켓·스케줄러가 통째로 끊긴다(감시자가 다시 켜 주기까지 30초). 로그에 남기고 계속 간다 —
  * 매매 도구는 「죽어서 깨끗한 것」보다 「살아서 시세를 주는 것」이 낫다.
  */
+/*
+ * ⚠️ **`console.error` 는 허공이었다** (2026-10-07). 작업 스케줄러가 `node dist\index.js` 를 띄우며 출력을 아무 데도
+ * 안 보내서, 10/6 밤 서버가 10분 간격으로 몇 번이나 죽는 동안 사인이 한 줄도 안 남았다. 아래 `noteLife` 가
+ * 배포 폴더(공유돼 있어 밖에서 읽힌다)의 `lifecycle.log` 에 **동기로** 한 줄씩 적는다.
+ */
+import { installLifecycleHooks, noteLife } from "./lifecycle.js";
+installLifecycleHooks();
 process.on("unhandledRejection", (reason) => {
-  console.error("[process] unhandledRejection:", reason instanceof Error ? reason.stack ?? reason.message : reason);
+  const s = reason instanceof Error ? (reason.stack ?? reason.message) : String(reason);
+  console.error("[process] unhandledRejection:", s);
+  noteLife("WARN", `unhandledRejection ${s}`);
 });
 process.on("uncaughtException", (err) => {
   console.error("[process] uncaughtException:", err.stack ?? err.message);
+  noteLife("FATAL", `uncaughtException ${err.stack ?? err.message}`);
 });
 
 import cors from "cors";

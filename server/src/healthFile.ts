@@ -6,6 +6,8 @@ import { hantooFutProbeSnapshot } from "./hantooFutProbe.js";
 import { hantooUsRankProbeSnapshot } from "./hantooUsRankProbe.js";
 import { mkdir, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import v8 from "node:v8";
+import { lifeSummary, noteLife } from "./lifecycle.js";
 import { peekRealtime, subscribedCount } from "./realtimeHub.js";
 import { hantooRealtimeStatus } from "./hantooRealtime.js";
 import { afterCloseStatus, afterCloseStateSummary } from "./afterClose.js";
@@ -89,6 +91,43 @@ async function outDir(): Promise<string> {
   return resolved ?? "";
 }
 
+/**
+ * 메모리·생애 — health 에 실을 숫자 몇 개 (2026-10-07).
+ *
+ * `rss` 가 프로세스가 실제로 쓰는 메모리, `heap` 이 V8 안쪽이다. 노드 기본 heap 상한은 시스템 메모리로 정해지는데,
+ * 그 선에 닿아 죽는 것이 OOM 이다 — `heapLimit` 을 같이 적어야 「상한에 닿아서 죽었나」를 나중에 판정할 수 있다.
+ * rss 가 상한의 85% 를 넘으면 `lifecycle.log` 에 경고 한 줄을 남긴다 — 죽기 전에 흔적을 만들어 두는 것이다.
+ */
+let peakRss = 0;
+let warnedAt = 0;
+function processStats(): Record<string, unknown> {
+  const m = process.memoryUsage();
+  const mb = (n: number) => Math.round(n / 1048576);
+  peakRss = Math.max(peakRss, m.rss);
+  const limit = (() => {
+    try {
+      /* heap 상한 — v8 모듈은 동기이고 싸다 */
+      return mb(v8.getHeapStatistics().heap_size_limit);
+    } catch {
+      return 0;
+    }
+  })();
+  if (limit > 0 && mb(m.heapUsed) > limit * 0.85 && Date.now() - warnedAt > 5 * 60_000) {
+    warnedAt = Date.now();
+    noteLife("WARN", `heap ${mb(m.heapUsed)}MB / 상한 ${limit}MB — OOM 가까움`);
+  }
+  return {
+    rssMB: mb(m.rss),
+    최고rssMB: mb(peakRss),
+    heapUsedMB: mb(m.heapUsed),
+    heapTotalMB: mb(m.heapTotal),
+    heap상한MB: limit,
+    pid: process.pid,
+    런처: (process.env.VNTG_LAUNCHER ?? "직접").trim(),
+    ...lifeSummary(),
+  };
+}
+
 let writing = false;
 async function writeOnce(): Promise<void> {
   /* 공유 폴더가 30초보다 느리면 두 틱이 같은 tmp 를 쓴다 (2026-09-16 점검) — 앞 것이 끝나기 전엔 안 쓴다 */
@@ -113,6 +152,12 @@ async function writeOnceInner(): Promise<void> {
     at: new Date().toISOString(),
     /* 서버가 언제 떴나 — 「방금 재시작했다」와 「하루째 돈다」는 다른 이야기다 */
     uptimeSec: Math.round(process.uptime()),
+    /*
+     * **죽기 직전의 몸무게** (2026-10-07). 30초마다 덮어쓰므로 서버가 죽으면 **마지막 30초 안의 값**이 남는다 —
+     * 메모리가 치솟다 갔는지(OOM), 멀쩡하다 갔는지(예외·강제종료)를 가르는 유일한 단서다.
+     * 숫자만 적는다(계좌·종목·키 없음). `최고` 는 이번 생애의 최대치.
+     */
+    프로세스: processStats(),
     국내실시간: rt
       ? {
           state: rt.state,
