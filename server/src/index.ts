@@ -198,6 +198,29 @@ app.use(
     }
   }),
 );
+/*
+ * **무거운 요청을 스스로 일러바치게 한다** (2026-10-07).
+ *
+ * 메모리가 분당 1GB 씩 느는데 **어느 창구가 먹는지** 알 길이 없어 코드를 뒤지고 있었다. 추측 대신 재게 한다 —
+ * 요청 하나가 끝날 때 heap 이 얼마나 늘었고 몇 초 걸렸는지 보고, 큰 것만 `lifecycle.log` 에 남긴다.
+ * 벤티지가 종목을 클릭하는 순간 범인 라우트가 이름을 드러낸다.
+ *
+ * ⚠️ heap 차이는 **GC 때문에 부정확**하고 동시 요청끼리 서로 섞인다 — 한 줄로 단정하면 안 되고, 여러 번
+ * 같은 이름이 찍히는지로 읽는다. 재는 비용은 `memoryUsage()` 두 번뿐이라 무시할 만하다.
+ * 문턱(60MB·4초)을 넘는 것만 적으므로 평소에는 한 줄도 안 쌓인다.
+ */
+app.use((req, res, next) => {
+  const t0 = Date.now();
+  const h0 = process.memoryUsage().heapUsed;
+  res.on("finish", () => {
+    const ms = Date.now() - t0;
+    const dMB = Math.round((process.memoryUsage().heapUsed - h0) / 1048576);
+    if (dMB >= 60 || ms >= 4000) {
+      noteLife("WARN", `무거운 요청 ${req.method} ${req.path} ${dMB >= 0 ? "+" : ""}${dMB}MB ${ms}ms`);
+    }
+  });
+  next();
+});
 app.use(express.json({ limit: "12mb" })); // 캘린더 이미지가 base64로 온다
 
 const startedAt = Date.now();
