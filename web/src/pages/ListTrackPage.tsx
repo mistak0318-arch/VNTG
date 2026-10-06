@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import { SuperDetailSheet } from "../components/SuperDetailSheet";
 import { GradeDetailRow } from "../components/GradeDetailRow";
 import { GradeVerdict, verdictOf } from "../components/GradeVerdict";
+import { ScoreCardPanel } from "../components/ScoreCardPanel";
 /** 속을 잰 지평과 **같은 칸**의 평균 — 다른 지평끼리 견주면 뜻이 없다 */
 function sameAvg(
   d: { horizon: 1 | 5 | 20 | null },
@@ -477,6 +478,12 @@ const low = (v: number | null | undefined) => (v === null || v === undefined ? -
           )}
         </section>
       )}
+
+      {/*
+        ── 성적표 ── 위 표는 **목록별**이고, 이쪽은 **그 밖의 모든 갈래**다 (2026-10-07).
+        점수대·장세·연속일·순위·경보. 접힌 채로 두고 열 때 받는다(조회 0회, 파일만 읽음).
+      */}
+      <ScoreCardPanel />
 
       {/*
         ── 목록 고르기 ── **드롭다운 하나로** (2026-09-04).

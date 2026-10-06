@@ -2632,6 +2632,28 @@ body {
 .ss-sep { height: 1px; background: var(--border); margin: 0.4rem 0; }
 .ss-note { font-size: 0.7rem; color: var(--muted); margin-top: 0.3rem; line-height: 1.5; }
 /* 수동계좌 CSV 들여오기 (2026-10-07) — 양식 받기 → 파일 → 미리보기 → 적용 */
+/* ── 실전 성적표 (2026-10-07) ── 「잰 것이 적은 줄은 흐리게」가 이 블록의 핵심이다 */
+.sc { margin-bottom: 12px; }
+.sc-pick { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.sc-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; }
+.sc-count b { font-variant-numeric: tabular-nums; }
+.sc-h { display: flex; gap: 6px; }
+.sc-unit { margin: 4px 0 2px; }
+.sc-note { margin: 6px 0; }
+.sc-hash { margin: 6px 0; font-size: 0.86rem; }
+.sc-hash summary { cursor: pointer; color: var(--muted); }
+.sc-hash ul { margin: 6px 0 0; padding-left: 18px; }
+.sc-hash code { font-size: 0.82rem; opacity: 0.8; }
+.sc-cut { margin-top: 14px; }
+.sc-cut-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+.sc-asks-warn { font-size: 0.84rem; font-style: normal; color: var(--accent); }
+.sc-table td, .sc-table th { font-variant-numeric: tabular-nums; }
+/* 잰 것이 적은 줄 — 숫자는 그려 주되 **믿지 말라**를 색으로 말한다 */
+.sc-table tr.sc-thin { opacity: 0.45; }
+.sc-table tr.sc-best td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.sc-tag { margin-left: 6px; font-size: 0.74rem; font-style: normal; color: var(--accent); }
+.sc-warn { margin-left: 4px; font-size: 0.72rem; font-style: normal; color: var(--muted); }
+
 .mi { margin-bottom: 12px; }
 .mi-toggle { background: none; border: none; color: var(--text); font: inherit; font-weight: 700; cursor: pointer; padding: 0; }
 .mi-body { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }

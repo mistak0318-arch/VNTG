@@ -8,6 +8,8 @@ import { enabledUniverses } from "./universeConfig.js";
 import { regimeTrust } from "./regimeWatch.js";
 import { pushNotice } from "./notifyCenter.js";
 import { gradeDetail, pickHorizon, type GradeDetail } from "./gradeStats.js";
+/* 채점용 일봉 — 전종목이 이미 파일에 있다. 조회 0회 (2026-10-07) */
+import { loadCloses } from "./dailyCloses.js";
 import { peekSnapshot } from "./marketSnapshot.js";
 /* 무리(테마·ETF 뒷배) — 슈퍼신호등이 쓰는 것과 **같은 함수**. 파일에서 읽어 조회 0회 */
 import { stockLens, themeMapNow } from "./stockLens.js";
@@ -538,6 +540,30 @@ export async function gradeListTrack(client: KiwoomClient, limit = 200): Promise
   const base = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10).replace(/-/g, "");
   /* 같은 종목이 여러 목록에 있으면 일봉을 한 번만 받는다 */
   const barsOf = new Map<string, { date: string; close: number }[]>();
+  /**
+   * **일봉은 원장에서 꺼낸다 — 조회 0회** (2026-10-07).
+   *
+   * ⚠️ 실측에서 **1,172건 중 872건이 채점 없이** 남아 있었다. 원장을 세어 본 결과는 이렇다:
+   *
+   *  · 872건 **전부** 전종목 일봉 원장에 있고, 편입일 봉도 다 찾힌다 → 조회할 이유가 없다
+   *  · 그중 779건은 **아직 20거래일이 안 지나서** d20 을 낼 수 없다 (원장이 9/02 시작)
+   *  · 그런데 **832건은 +5일을 낼 수 있는데 `d5` 조차 비어 있었다** — 이쪽이 결함이다
+   *
+   * 까닭은 `pending.slice(0, limit)` 였다. 종목마다 `ka10081` 을 부르고 220ms 를 쉬니
+   * 하루 300건이 상한이고, d20 이 안 찬 건은 계속 `pending` 에 남아 **같은 앞쪽만 다시
+   * 재는 동안 뒤쪽은 차례가 오지 않았다.** 그래서 낼 수 있는 5일 성적까지 비어 있었다.
+   *
+   * 덜 잰 성적은 부풀려진다. 실제로 채점된 300건은 **옛 기준 편입분에 쏠려** 있었는데,
+   * 그건 기준 탓이 아니라 **옛 기준 편입이 오래된 것**이라 20일이 지난 것뿐이다. 그래도
+   * 결과는 같다 — 「약한 장이 나빴다」가 실은 「오래된 것만 쟀다」가 된다.
+   *
+   * 전종목 일봉은 마감 뒤 정리가 이미 파일로 쌓아 두고 서버가 통째로 들고 있다.
+   * **같은 TR(`ka10081`)·같은 수정주가(`upd_stkpc_tp:"1"`)** 로 쌓은 것이라 값이 동일하다 —
+   * 과거 채점분과 어긋나지 않는다. 조회가 0 이 되니 **상한도 자를 이유가 없다.**
+   */
+  const localBars = (await loadCloses().catch(() => null))?.bars ?? {};
+  /** 원장에 일봉이 없어 조회로 메운 종목 수 — 상한은 이제 **이것만** 센다 */
+  let fetched = 0;
   /*
    * 지수 — **슈퍼신호등과 같은 함수**를 쓴다(2026-09-01). 두 원장의 차이가
    * 「교집합을 봤나」 하나로 좁혀지려면 채점하는 자가 같아야 한다. 조회 1회.
@@ -545,10 +571,25 @@ export async function gradeListTrack(client: KiwoomClient, limit = 200): Promise
   const kospi = await kospiCloses(client).catch(() => new Map<string, number>());
   let graded = 0;
 
-  for (const e of pending.slice(0, limit)) {
+  /* `slice` 를 뺐다 — 조회가 0 이라 전부 돈다. 뒤쪽이 차례를 못 받는 일이 없어진다 */
+  for (const e of pending) {
     try {
       let rows = barsOf.get(e.code);
       if (!rows) {
+        /* ① 원장(전종목 일봉) — 조회 0회. 정규장 종가(`c`)를 쓴다 */
+        const mine = localBars[e.code];
+        if (mine && mine.length > 0) {
+          rows = mine
+            .filter((b) => /^\d{8}$/.test(b.d) && b.c > 0)
+            .map((b) => ({ date: b.d, close: b.c }))
+            .sort((a, b) => a.date.localeCompare(b.date));
+          barsOf.set(e.code, rows);
+        }
+      }
+      if (!rows || rows.length === 0) {
+        /* ② 원장에 없는 종목만 조회로 메운다 — 여기에만 상한을 둔다 */
+        if (fetched >= limit) continue;
+        fetched += 1;
         const res = await client.request<Record<string, unknown>>("/api/dostk/chart", "ka10081", {
           stk_cd: e.code,
           base_dt: base,
@@ -747,6 +788,17 @@ export interface ListTrackSummary {
  */
 export async function listTrackLastRunDate(): Promise<string | null> {
   return (await load()).lastRunDate;
+}
+
+/**
+ * **원장 통째로** — 성적표(`scoreCard`)가 가로지르는 데 쓴다 (2026-10-07). 조회 0회.
+ *
+ * 파일 경로를 두 곳에 두지 않으려고 여기서 내보낸다. 읽기만 한다 — 돌려준 배열을
+ * 고쳐도 저장되지 않는다(`save` 를 부르는 건 이 파일 안에서만).
+ */
+export async function listLedger(): Promise<{ entries: ListEntry[]; lastRunDate: string | null }> {
+  const s = await load();
+  return { entries: s.entries, lastRunDate: s.lastRunDate };
 }
 
 /**

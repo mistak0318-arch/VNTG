@@ -1739,6 +1739,11 @@ export async function superMarkIndex(): Promise<Map<string, { super: boolean; ra
 }
 
 /** 원장 항목 하나 — 표식 근거(`markWhy`)가 조회 0회로 읽는다 (2026-09-08) */
+/** 원장 통째로 — 성적표(`scoreCard`)가 가로지르는 데 쓴다 (2026-10-07). 읽기만, 조회 0회 */
+export async function superEntries(): Promise<SuperEntry[]> {
+  return (await load()).entries;
+}
+
 export async function superEntryOf(code: string): Promise<{ entry: SuperEntry | null; rainbowDays: number }> {
   const store = await load();
   return { entry: store.entries.find((e) => e.code === code) ?? null, rainbowDays: cfgOf(store).rainbowDays };

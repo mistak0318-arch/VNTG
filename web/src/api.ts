@@ -2165,6 +2165,11 @@ export const api = {
    */
   /* ---------------- 신호등 분석 (목록별 추적, 2026-08-31) ---------------- */
   listTrack: () => getJson<ListTrackSummary>("/api/signal/list-track"),
+  /**
+   * **실전 성적표** (2026-10-07) — 원장을 점수·장세·연속일·순위·경보로 가로지른다.
+   * 서버가 파일만 읽으므로 조회 0회.
+   */
+  scoreCard: () => getJson<{ list: ScoreCard; super: ScoreCard }>("/api/signal/scorecard"),
   listTrackJob: () =>
     getJson<{
       status: string;
@@ -7787,6 +7792,39 @@ export interface SignalSuperSimResult {
   listsTotal: number;
   minLists: number;
   rows: SignalSuperSimRow[];
+}
+
+/* ───────── 실전 성적표 (2026-10-07) — 서버 scoreCard.ts 와 같은 모양 ───────── */
+
+/** 한 칸의 성적 — `n`(편입)과 `graded`(잰 것)를 **반드시 같이** 본다 */
+export interface ScoreStat {
+  n: number;
+  graded: number;
+  avg: number | null;
+  med: number | null;
+  win: number | null;
+  worst: number | null;
+}
+export interface ScoreRow {
+  label: string;
+  d5: ScoreStat;
+  d20: ScoreStat;
+}
+export interface ScoreCut {
+  title: string;
+  asks: string;
+  rows: ScoreRow[];
+}
+export interface ScoreCard {
+  builtAt: string;
+  source: "listTrack" | "super";
+  lastRunDate: string | null;
+  total: number;
+  graded: number;
+  graded5: number;
+  byHash: { hash: string; n: number; graded: number }[];
+  warn: string | null;
+  cuts: ScoreCut[];
 }
 
 /** 목록별 추적 원장의 한 줄 — 서버 listTrack.ts 와 같은 모양 */

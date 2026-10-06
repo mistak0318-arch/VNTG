@@ -32,6 +32,7 @@ import { resetSignalLedgers } from "../ledgerReset.js";
 import { archiveReport, listArchives } from "../ledgerArchive.js";
 import {
   exitListEntry,
+  gradeListTrack,
   listTrackDetail,
   listTrackJob,
   listTrackSummary,
@@ -39,6 +40,7 @@ import {
   runListTrack,
   updateListNote,
 } from "../listTrack.js";
+import { listScoreCard, superScoreCard } from "../scoreCard.js";
 import {
   buildVerdict,
   conditional,
@@ -546,6 +548,23 @@ export function createSignalRouter(client: KiwoomClient): Router {
     }
   });
 
+  /**
+   * **채점만 돌린다** (2026-10-07) — 편입은 건드리지 않는다.
+   *
+   * 편입 판정(`/list-track/run`)은 전 종목을 다시 평가해 12분 걸리고 조회를 크게 쓴다.
+   * 그런데 「성적표가 비어 있다」를 고치는 데 필요한 것은 **채점뿐**이고, 채점은 이제
+   * 전종목 일봉 원장에서 꺼내 쓰므로 **지수 1회**만 나간다. 그래서 따로 뗀다 —
+   * 마감 뒤를 기다리지 않고 지금 채울 수 있다.
+   */
+  router.post("/list-track/grade", async (_req, res, next) => {
+    try {
+      const graded = await gradeListTrack(client, 50);
+      res.json({ graded });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   /* ---------------- 슈퍼신호등 ---------------- */
 
   /** 관찰 목록 — 지금 가격·편입가 대비까지 붙여서 */
@@ -979,6 +998,18 @@ export function createSignalRouter(client: KiwoomClient): Router {
   router.get("/verdict", async (_req, res, next) => {
     try {
       res.json({ verdict: await loadVerdict() });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * **실전 성적표** (2026-10-07) — 원장을 점수·장세·연속일·순위로 가로지른다.
+   * 파일만 읽으므로 **조회 0회**, 수십 밀리초.
+   */
+  router.get("/scorecard", async (_req, res, next) => {
+    try {
+      res.json({ list: await listScoreCard(), super: await superScoreCard() });
     } catch (err) {
       next(err);
     }
