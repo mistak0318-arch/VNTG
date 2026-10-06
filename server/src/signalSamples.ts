@@ -325,15 +325,28 @@ export async function saveSamples(f: SampleFile): Promise<void> {
   await fs.writeFile(FILE, JSON.stringify(f), "utf-8");
 }
 
+/**
+ * **읽는 중이면 같이 기다린다** (2026-10-07) — `dailyCloses.loadCloses` 와 같은 병이었다.
+ * `if (cache) return cache` 와 캐시가 차는 순간 **사이**에 들어온 요청이 저마다 38MB 를 읽고 파싱했다.
+ * 신호등을 여러 종목에 한꺼번에 걸면 그만큼 겹친다.
+ */
+let loading: Promise<SampleFile | null> | null = null;
+
 export async function loadSamples(): Promise<SampleFile | null> {
   if (cache) return cache;
-  try {
-    const raw = await fs.readFile(FILE, "utf-8");
-    cache = JSON.parse(raw) as SampleFile;
-    return cache;
-  } catch {
-    return null;
-  }
+  if (loading) return loading;
+  loading = (async () => {
+    try {
+      const raw = await fs.readFile(FILE, "utf-8");
+      cache = JSON.parse(raw) as SampleFile;
+      return cache;
+    } catch {
+      return null;
+    }
+  })().finally(() => {
+    loading = null;
+  });
+  return loading;
 }
 
 /** 창고에 무엇이 있나 — 표본을 다시 받아야 하는지 화면이 판단할 때 쓴다 */

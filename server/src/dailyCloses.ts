@@ -116,7 +116,28 @@ interface Store {
 const EMPTY: Store = { builtAt: "", closes: {}, bars: {} };
 let cache: Store | null = null;
 
+/**
+ * **읽는 중이면 그 약속을 같이 기다린다** (2026-10-07 — 서버가 반복해서 죽던 진짜 원인).
+ *
+ * 예전엔 `if (cache) return cache` 뒤에 곧바로 `await readFile` 이었다. 그 사이는 **캐시가 아직 빈 구간**이라,
+ * 그동안 들어온 요청이 **저마다 84MB 파일을 읽고 저마다 JSON.parse** 했다. 종목 상세 한 번에 이 함수를 부르는
+ * 경로가 여러 곳이고(열다섯 곳 넘는다) 화면을 빠르게 여러 개 띄우면 동시 요청이 수십이라 —
+ * 84MB × 수십 = **수 GB**. 실측(10/07 00:25): 30초 만에 heap +680MB, 곧 `FATAL ERROR ... heap out of memory`.
+ *
+ * 한 번만 읽게 하면 끝난다. 캐시가 찰 때까지 들어온 요청은 **같은 약속**을 받아 기다린다.
+ */
+let loading: Promise<Store> | null = null;
+
 export async function loadCloses(): Promise<Store> {
+  if (cache) return cache;
+  if (loading) return loading;
+  loading = readOnce().finally(() => {
+    loading = null;
+  });
+  return loading;
+}
+
+async function readOnce(): Promise<Store> {
   if (cache) return cache;
   try {
     const raw = JSON.parse(await readFile(FILE, "utf-8")) as Store;
