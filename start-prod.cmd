@@ -32,7 +32,12 @@ REM 서버가 「나는 이 스크립트로 떴다」를 health.json 에 적게 
 REM 이 파일을 쓰는지 node 를 직접 부르는지 밖에서 확인할 길이 그것뿐이다
 set "VNTG_LAUNCHER=start-prod"
 
+REM ⚠️ **heap 상한을 올린다** (2026-10-07). 노드 기본 상한이 이 기계에서 2,240MB 인데, 뜨자마자
+REM `dailyCloses.json`(84MB)·`signalSamples.json`(38MB) 같은 큰 파일을 통째로 올려 **시작 32초 만에 heap 931MB**,
+REM 장중 캐시·실시간이 얹히면 몇 분 만에 상한에 닿아 **OOM 으로 즉사**했다(10/6 밤 10분 주기 사망의 정체).
+REM 3,584MB 로 올려 두 배 반의 여유를 준다 — 상한을 올린 것은 시간을 버는 조치이고, 큰 파일을 통째로 안 드는
+REM 것이 근본 처방이다. 실제로 얼마나 쓰는지는 health.json 의 「프로세스」가 매일 적는다.
 echo.>> "%LOG%"
 echo ==== %date% %time% 서버 시작 ====>> "%LOG%"
-node dist\index.js >> "%LOG%" 2>&1
+node --max-old-space-size=3584 dist\index.js >> "%LOG%" 2>&1
 echo ==== %date% %time% 서버 끝남 (exit %errorlevel%) ====>> "%LOG%"

@@ -6,6 +6,7 @@ import { hantooFutProbeSnapshot } from "./hantooFutProbe.js";
 import { hantooUsRankProbeSnapshot } from "./hantooUsRankProbe.js";
 import { mkdir, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import os from "node:os";
 import v8 from "node:v8";
 import { lifeSummary, noteLife } from "./lifecycle.js";
 import { peekRealtime, subscribedCount } from "./realtimeHub.js";
@@ -122,6 +123,9 @@ function processStats(): Record<string, unknown> {
     heapUsedMB: mb(m.heapUsed),
     heapTotalMB: mb(m.heapTotal),
     heap상한MB: limit,
+    /* 이 기계가 가진 메모리 — 상한을 얼마까지 올려도 되는지 판단할 근거 (2026-10-07) */
+    램MB: Math.round(os.totalmem() / 1048576),
+    남은램MB: Math.round(os.freemem() / 1048576),
     pid: process.pid,
     런처: (process.env.VNTG_LAUNCHER ?? "직접").trim(),
     ...lifeSummary(),
