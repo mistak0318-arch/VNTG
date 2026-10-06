@@ -332,6 +332,13 @@ export async function saveSamples(f: SampleFile): Promise<void> {
  */
 let loading: Promise<SampleFile | null> | null = null;
 
+/** 메모리가 빡빡할 때 놓는다 — 38MB 짜리다 (2026-10-07) */
+export function dropSamplesCache(): boolean {
+  const had = cache !== null;
+  cache = null;
+  return had;
+}
+
 export async function loadSamples(): Promise<SampleFile | null> {
   if (cache) return cache;
   if (loading) return loading;

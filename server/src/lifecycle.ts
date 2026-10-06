@@ -123,6 +123,51 @@ export function lifeSummary(): { 오늘재시작: number; 마지막사망: strin
  * OOM(V8 heap out of memory)은 이 훅이 돌 틈도 없이 죽는다 — 그때는 `START` 뒤에 아무 줄도 없고,
  * `start-prod.cmd` 가 받아 둔 `server.log` 의 `FATAL ERROR ... heap out of memory` 로 가린다.
  */
+/** `installLifecycleHooks` 가 채운다 — 자가 치유가 종료 줄을 남길 때 쓴다 */
+let selfExit: ((kind: LifeKind, note: string) => void) | null = null;
+
+/**
+ * **숨이 가빠지면 스스로 손을 쓴다** (2026-10-07 — 벤티지: "이렇게 느려지거나 멈춰있는 경우 해결방안도 함께 구현해서").
+ *
+ * 감시자(`deploy-watch.cmd`)는 **완전히 죽어야** 되살린다. 그런데 더 흔한 괴로움은 그 전 단계다 —
+ * heap 이 상한에 가까워지면 V8 이 쉴 새 없이 GC 를 돌려(mark-compact) **살아는 있는데 모든 응답이 느려진다.**
+ * 그러다 결국 `Ineffective mark-compacts` 로 즉사하고, 그 순간 쓰고 있던 응답은 중간에 잘린다
+ * (화면의 「Unexpected end of JSON input」이 그것이다).
+ *
+ * 그래서 두 단계로 미리 손을 쓴다. 30초마다(health 쓸 때) 불린다.
+ *
+ *   ① **75%** — 들고 있던 큰 캐시를 놓는다. 일봉(84MB 파일에서 만든 수백 MB)과 표본(38MB)이 가장 크고,
+ *      둘 다 다시 읽으면 되는 **파생물**이라 버려도 잃는 게 없다. 대개 여기서 숨이 트인다.
+ *   ② **88%** — 그래도 안 내려가면 **스스로 깨끗이 내려간다.** 감시자가 20초 안에 되살린다.
+ *      멋대로 재시작하는 것처럼 보이지만, 그냥 두면 어차피 몇 분 뒤 **응답을 자르며** 죽는다 —
+ *      쓰다 만 응답을 남기는 대신 끝내고 새로 뜨는 쪽이 낫다. 로그에 이유가 남는 것도 이쪽뿐이다.
+ *
+ * ⚠️ **뜬 지 5분 안에는 ②를 안 한다.** 기동 직후엔 큰 파일을 올리는 중이라 높게 잡히는 게 정상이고,
+ * 그때 내려가면 뜨자마자 또 내려가는 맴돌이가 된다. 재시작 사이에도 최소 10분을 둔다.
+ */
+let lastDrop = 0;
+let lastSelfRestart = 0;
+export function selfHeal(heapUsedMB: number, limitMB: number, drop: () => string): void {
+  if (limitMB <= 0) return;
+  const pct = (heapUsedMB / limitMB) * 100;
+  const now = Date.now();
+
+  if (pct >= 75 && now - lastDrop > 3 * 60_000) {
+    lastDrop = now;
+    const what = drop();
+    noteLife("WARN", `heap ${heapUsedMB}/${limitMB}MB (${pct.toFixed(0)}%) — 캐시를 놓는다: ${what}`);
+    return;
+  }
+
+  if (pct >= 88 && process.uptime() > 300 && now - lastSelfRestart > 10 * 60_000) {
+    lastSelfRestart = now;
+    noteLife("WARN", `heap ${heapUsedMB}/${limitMB}MB (${pct.toFixed(0)}%) — 스스로 내려간다(감시자가 다시 띄운다)`);
+    selfExit?.("EXIT", "self-heal 재시작");
+    /* 적는 것이 끝나도록 한 박자 뒤에 — 이 사이에 쓰던 응답은 마저 나간다 */
+    setTimeout(() => process.exit(0), 1500).unref?.();
+  }
+}
+
 export function installLifecycleHooks(): void {
   const launcher = (process.env.VNTG_LAUNCHER ?? "직접").trim();
   /* 어느 코드로 떠 있나 — 배포가 적어 둔 해시를 그대로 읽는다(둘째 줄) */
@@ -142,6 +187,7 @@ export function installLifecycleHooks(): void {
     noteLife(kind, note);
   };
   process.on("exit", (code) => once("EXIT", `code=${code}`));
+  selfExit = once;
   for (const sig of ["SIGTERM", "SIGINT", "SIGHUP", "SIGBREAK"] as const) {
     process.on(sig, () => {
       once("EXIT", `signal=${sig}`);

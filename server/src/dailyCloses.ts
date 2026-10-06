@@ -137,6 +137,16 @@ export async function loadCloses(): Promise<Store> {
   return loading;
 }
 
+/**
+ * 캐시를 놓는다 — **메모리가 빡빡할 때 되찾을 수 있는 가장 큰 덩어리**다 (2026-10-07).
+ * 수백 MB 를 한 번에 돌려주고, 다음에 필요하면 다시 읽는다(단일 비행이라 그때도 한 번만 읽는다).
+ */
+export function dropClosesCache(): number {
+  const had = cache ? Object.keys(cache.bars ?? {}).length : 0;
+  cache = null;
+  return had;
+}
+
 async function readOnce(): Promise<Store> {
   if (cache) return cache;
   try {

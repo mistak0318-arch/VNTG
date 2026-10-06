@@ -8,7 +8,9 @@ import { mkdir, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import os from "node:os";
 import v8 from "node:v8";
-import { lifeSummary, noteLife } from "./lifecycle.js";
+import { lifeSummary, noteLife, selfHeal } from "./lifecycle.js";
+import { dropClosesCache } from "./dailyCloses.js";
+import { dropSamplesCache } from "./signalSamples.js";
 import { peekRealtime, subscribedCount } from "./realtimeHub.js";
 import { hantooRealtimeStatus } from "./hantooRealtime.js";
 import { afterCloseStatus, afterCloseStateSummary } from "./afterClose.js";
@@ -128,10 +130,12 @@ function processStats(): Record<string, unknown> {
       return 0;
     }
   })();
-  if (limit > 0 && mb(m.heapUsed) > limit * 0.85 && Date.now() - warnedAt > 5 * 60_000) {
-    warnedAt = Date.now();
-    noteLife("WARN", `heap ${mb(m.heapUsed)}MB / 상한 ${limit}MB — OOM 가까움`);
-  }
+  /* 숨이 가빠지면 스스로 손을 쓴다 — 캐시를 놓고, 그래도 안 되면 깨끗이 내려간다 (lifecycle.selfHeal) */
+  selfHeal(mb(m.heapUsed), limit, () => {
+    const codes = dropClosesCache();
+    const samples = dropSamplesCache();
+    return `일봉 ${codes}종목${samples ? " · 표본" : ""}`;
+  });
   noteHourlyMem();
   return {
     rssMB: mb(m.rss),
