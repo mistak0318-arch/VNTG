@@ -66,7 +66,7 @@ function rotate(path: string): void {
   }
 }
 
-export type LifeKind = "START" | "EXIT" | "FATAL" | "WARN";
+export type LifeKind = "START" | "EXIT" | "FATAL" | "WARN" | "MEM";
 
 /** 한 줄 남긴다. 어떤 이유로든 실패하면 조용히 넘어간다 */
 export function noteLife(kind: LifeKind, note: string): void {

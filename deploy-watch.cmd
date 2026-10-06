@@ -55,7 +55,8 @@ if exist "%DROP%\deploy.lock" (
 )
 
 if %DEAD% GEQ 3 (
-  echo %date% %time% 응답 없음 %DEAD%회 - 되살린다>> "%DROP%\restart.log"
+  REM ⚠️ 한글로 적지 않는다 — cmd 의 echo 는 CP949 로 쓰는데 이 파일을 읽는 쪽은 UTF-8 이라 깨진다(10/07 실측)
+  echo %date% %time% health no-response x%DEAD% - restarting>> "%DROP%\restart.log"
   schtasks /End /TN "VNTG HTS" >nul 2>&1
   timeout /t 2 /nobreak >nul
   schtasks /Run /TN "VNTG HTS" >nul 2>&1

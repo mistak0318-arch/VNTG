@@ -101,6 +101,21 @@ async function outDir(): Promise<string> {
  */
 let peakRss = 0;
 let warnedAt = 0;
+/**
+ * **한 시간에 한 줄, 몸무게를 적는다** (2026-10-07 — 벤티지: "추이를 보고 하자").
+ *
+ * `health.json` 은 30초마다 **덮어쓰므로** 과거가 안 남고, `최고rss` 는 이번 생애의 값이라 재시작하면 0 으로 돌아간다.
+ * 그래서 「요즘 늘고 있나」를 볼 자리가 어디에도 없었다 — 상한을 올린 것이 시간을 번 조치인 이상, 그 시간이
+ * 얼마나 남았는지는 추이로만 안다. `lifecycle.log` 에 시간마다 한 줄이면 하루 24줄, 2MB 회전 안에서 몇 달이 쌓인다.
+ */
+let memHour = -1;
+function noteHourlyMem(): void {
+  const h = new Date(Date.now() + 9 * 3600_000).getUTCHours();
+  if (h === memHour) return;
+  memHour = h;
+  noteLife("MEM", `최고rss=${Math.round(peakRss / 1048576)}MB`);
+}
+
 function processStats(): Record<string, unknown> {
   const m = process.memoryUsage();
   const mb = (n: number) => Math.round(n / 1048576);
@@ -117,6 +132,7 @@ function processStats(): Record<string, unknown> {
     warnedAt = Date.now();
     noteLife("WARN", `heap ${mb(m.heapUsed)}MB / 상한 ${limit}MB — OOM 가까움`);
   }
+  noteHourlyMem();
   return {
     rssMB: mb(m.rss),
     최고rssMB: mb(peakRss),
