@@ -12,7 +12,8 @@ import {
   reorderAccounts,
 } from "../manualAccounts.js";
 import { allHistory, dropHistory, recordSnapshot } from "../manualHistory.js";
-import { applyImport, parseCsv, planImport } from "../manualImport.js";
+import { applyImport, fillCodesByName, parseCsv, planImport } from "../manualImport.js";
+import { getStockIndex } from "../stockListCache.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { MIN, krxAfterMarket } from "../marketHours.js";
 import { isTradingDay } from "../tradingDay.js";
@@ -370,7 +371,12 @@ export function createAccountRouter(client: KiwoomClient): Router {
         res.status(400).json({ error: "CSV 내용이 비어 있습니다." });
         return;
       }
-      const { rows, skipped } = parseCsv(csv);
+      const parsed = parseCsv(csv);
+      const skipped = parsed.skipped;
+      /* 코드 없이 이름만 온 줄은 전 종목 목록에서 찾아 채운다 — AI 가 코드를 지어내게 두지 않으려는 것 */
+      const rows = parsed.rows.some((r) => !r.code && r.name)
+        ? fillCodesByName(parsed.rows, await getStockIndex(client).catch(() => new Map()), skipped)
+        : parsed.rows;
       if (rows.length === 0) {
         res.status(400).json({ error: "읽을 줄이 없습니다. 양식을 내려받아 견줘 보세요.", plan: planImport([], skipped, await listAccounts(), mode) });
         return;

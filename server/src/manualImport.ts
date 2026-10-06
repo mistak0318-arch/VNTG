@@ -147,10 +147,17 @@ export function parseCsv(text: string): { rows: ImportRow[]; skipped: ImportPlan
     }
     const rawCode = (get("code") ?? "").replace(/[^0-9A-Za-z]/g, "");
     const cash = num(get("cash"));
-    /* 종목이 없고 예수금만 있는 줄 — 예수금만 고치려는 것이다 */
     if (!rawCode) {
+      /* **이름과 수량이 있으면 보유 줄이다** — 코드는 뒤에서 이름으로 찾는다(증권사 화면엔 코드가 없는 때가 많다) */
+      const nm0 = (get("name") ?? "").trim();
+      const q0 = num(get("qty"));
+      if (nm0 && q0 !== null && q0 > 0) {
+        rows.push({ broker, account, code: "", name: nm0, qty: q0, avgPrice: num(get("avgPrice")) ?? 0, cash });
+        return;
+      }
+      /* 종목이 없고 예수금만 있는 줄 — 예수금만 고치려는 것이다 */
       if (cash === null) {
-        skipped.push({ line: i + 1, why: "종목코드도 예수금도 없습니다", text: line.slice(0, 60) });
+        skipped.push({ line: i + 1, why: "종목코드도 종목명도 예수금도 없습니다", text: line.slice(0, 60) });
         return;
       }
       rows.push({ broker, account, code: "", name: "", qty: 0, avgPrice: 0, cash });
@@ -175,6 +182,49 @@ export function parseCsv(text: string): { rows: ImportRow[]; skipped: ImportPlan
   });
 
   return { rows, skipped };
+}
+
+/**
+ * **종목코드가 없으면 이름으로 찾는다** (2026-10-07).
+ *
+ * 증권사 잔고 화면에는 **종목명만 있고 코드가 없는 경우가 흔하다.** 그걸 AI 에게 「코드도 채워 줘」라고 시키면
+ * 삼성전자(005930) 같은 대형주는 맞히지만 중소형주에서 **지어낸다** — 계좌는 돈이 걸린 자리라 환각이 섞이면 안 된다.
+ * 그래서 코드 칸은 비워도 되게 하고, 우리가 가진 전 종목 목록에서 **이름으로** 찾는다.
+ *
+ * 띄어쓰기·괄호 안 설명(「삼성전자(우)」의 (우) 는 **다른 종목**이므로 지우지 않는다)을 빼고 정확히 맞는 것만 쓴다.
+ * 둘 이상이 걸리거나 하나도 없으면 **그 줄을 건너뛰고 까닭을 돌려준다** — 비슷한 이름으로 넘겨짚지 않는다.
+ */
+const norm = (s: string) => s.replace(/\s+/g, "").toLowerCase();
+
+export function fillCodesByName(
+  rows: ImportRow[],
+  index: Map<string, { name: string }>,
+  skipped: ImportPlan["skipped"],
+): ImportRow[] {
+  const byName = new Map<string, string[]>();
+  for (const [code, e] of index) {
+    const k = norm(e.name);
+    if (!k) continue;
+    if (!byName.has(k)) byName.set(k, []);
+    byName.get(k)!.push(code);
+  }
+  const out: ImportRow[] = [];
+  for (const r of rows) {
+    if (r.code || !r.name) {
+      out.push(r);
+      continue;
+    }
+    const hit = byName.get(norm(r.name)) ?? [];
+    if (hit.length === 1) out.push({ ...r, code: hit[0] });
+    else {
+      skipped.push({
+        line: 0,
+        why: hit.length === 0 ? `「${r.name}」을 종목 목록에서 못 찾았습니다 — 종목코드를 적어 주세요` : `「${r.name}」이 ${hit.length}개 있습니다 — 종목코드를 적어 주세요`,
+        text: `${r.broker} ${r.account} ${r.name}`,
+      });
+    }
+  }
+  return out;
 }
 
 /** 계좌를 가르는 열쇠 — 증권사+이름 */
