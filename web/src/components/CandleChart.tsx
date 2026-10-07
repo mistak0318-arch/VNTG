@@ -9,7 +9,7 @@ import {
   type SeriesMarker,
   type Time,
 } from "lightweight-charts";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { setPref } from "../prefs";
 import { chartColors, useAppearance } from "../useAppearance";
 import { useChartPrefs } from "../useChartPrefs";
@@ -218,6 +218,19 @@ function rsi(rows: Candle[], period: number): { time: Time; value: number }[] {
   return out;
 }
 
+/** 값 줄의 단순이동평균 — RSI 시그널선처럼 **이미 만든 선을 다시 평균 낼 때** 쓴다 */
+function smaOf(rows: { time: Time; value: number }[], period: number): { time: Time; value: number }[] {
+  const out: { time: Time; value: number }[] = [];
+  if (period < 2) return rows;
+  let sum = 0;
+  for (let i = 0; i < rows.length; i++) {
+    sum += rows[i].value;
+    if (i >= period) sum -= rows[i - period].value;
+    if (i >= period - 1) out.push({ time: rows[i].time, value: sum / period });
+  }
+  return out;
+}
+
 /** 캔들 배열에서 기간 최고/최저를 낸다 (HTS의 최고/최저 표시용) */
 function extremes(candles: Candle[]) {
   let hi = candles[0];
@@ -386,6 +399,8 @@ export function CandleChart({
   sizeTick = 0,
   fitKey = "",
   lockScope,
+  bbOn: bbOnProp,
+  rsiOn: rsiOnProp,
   trades,
   digits = 0,
   prevClose = null,
@@ -400,6 +415,15 @@ export function CandleChart({
   trades?: TradeMark[];
   /** 자물쇠를 이 차트만의 것으로 — 보드 카드가 인스턴스 id 를 준다. 없으면 전역 */
   lockScope?: string;
+  /**
+   * 지표 켜고 끄기를 **부르는 쪽이 정한다** (2026-10-07). 안 주면 공통 설정을 따른다.
+   *
+   * 보드에 차트 카드를 여러 장 띄우므로, 한 장에서 켠 것이 전부에 번지면 안 된다
+   * (벤티지: "독립적으로 적용되게 해줘"). 기간·색 같은 세부는 그대로 공통이다 —
+   * 차트마다 다른 기간을 쓰면 같은 지표를 보면서 서로 다른 숫자를 읽게 된다.
+   */
+  bbOn?: boolean;
+  rsiOn?: boolean;
   /** 차트 높이(px). 전체화면에서 화면 높이만큼 키운다 */
   height?: number;
   /**
@@ -457,7 +481,19 @@ export function CandleChart({
   /** 리사이저 — 십자선이 「좁음」 판정이 어긋난 걸 발견하면 여기로 다시 부른다 */
   const resizeRef = useRef<(() => void) | null>(null);
   const { theme } = useAppearance();
-  const { prefs } = useChartPrefs();
+  const { prefs: basePrefs } = useChartPrefs();
+  /*
+   * 켜고 끄기는 **부르는 쪽이 이기고**, 세부(기간·색·시그널)는 공통 설정 그대로다 (2026-10-07).
+   * 아래 코드는 전부 `prefs` 하나만 보므로, 여기서 한 번 겹쳐 두면 나머지는 손댈 것이 없다.
+   */
+  const prefs = useMemo(
+    () => ({
+      ...basePrefs,
+      bbOn: bbOnProp ?? basePrefs.bbOn,
+      rsiOn: rsiOnProp ?? basePrefs.rsiOn,
+    }),
+    [basePrefs, bbOnProp, rsiOnProp],
+  );
   /**
    * 켜 둔 이평선만. 설정이 바뀌면 이 배열이 바뀌고 차트를 다시 만든다.
    *
@@ -487,6 +523,8 @@ export function CandleChart({
   const bbRefs = useRef<ISeriesApi<"Line">[]>([]);
   /** RSI 띠 (2026-10-07) — 켰을 때만 만든다 */
   const rsiRef = useRef<ISeriesApi<"Line"> | null>(null);
+  /** 시그널선 — RSI 를 다시 평균 낸 선. 엇갈림이 화살표가 된다 */
+  const rsiSigRef = useRef<ISeriesApi<"Line"> | null>(null);
   /** 크로스헤어 핸들러가 늘 최신 설정을 보게 한다 */
   const prefsRef = useRef(prefs);
   prefsRef.current = prefs;
@@ -985,14 +1023,16 @@ export function CandleChart({
      * 격자와 같은 톤이라 다크에서 켜도 안 보였다.
      */
     bbRefs.current = prefs.bbOn
-      ? [0, 1].map(() =>
-          chart.addLineSeries({
-            color: c.bb,
-            lineWidth: 1,
-            lineStyle: LineStyle.Dashed,
-            priceLineVisible: false,
-            lastValueVisible: false,
-          }),
+      ? /* [위, 아래, 중심] — 중심은 꺼져 있으면 안 만든다 */
+        [prefs.bbUpperColor, prefs.bbLowerColor, ...(prefs.bbMidOn ? [prefs.bbMidColor] : [])].map(
+          (color) =>
+            chart.addLineSeries({
+              color: color || c.bb,
+              lineWidth: 1,
+              lineStyle: LineStyle.Dashed,
+              priceLineVisible: false,
+              lastValueVisible: false,
+            }),
         )
       : [];
 
@@ -1014,15 +1054,15 @@ export function CandleChart({
     if (prefs.rsiOn) {
       const rsiSeries = chart.addLineSeries({
         priceScaleId: "rsi",
-        color: "#f0a04b",
+        color: prefs.rsiColor,
         lineWidth: 1,
         priceLineVisible: false,
         lastValueVisible: true,
         autoscaleInfoProvider: () => ({ priceRange: { minValue: 0, maxValue: 100 } }),
       });
       rsiSeries.priceScale().applyOptions({ scaleMargins: band.rsi, visible: false });
-      /* 30·70 — 이 지표를 보는 이유 자체라 선으로 박아 둔다 */
-      for (const v of [30, 70])
+      /* 과매수·과매도 선 — 이 지표를 보는 이유 자체라 선으로 박아 둔다 */
+      for (const v of [prefs.rsiLow, prefs.rsiHigh])
         rsiSeries.createPriceLine({
           price: v,
           color: c.border,
@@ -1032,7 +1072,21 @@ export function CandleChart({
           title: "",
         });
       rsiRef.current = rsiSeries;
-    } else rsiRef.current = null;
+      /* 시그널선 — RSI 와 **같은 축**이라야 엇갈림이 눈에 맞는다 */
+      rsiSigRef.current = prefs.rsiSignalOn
+        ? chart.addLineSeries({
+            priceScaleId: "rsi",
+            color: prefs.rsiSignalColor,
+            lineWidth: 1,
+            priceLineVisible: false,
+            lastValueVisible: false,
+            autoscaleInfoProvider: () => ({ priceRange: { minValue: 0, maxValue: 100 } }),
+          })
+        : null;
+    } else {
+      rsiRef.current = null;
+      rsiSigRef.current = null;
+    }
 
     /**
      * 봉 위에 올렸을 때 그 봉의 정보를 띄운다 (키움 차트와 같은 방식).
@@ -1422,7 +1476,7 @@ export function CandleChart({
       volRef.current = null;
     };
     // maKey·볼린저·RSI 설정이 바뀌면 시리즈 구성과 띠 나눔이 달라지므로 차트를 다시 만든다
-  }, [intraday, theme, name, code, maKey, prefs.bbOn, prefs.rsiOn]);
+  }, [intraday, theme, name, code, maKey, prefs.bbOn, prefs.rsiOn, prefs.bbMidOn, prefs.bbUpperColor, prefs.bbLowerColor, prefs.bbMidColor, prefs.rsiSignalOn, prefs.rsiColor, prefs.rsiSignalColor, prefs.rsiHigh, prefs.rsiLow]);
 
   /*
    * ── 그리기: 클릭·미리보기·화면 이동 구독 (차트가 새로 태어날 때마다) ──
@@ -1707,12 +1761,45 @@ export function CandleChart({
       const m = maLines[i];
       if (m) line.setData(sma(candles, m.period));
     });
-    if (prefs.bbOn && bbRefs.current.length === 2) {
+    if (prefs.bbOn && bbRefs.current.length >= 2) {
       const bb = bollinger(candles, prefs.bbPeriod, prefs.bbStdDev);
       bbRefs.current[0].setData(bb.upper);
       bbRefs.current[1].setData(bb.lower);
+      /* 중심선은 `bbPeriod` 이동평균과 같은 값이다 — 따로 세지 않고 그대로 쓴다 */
+      if (bbRefs.current[2]) bbRefs.current[2].setData(sma(candles, prefs.bbPeriod));
     }
-    if (prefs.rsiOn && rsiRef.current) rsiRef.current.setData(rsi(candles, prefs.rsiPeriod));
+    if (prefs.rsiOn && rsiRef.current) {
+      const r = rsi(candles, prefs.rsiPeriod);
+      rsiRef.current.setData(r);
+      /*
+       * 시그널선은 **RSI 를 다시 평균 낸 것**이다 — 종가가 아니라 RSI 값을 평균 낸다.
+       * 여기서 종가를 평균 내면 그냥 이평선이 하나 더 생길 뿐이다.
+       */
+      const sig = r.length > prefs.rsiSignal ? smaOf(r, prefs.rsiSignal) : [];
+      if (rsiSigRef.current) rsiSigRef.current.setData(sig);
+      /*
+       * **엇갈림 화살표** — 키움 차트의 그 화살표다. RSI 가 시그널선을 **뚫은 봉**에 찍는다.
+       * 둘 다 있는 구간에서만 센다(시그널은 RSI 보다 늦게 시작한다).
+       */
+      if (prefs.rsiMarkOn && prefs.rsiSignalOn && sig.length > 1) {
+        /* 위로 뚫음=오름색, 아래로 뚫음=내림색. 봉 색과 같은 규칙이라 따로 안 읽어도 뜻이 통한다 */
+        const mc = chartColors(theme);
+        const sigAt = new Map(sig.map((p) => [timeValue(p.time), p.value]));
+        const marks: SeriesMarker<Time>[] = [];
+        let prevDiff: number | null = null;
+        for (const p of r) {
+          const s = sigAt.get(timeValue(p.time));
+          if (s === undefined) continue;
+          const diff = p.value - s;
+          if (prevDiff !== null && prevDiff <= 0 && diff > 0)
+            marks.push({ time: p.time, position: "belowBar", color: mc.up, shape: "arrowUp", text: "" });
+          else if (prevDiff !== null && prevDiff >= 0 && diff < 0)
+            marks.push({ time: p.time, position: "aboveBar", color: mc.down, shape: "arrowDown", text: "" });
+          prevDiff = diff;
+        }
+        rsiRef.current.setMarkers(marks);
+      } else rsiRef.current.setMarkers([]);
+    }
     /* 거래량 봉도 테마 색으로 (2026-08-27) — 여기만 빨강·파랑이 박혀 있어서
        엑셀 모드에서 봉은 무채색인데 거래량만 주식 색으로 남았다 */
     const vc = chartColors(theme);

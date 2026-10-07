@@ -102,7 +102,8 @@ export function ChartConfigPanel() {
         <div className="cc-title">
           <b>볼린저 밴드</b>
           <small>
-            이동평균 ± 표준편차×배수. <b>가운데 선은 그리지 않습니다</b> — 이평선과 겹칩니다
+            이동평균 ± 표준편차×배수. <b>켜고 끄기는 차트마다 따로</b>입니다 — 차트 도구줄의
+            「볼린저」 단추로 그 차트만 켭니다. 여기 값은 모든 차트가 함께 씁니다
           </small>
         </div>
         <div className="cc-inline">
@@ -138,6 +139,141 @@ export function ChartConfigPanel() {
             />
             배
           </label>
+        </div>
+        {/* 색 — 위·아래를 따로 두면 「어느 쪽에 닿았나」를 색으로 읽을 수 있다 (2026-10-07) */}
+        <div className="cc-inline">
+          <label>
+            위 선
+            <input
+              type="color"
+              value={prefs.bbUpperColor}
+              onChange={(e) => set({ ...prefs, bbUpperColor: e.target.value })}
+            />
+          </label>
+          <label>
+            아래 선
+            <input
+              type="color"
+              value={prefs.bbLowerColor}
+              onChange={(e) => set({ ...prefs, bbLowerColor: e.target.value })}
+            />
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={prefs.bbMidOn}
+              onChange={(e) => set({ ...prefs, bbMidOn: e.target.checked })}
+            />
+            중심선
+          </label>
+          <label>
+            색
+            <input
+              type="color"
+              value={prefs.bbMidColor}
+              disabled={!prefs.bbMidOn}
+              onChange={(e) => set({ ...prefs, bbMidColor: e.target.value })}
+            />
+          </label>
+        </div>
+        <div className="cc-note">
+          중심선은 <b>기간과 같은 이동평균</b>입니다 — 그 이평선을 이미 켜 뒀다면 같은 자리에
+          두 줄이 겹칩니다.
+        </div>
+      </section>
+
+      {/* ---------------- RSI (2026-10-07) ---------------- */}
+      <section className="cc-group">
+        <div className="cc-head">
+          <b>RSI</b>
+          <small>
+            거래량 아래 띠로 그립니다. <b>켜고 끄기는 차트마다 따로</b> — 차트 도구줄의 「RSI」
+            단추입니다. 여기 값은 모든 차트가 함께 씁니다
+          </small>
+        </div>
+        <div className="cc-inline">
+          <label>
+            기간
+            <input
+              type="number"
+              min={2}
+              max={100}
+              value={prefs.rsiPeriod}
+              onChange={(e) => set({ ...prefs, rsiPeriod: Math.max(2, Number(e.target.value) || 14) })}
+            />
+          </label>
+          <label>
+            색
+            <input
+              type="color"
+              value={prefs.rsiColor}
+              onChange={(e) => set({ ...prefs, rsiColor: e.target.value })}
+            />
+          </label>
+          <label>
+            과매수
+            <input
+              type="number"
+              min={50}
+              max={95}
+              value={prefs.rsiHigh}
+              onChange={(e) => set({ ...prefs, rsiHigh: Math.min(95, Math.max(50, Number(e.target.value) || 70)) })}
+            />
+          </label>
+          <label>
+            과매도
+            <input
+              type="number"
+              min={5}
+              max={50}
+              value={prefs.rsiLow}
+              onChange={(e) => set({ ...prefs, rsiLow: Math.min(50, Math.max(5, Number(e.target.value) || 30)) })}
+            />
+          </label>
+        </div>
+        <div className="cc-inline">
+          <label>
+            <input
+              type="checkbox"
+              checked={prefs.rsiSignalOn}
+              onChange={(e) => set({ ...prefs, rsiSignalOn: e.target.checked })}
+            />
+            시그널선
+          </label>
+          <label>
+            기간
+            <input
+              type="number"
+              min={2}
+              max={50}
+              value={prefs.rsiSignal}
+              disabled={!prefs.rsiSignalOn}
+              onChange={(e) => set({ ...prefs, rsiSignal: Math.max(2, Number(e.target.value) || 9) })}
+            />
+          </label>
+          <label>
+            색
+            <input
+              type="color"
+              value={prefs.rsiSignalColor}
+              disabled={!prefs.rsiSignalOn}
+              onChange={(e) => set({ ...prefs, rsiSignalColor: e.target.value })}
+            />
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={prefs.rsiMarkOn}
+              disabled={!prefs.rsiSignalOn}
+              onChange={(e) => set({ ...prefs, rsiMarkOn: e.target.checked })}
+            />
+            엇갈림 화살표
+          </label>
+        </div>
+        <div className="cc-note">
+          시그널선은 <b>RSI 를 다시 평균 낸 선</b>입니다(종가가 아닙니다). 화살표는 RSI 가
+          시그널선을 뚫은 봉에 찍습니다 — 위로 뚫으면 ▲, 아래로 ▼.{" "}
+          <b>신호이지 매매 지시가 아닙니다</b> — 횡보장에서는 하루걸러 엇갈려 화살표가 빽빽해집니다.
         </div>
       </section>
 

@@ -4,7 +4,7 @@ import type { RawRecord } from "../api";
 import { api, type TradeFill } from "../api";
 import { CandleChart, type Candle } from "./CandleChart";
 import { setPref } from "../prefs";
-import { useChartPrefs } from "../useChartPrefs";
+import { indOn, setIndOn, useChartPrefs } from "../useChartPrefs";
 import { ChartInsights } from "./ChartInsights";
 import { PERIOD_CONFIG, lastDays, toCandles, type Period } from "./chartCandles";
 
@@ -141,6 +141,22 @@ export function ChartPanel({
    * 한 번 그려진 뒤다. 그래서 localStorage 에서 바로 꺼낸다(서버 값은 부팅 때 여기
    * 채워진다). 쓰기는 `setPref` 라 서버에도 올라간다.
    */
+  /*
+   * **지표는 이 차트만** (2026-10-07) — 벤티지: "RSI 볼린저 설정 하면 열려있는 모든 차트에
+   * 적용된다. 독립적으로 적용되게 해줘." 자물쇠와 같은 규칙이다(`lockScope` → `viewId`).
+   * 제 값이 없으면 공통 설정을 따르므로, 설정에서 켜 두면 새로 띄우는 차트는 켜진 채로 뜬다.
+   */
+  const [bbOn, setBbOn] = useState(() => indOn("bb", viewId, prefs.bbOn));
+  const [rsiOn, setRsiOn] = useState(() => indOn("rsi", viewId, prefs.rsiOn));
+  const toggleInd = (k: "bb" | "rsi") => {
+    const cur = k === "bb" ? bbOn : rsiOn;
+    const next = !cur;
+    (k === "bb" ? setBbOn : setRsiOn)(next);
+    /* 카드가 아닌 자리(개별종목분석처럼 한 장뿐)는 공통 설정을 고쳐 다음에 열 때도 남게 한다 */
+    if (viewId) setIndOn(k, viewId, next);
+    else savePrefs({ ...prefs, [k === "bb" ? "bbOn" : "rsiOn"]: next });
+  };
+
   const viewKey = viewId ? `vntg.chart.view.${viewId}` : "";
   const saved = (): { period?: Period; venue?: Venue; venueDaily?: Venue; span?: number; fold?: boolean } => {
     if (!viewKey) return {};
@@ -633,10 +649,10 @@ export function ChartPanel({
       */}
       <span className="period-sep" />
       <button
-        className={`period-btn ind${prefs.bbOn ? " active" : ""}`}
-        onClick={() => savePrefs({ ...prefs, bbOn: !prefs.bbOn })}
+        className={`period-btn ind${bbOn ? " active" : ""}`}
+        onClick={() => toggleInd("bb")}
         title={
-          prefs.bbOn
+          bbOn
             ? "볼린저 밴드 끄기"
             : `볼린저 밴드 — ${prefs.bbPeriod}일 이동평균 ± 표준편차×${prefs.bbStdDev} (기간·배수는 설정 > 화면 > 차트)`
         }
@@ -644,10 +660,10 @@ export function ChartPanel({
         볼린저
       </button>
       <button
-        className={`period-btn ind${prefs.rsiOn ? " active" : ""}`}
-        onClick={() => savePrefs({ ...prefs, rsiOn: !prefs.rsiOn })}
+        className={`period-btn ind${rsiOn ? " active" : ""}`}
+        onClick={() => toggleInd("rsi")}
         title={
-          prefs.rsiOn
+          rsiOn
             ? "RSI 끄기"
             : `RSI ${prefs.rsiPeriod} — 거래량 아래 띠로. 30·70 점선 (기간은 설정 > 화면 > 차트)`
         }
@@ -771,6 +787,9 @@ export function ChartPanel({
             code={code}
             sizeTick={sizeTick}
             lockScope={viewId}
+            /* 지표는 이 카드만 — 공통 설정은 세부(기간·색)만 맡는다 (2026-10-07) */
+            bbOn={bbOn}
+            rsiOn={rsiOn}
           />
         </div>
       )}

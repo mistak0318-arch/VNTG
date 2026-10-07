@@ -40,6 +40,20 @@ export interface ChartPrefs {
   /** 표준편차 배수 */
   bbStdDev: number;
   /**
+   * 띠 색 (2026-10-07) — 위·아래·중심을 따로 고른다.
+   *
+   * 테마에서 한 색을 주고 있었는데, 그러면 「위는 빨강 아래는 파랑」처럼 **방향을 색으로
+   * 읽는** 사람이 손댈 자리가 없다. 이평선이 이미 각자 색을 들고 있으니 같은 방식으로 둔다.
+   */
+  bbUpperColor: string;
+  bbLowerColor: string;
+  /**
+   * 중심선 — 기본은 **꺼 둔다.** 중심선은 `bbPeriod` 일 이동평균과 **같은 선**이라,
+   * 이평선을 켜 둔 사람에게는 같은 자리에 두 줄이 겹쳐 그려진다.
+   */
+  bbMidOn: boolean;
+  bbMidColor: string;
+  /**
    * **RSI** (2026-10-07 — 벤티지: "차트에 rsi 옵션 키고 끄게 할 수 있어?").
    *
    * 켜면 거래량 아래에 띠가 하나 더 생기고 봉·거래량이 그만큼 위로 눌린다.
@@ -48,6 +62,26 @@ export interface ChartPrefs {
   rsiOn: boolean;
   /** 며칠로 잴지. 키움 기본과 같은 14 */
   rsiPeriod: number;
+  /**
+   * **시그널선** — RSI 를 다시 평균 낸 선 (키움의 「시그널 9」).
+   *
+   * RSI 하나만 보면 과매수·과매도 두 자리밖에 못 읽는다. 시그널선이 있으면 **둘이
+   * 엇갈리는 지점**이 생기고, 그게 키움 차트의 그 화살표다.
+   */
+  rsiSignalOn: boolean;
+  rsiSignal: number;
+  /** 과매수·과매도 선 (기본 70·30) */
+  rsiHigh: number;
+  rsiLow: number;
+  /**
+   * 엇갈림 화살표 — RSI 가 시그널선을 **뚫은 봉**에 찍는다. 위로 뚫으면 ▲, 아래로 ▼.
+   *
+   * ⚠️ 이건 **신호이지 매매 지시가 아니다.** 횡보장에서는 하루걸러 엇갈려 화살표가
+   * 빽빽해진다 — 추세가 있을 때만 뜻이 있다.
+   */
+  rsiMarkOn: boolean;
+  rsiColor: string;
+  rsiSignalColor: string;
   /** 차트 위 판독 줄(이동평균 요약·매물대)을 띄울지 */
   insightsOn: boolean;
   /** 판독 줄 안의 매물대를 띄울지 */
@@ -91,8 +125,19 @@ export const DEFAULT_PREFS: ChartPrefs = {
   bbOn: false,
   bbPeriod: 20,
   bbStdDev: 2,
+  bbUpperColor: "#4fd1c5",
+  bbLowerColor: "#4fd1c5",
+  bbMidOn: false,
+  bbMidColor: "#8b98a5",
   rsiOn: false,
   rsiPeriod: 14,
+  rsiSignalOn: true,
+  rsiSignal: 9,
+  rsiHigh: 70,
+  rsiLow: 30,
+  rsiMarkOn: true,
+  rsiColor: "#f0a04b",
+  rsiSignalColor: "#e879c8",
   insightsOn: true,
   profileOn: true,
   profileDays: 120,
@@ -177,4 +222,50 @@ export function useChartPrefs(): {
   }, []);
 
   return { prefs, set, reset };
+}
+
+/* ───────── 지표 켜고 끄기는 **차트마다 따로** (2026-10-07) ───────── */
+
+/**
+ * 벤티지: "RSI 볼린저 설정 하면 열려있는 모든 차트에 적용된다. 독립적으로 적용되게 해줘."
+ *
+ * 보드에는 차트 카드를 여러 장 띄운다. 한 장에서 RSI 를 켜려고 눌렀더니 **띄워 둔 전부가
+ * 같이 켜졌다** — 비교하려고 여러 장을 띄운 사람에게는 그게 고장이다.
+ *
+ * 자물쇠(`lockScope`)가 이미 같은 문제를 같은 방식으로 풀고 있다: **그 차트만의 값이
+ * 있으면 그걸 쓰고, 없으면 공통 설정을 따른다.** 같은 수법을 쓴다 — 두 벌로 만들면
+ * 언젠가 한쪽만 고치게 된다.
+ *
+ * ⚠️ 여기 담는 건 **켜고 끄기뿐**이다. 기간·색·시그널 같은 세부는 공통(`ChartPrefs`)에
+ * 그대로 둔다 (벤티지: "세부설정은 옵션에서 하더라고") — 차트마다 다른 기간을 쓰면
+ * 같은 지표를 보면서 서로 다른 숫자를 읽게 된다.
+ */
+export type IndKey = "bb" | "rsi";
+
+const indKeyOf = (scope: string, k: IndKey) => `vntg.chart.ind.${k}.${scope}`;
+
+/** 이 차트에서 켜져 있나 — 제 값이 없으면 공통 설정(`fallback`)을 따른다 */
+export function indOn(k: IndKey, scope: string | undefined, fallback: boolean): boolean {
+  try {
+    if (scope) {
+      const own = localStorage.getItem(indKeyOf(scope, k));
+      if (own !== null) return own === "1";
+    }
+  } catch {
+    /* 저장소를 못 읽어도 공통 설정으로 뜬다 */
+  }
+  return fallback;
+}
+
+/**
+ * 이 차트의 값을 적는다. `scope` 가 없는 차트(개별종목분석처럼 한 장뿐인 자리)는
+ * 공통 설정을 직접 고친다 — 거기서 켠 것이 다음에 열 때도 켜져 있어야 한다.
+ */
+export function setIndOn(k: IndKey, scope: string | undefined, on: boolean): void {
+  if (!scope) return;
+  try {
+    localStorage.setItem(indKeyOf(scope, k), on ? "1" : "0");
+  } catch {
+    /* 못 적어도 이번 화면에는 적용된다 */
+  }
 }
