@@ -464,7 +464,13 @@ export function UsWatchTable({
                       return (
                         <td
                           key={c.key}
-                          className={`num tickable ${cls(shownRate)} ${tick?.(s.symbol) ?? ""}`}
+                          /*
+                           * `uw-rate` — **줄을 안 바꾼다** (2026-10-07). 벤티지: "봉은 왜 이래 겹쳐보이네".
+                           * 봉(`MiniCandle` sm)이 **26px** 이라 글자 줄 높이보다 크다. 칸이 좁아 봉이
+                           * 둘째 줄로 밀리면 그 26px 이 윗줄 글자를 타고 올라가 겹쳐 보인다.
+                           * 한 줄로 두면 줄 상자가 봉 높이만큼 커져서 겹칠 일이 없다.
+                           */
+                          className={`num tickable uw-rate ${cls(shownRate)} ${tick?.(s.symbol) ?? ""}`}
                         >
                           {pct(shownRate)}
                           {side && (
