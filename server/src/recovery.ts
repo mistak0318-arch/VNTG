@@ -92,6 +92,14 @@ export function isStressed(): boolean {
 }
 
 /**
+ * 관문이 **몇 개를 동시에 받을지** 정할 때 쓴다 (2026-10-08).
+ * 문턱을 두 벌로 만들면 둘이 어긋나므로, 복구 루틴의 상태를 그대로 내준다.
+ */
+export function stressLevel(): HealthState {
+  return state;
+}
+
+/**
  * **손으로 지금 비운다** (2026-10-08).
  *
  * 벤티지: "모니터 3개에 보드 창을 연동해서 사용하고 있고… 캐시 지우기나 메모리 비우기

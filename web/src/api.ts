@@ -7837,7 +7837,16 @@ export interface SysMem {
     GC호출: number;
     GC가능: boolean;
   };
-  관문: { 지금도는것: number; 최고동시: number; 되돌려보냄: number; 상한MB: number };
+  관문: {
+    지금도는것: number;
+    동시한도: number;
+    기다리는것: number;
+    최고동시: number;
+    최고기다림: number;
+    최대기다림ms: number;
+    되돌려보냄: number;
+    상한MB: number;
+  };
 }
 
 /* ───────── 실전 성적표 (2026-10-07) — 서버 scoreCard.ts 와 같은 모양 ───────── */

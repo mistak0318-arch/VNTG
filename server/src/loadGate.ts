@@ -2,7 +2,7 @@ import { memoryUsage } from "node:process";
 import v8 from "node:v8";
 import type { NextFunction, Request, Response } from "express";
 import { noteLife } from "./lifecycle.js";
-import { isStressed } from "./recovery.js";
+import { isStressed, stressLevel } from "./recovery.js";
 
 /**
  * 과부하 관문 — **서버가 죽는 대신 느려지게 한다** (2026-10-07 밤).
@@ -36,13 +36,23 @@ import { isStressed } from "./recovery.js";
  */
 
 /**
- * 동시에 도는 무거운 요청 수.
+ * 동시에 도는 무거운 요청 수 — **메모리 여유에 따라 늘었다 줄었다 한다** (2026-10-08).
  *
- * 종목 화면 한 장이 길 열다섯 개를 던지므로, 이 값이 작으면 두세 물결로 나뉘어 화면이
- * 굼떠진다. 크면 봉우리가 자란다. 요청 하나가 평균 150MB 안팎이니 8이면 1.2GB —
- * 기본 940MB 를 더해도 상한 6GB 에 한참 못 미친다.
+ * ⚠️ 처음엔 8로 박아 뒀다가 실측에서 당했다. 벤티지가 보드를 **모니터 셋**에 띄우고
+ * 종목연동으로 쓰니 종목 하나에 화면 셋이 같은 길을 동시에 연다 — 카드가 수십 장인데
+ * 자리가 여덟이라 **165건이 15초를 기다리다 503 으로 나갔다.** 그런데 그때 heap 은
+ * **상한의 32%** 였다. 메모리를 지키려고 만든 관문이 **메모리가 멀쩡한데도 목을 조른 것**이다.
+ *
+ * 이 관문의 목적은 「동시 실행을 적게 하는 것」이 아니라 **봉우리를 상한 아래로 묶는 것**이다.
+ * 여유가 있으면 넓히고, 차오르면 조인다. 조이는 판단은 복구 루틴이 이미 하고 있으니
+ * 그 상태를 그대로 쓴다 — 문턱을 두 벌로 만들면 둘이 어긋난다.
  */
-const MAX_INFLIGHT = 8;
+function maxInflight(): number {
+  const s = stressLevel();
+  if (s === "복구") return 5;
+  if (s === "경계") return 10;
+  return 20;
+}
 /** 줄에서 기다리는 최대 시간 — 이보다 길면 화면이 이미 포기했다 */
 const MAX_WAIT_MS = 15_000;
 /** 이 비율을 넘으면 새 요청을 받지 않는다 */
@@ -69,11 +79,36 @@ let inflight = 0;
 const waiters: (() => void)[] = [];
 /** 거절한 횟수 — health.json 이 적어 둔다. 늘어나면 ①상한 ②동시수를 다시 본다 */
 let shed = 0;
-let maxInflight = 0;
+let peakInflight = 0;
+let peakWaiters = 0;
+let maxWaitedMs = 0;
 let lastShedNote = 0;
 
-export function loadGateStats(): { 지금도는것: number; 최고동시: number; 되돌려보냄: number; 상한MB: number } {
-  return { 지금도는것: inflight, 최고동시: maxInflight, 되돌려보냄: shed, 상한MB: limitMB };
+export function loadGateStats(): {
+  지금도는것: number;
+  동시한도: number;
+  기다리는것: number;
+  최고동시: number;
+  최고기다림: number;
+  최대기다림ms: number;
+  되돌려보냄: number;
+  상한MB: number;
+} {
+  /*
+   * ⚠️ **「기다리는 것」이 없어서 한 번 헤맸다** (2026-10-08). 화면이 굼뜰 때
+   * 「증권사 줄인가 내 관문인가」를 물었는데, 관문이 `지금도는것` 만 적고 있어서
+   * 답을 못 했다. 줄 길이와 **가장 오래 기다린 시간**이 있어야 그 물음에 답이 된다.
+   */
+  return {
+    지금도는것: inflight,
+    동시한도: maxInflight(),
+    기다리는것: waiters.length,
+    최고동시: peakInflight,
+    최고기다림: peakWaiters,
+    최대기다림ms: maxWaitedMs,
+    되돌려보냄: shed,
+    상한MB: limitMB,
+  };
 }
 
 function release(): void {
@@ -114,7 +149,7 @@ export function loadGate(req: Request, res: Response, next: NextFunction): void 
 
   const run = () => {
     inflight += 1;
-    if (inflight > maxInflight) maxInflight = inflight;
+    if (inflight > peakInflight) peakInflight = inflight;
     let done = false;
     const finish = () => {
       if (done) return;
@@ -127,26 +162,32 @@ export function loadGate(req: Request, res: Response, next: NextFunction): void 
     next();
   };
 
-  if (inflight < MAX_INFLIGHT) {
+  if (inflight < maxInflight()) {
     run();
     return;
   }
 
   /* 줄에 세운다. 너무 오래 기다리면 포기하고 503 — 끝없이 쌓이면 그것도 메모리다 */
   let timer: NodeJS.Timeout | null = null;
+  /* 얼마나 기다렸나 — 「증권사 줄인가 내 관문인가」는 이 숫자로만 갈린다 */
+  const queuedAt = Date.now();
   const start = () => {
     if (timer) {
       clearTimeout(timer);
       timer = null;
+      const waited = Date.now() - queuedAt;
+      if (waited > maxWaitedMs) maxWaitedMs = waited;
       run();
     }
   };
   waiters.push(start);
+  if (waiters.length > peakWaiters) peakWaiters = waiters.length;
   timer = setTimeout(() => {
     timer = null;
     const i = waiters.indexOf(start);
     if (i >= 0) waiters.splice(i, 1);
     shed += 1;
+    if (MAX_WAIT_MS > maxWaitedMs) maxWaitedMs = MAX_WAIT_MS;
     res.status(503).json({ error: "서버가 많이 바쁩니다 — 잠시 뒤 다시 눌러 주세요.", 과부하: true });
   }, MAX_WAIT_MS);
 }
