@@ -5,6 +5,7 @@ import { COMMON_PARAMS, findSpec, specGroups, type RankSpec } from "../rankSpecs
 import { getMarketSnapshot } from "../marketSnapshot.js";
 import { latestRegularCloses } from "../dailyCloses.js";
 import { bare, extras, toNum } from "../rankExtras.js";
+import { alCode } from "../alCode.js";
 import { getStockIndex } from "../stockListCache.js";
 import { flowRank, flowSums, SUBJECT_LABEL, type FlowSubject, twinFromSpans } from "../dailyStore.js";
 import { buzzDetail, buzzMany, markEntered, clampDays } from "../inquiryBuzz.js";
@@ -645,12 +646,21 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
    */
   router.get("/recent", async (req, res, next) => {
     try {
+      /*
+       * ⚠️ **ETF 코드는 숫자가 아니다** (2026-10-07 — 벤티지: "etf 검색해서 넣어봣는데
+       * 최근조회에 안떠"). `0091P0` 처럼 영문이 섞인다. 예전 필터 `^\d{6}$` 가 그런 줄을
+       * 통째로 버려서, 목록에는 멀쩡히 쌓였는데 표에서만 조용히 사라졌다.
+       *
+       * `dailyCloses` 가 2026-09-01 에 같은 병을 같은 처방으로 고쳤다(「여섯 자리 영숫자」).
+       * 이 라우트는 주석에 **「최근 본 종목에는 ETF 가 섞이는 게 당연하다」**고까지 적어
+       * 놓고 정작 입구에서 거르고 있었다.
+       */
       const codes = [
         ...new Set(
           String(req.query.codes ?? "")
             .split(",")
             .map((c) => bare(c.trim()))
-            .filter((c) => /^\d{6}$/.test(c)),
+            .filter((c) => /^[0-9A-Z]{6}$/i.test(c)),
         ),
       ].slice(0, 50);
 
@@ -685,7 +695,11 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
       for (let i = 0; i < codes.length; i += 50) {
         const part = codes.slice(i, i + 50);
         const { data } = await client.request<Record<string, unknown>>("/api/dostk/stkinfo", "ka10095", {
-          stk_cd: part.map((c) => `${c}_AL`).join("|"),
+          /*
+           * `_AL`(KRX+NXT 통합)은 **숫자 6자리에만** 붙인다 — `alCode` 가 그 규칙을 들고 있다.
+           * 여기서 모든 코드에 손으로 붙이고 있었는데, `0091P0_AL` 같은 건 조회가 깨진다.
+           */
+          stk_cd: part.map((c) => alCode(c)).join("|"),
         });
         for (const r of (data.atn_stk_infr ?? []) as Record<string, unknown>[]) {
           const code = bare(r.stk_cd);
