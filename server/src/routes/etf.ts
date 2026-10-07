@@ -51,6 +51,9 @@ let listCache: { at: number; rows: EtfListRow[] } | null = null;
 const LIST_TTL = 3 * 60_000;
 
 /** ETF 전체 시세 — 연금 계좌 엔진(cisPension)이 모집단으로 쓴다 */
+/** 거래대금 단위가 의심스러울 때 한 번만 적는다 — 줄마다 적으면 로그가 천 줄이 된다 */
+let warnedUnit = false;
+
 export async function fetchAll(client: KiwoomClient, opts: { fresh?: boolean } = {}): Promise<EtfListRow[]> {
   /* 카드 ↻ (2026-09-17) — 30초 지난 캐시만 버린다. 15쪽짜리 조회라 연타는 막는다 */
   const fresh = Boolean(opts.fresh) && (!listCache || Date.now() - listCache.at > 30_000);
@@ -79,6 +82,35 @@ export async function fetchAll(client: KiwoomClient, opts: { fresh?: boolean } =
       const volume = Math.abs(num(r.trde_qty) ?? 0);
       const nav = num(r.nav);
       if (!r.stk_cd || price <= 0) continue;
+      /*
+       * **거래대금은 받은 값이 있으면 그걸 쓴다** (2026-10-08).
+       *
+       * 벤티지: "거래대금 상위 100개인데 내가 아는 거래대금 상위 100개랑 좀 다른 것 같거든?"
+       *
+       * 여태 `현재가 × 거래량` 으로 어림했다. 그 둘은 **다른 값**이다 — 진짜 거래대금은
+       * 체결마다의 가격×수량을 더한 것이라, 장중에 많이 움직인 종목일수록 어긋난다.
+       * 그 어림값으로 상위를 자르니 순위가 실제와 달라졌다.
+       *
+       * ⚠️ **단위를 짐작으로 믿지 않는다.** 키움은 `trde_prica` 를 TR 마다 다른 단위로 준다
+       * (ka10032 는 백만원). 그래서 **백만원으로 읽어 억으로 바꾼 값**과 **곱셈 어림**을
+       * 견줘 보고, 자릿수가 크게 어긋나면 받은 값을 안 믿고 어림을 쓴다.
+       * 둘이 맞으면 받은 값이 더 정확하므로 그쪽을 쓴다.
+       */
+      const approxEok = Math.round((price * volume) / 1e8);
+      const given = num(r.trde_prica);
+      let tradeValue = approxEok;
+      if (given !== null && given > 0) {
+        const asEok = Math.round(given / 100); // 백만원 → 억원
+        /* 어림과 2배 안쪽이면 같은 뜻으로 본다. 0 근처는 비교가 뜻이 없어 그냥 받는다 */
+        if (approxEok <= 1 || (asEok > 0 && asEok / approxEok < 2 && approxEok / asEok < 2)) {
+          tradeValue = asEok;
+        } else if (!warnedUnit) {
+          warnedUnit = true;
+          console.warn(
+            `[etf] 거래대금 단위가 의심스럽다 — 받은 값 ${given}(→${asEok}억) vs 어림 ${approxEok}억. 어림을 쓴다`,
+          );
+        }
+      }
       rows.push({
         code: String(r.stk_cd),
         name: String(r.stk_nm ?? ""),
@@ -86,7 +118,7 @@ export async function fetchAll(client: KiwoomClient, opts: { fresh?: boolean } =
         change: num(r.pred_pre) ?? 0,
         changeRate: num(r.pre_rt) ?? 0,
         volume,
-        tradeValue: Math.round((price * volume) / 1e8),
+        tradeValue,
         nav: nav && nav > 0 ? nav : null,
         deviation: nav && nav > 0 ? ((price - nav) / nav) * 100 : null,
         traceErr: num(r.trace_eor_rt),

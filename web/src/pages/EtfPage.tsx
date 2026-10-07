@@ -240,8 +240,14 @@ function EtfCumTab({ onSelectStock }: { onSelectStock: (code: string, name: stri
     let alive = true;
     setBusy(true);
     setError(null);
-    /* days=5 는 기본 정렬(서버가 5일 누적순으로 준다) — 구간 값은 전부 같이 온다 */
-    fetch(`/api/rank/cumulative?days=5&market=ETF&universe=100`)
+    /*
+     * days=5 는 기본 정렬(서버가 5일 누적순으로 준다) — 구간 값은 전부 같이 온다.
+     *
+     * 100 → 200 (2026-10-08). 벤티지: "일단 거래대금 상위 200으로 범위를 넓히고".
+     * 모집단은 ETF 전체시세(ka40004)를 거래대금으로 줄 세운 것이라, 넓혀도 **조회가 안 는다**
+     * — 같은 목록에서 더 많이 자를 뿐이다. 일봉은 캐시에서 꺼내므로 그쪽도 공짜다.
+     */
+    fetch(`/api/rank/cumulative?days=5&market=ETF&universe=200`)
       .then((r) => r.json())
       .then((j: { rows?: CumRow[]; note?: string; error?: string }) => {
         if (!alive) return;
