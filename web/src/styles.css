@@ -8597,6 +8597,12 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .uw-day { font-size: 0.7333rem; opacity: .75; }
 /* 등락률 칸 안의 당일 봉 (2026-09-24) — 숫자 오른쪽에 붙이고 세로 가운데 */
 .uw-cd { display: inline-flex; align-items: center; vertical-align: middle; margin-left: 6px; }
+/*
+ * 등락률 칸은 **줄을 안 바꾼다** (2026-10-07). 봉이 26px 이라 줄 높이보다 커서, 둘째 줄로
+ * 밀리는 순간 윗줄 글자와 겹쳐 보인다. 한 줄이면 줄 상자가 봉만큼 커져 겹칠 일이 없다.
+ * 칸 너비를 손으로 줄여 둔 경우(`col-fixed`)에도 글자가 뭉개지지 않게 넘치는 쪽을 숨긴다.
+ */
+.uw-table td.uw-rate { white-space: nowrap; overflow: hidden; }
 .uw-day-h { font-size: 0.6667rem; opacity: .6; font-weight: 400; }
 
 /*

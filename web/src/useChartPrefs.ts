@@ -39,6 +39,15 @@ export interface ChartPrefs {
   bbPeriod: number;
   /** 표준편차 배수 */
   bbStdDev: number;
+  /**
+   * **RSI** (2026-10-07 — 벤티지: "차트에 rsi 옵션 키고 끄게 할 수 있어?").
+   *
+   * 켜면 거래량 아래에 띠가 하나 더 생기고 봉·거래량이 그만큼 위로 눌린다.
+   * 기본은 꺼 둔다 — 늘 켜 두면 봉 보는 자리가 좁아진다. 쓰는 사람만 켜면 된다.
+   */
+  rsiOn: boolean;
+  /** 며칠로 잴지. 키움 기본과 같은 14 */
+  rsiPeriod: number;
   /** 차트 위 판독 줄(이동평균 요약·매물대)을 띄울지 */
   insightsOn: boolean;
   /** 판독 줄 안의 매물대를 띄울지 */
@@ -82,6 +91,8 @@ export const DEFAULT_PREFS: ChartPrefs = {
   bbOn: false,
   bbPeriod: 20,
   bbStdDev: 2,
+  rsiOn: false,
+  rsiPeriod: 14,
   insightsOn: true,
   profileOn: true,
   profileDays: 120,

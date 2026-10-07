@@ -183,6 +183,41 @@ function bollinger(
   return { upper, lower };
 }
 
+/**
+ * **RSI** (2026-10-07 — 벤티지: "차트에 rsi 옵션 키고 끄게 할 수 있어?").
+ *
+ * 와일더 방식이다 — 첫 구간만 단순평균으로 띄우고 그 뒤로는 `((n-1)×직전 + 오늘)/n` 로
+ * 굴린다. HTS·증권사가 쓰는 것이 이쪽이라, 단순이동평균으로 내면 **같은 종목에서 값이
+ * 몇 포인트씩 어긋난다.** 두 화면을 나란히 보는 사람에게는 그게 고장으로 보인다.
+ *
+ * 변화가 없는 날(상승·하락 둘 다 0)은 `loss` 가 0 이 되어 나눗셈이 깨지므로 100 으로 둔다.
+ */
+function rsi(rows: Candle[], period: number): { time: Time; value: number }[] {
+  const out: { time: Time; value: number }[] = [];
+  if (period < 2 || rows.length <= period) return out;
+  let gain = 0;
+  let loss = 0;
+  for (let i = 1; i <= period; i++) {
+    const d = rows[i].close - rows[i - 1].close;
+    if (d >= 0) gain += d;
+    else loss -= d;
+  }
+  gain /= period;
+  loss /= period;
+  const push = (i: number) => {
+    const v = loss === 0 ? 100 : 100 - 100 / (1 + gain / loss);
+    out.push({ time: rows[i].time, value: Math.round(v * 100) / 100 });
+  };
+  push(period);
+  for (let i = period + 1; i < rows.length; i++) {
+    const d = rows[i].close - rows[i - 1].close;
+    gain = (gain * (period - 1) + (d > 0 ? d : 0)) / period;
+    loss = (loss * (period - 1) + (d < 0 ? -d : 0)) / period;
+    push(i);
+  }
+  return out;
+}
+
 /** 캔들 배열에서 기간 최고/최저를 낸다 (HTS의 최고/최저 표시용) */
 function extremes(candles: Candle[]) {
   let hi = candles[0];
@@ -450,6 +485,8 @@ export function CandleChart({
   const candleRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const maRefs = useRef<ISeriesApi<"Line">[]>([]);
   const bbRefs = useRef<ISeriesApi<"Line">[]>([]);
+  /** RSI 띠 (2026-10-07) — 켰을 때만 만든다 */
+  const rsiRef = useRef<ISeriesApi<"Line"> | null>(null);
   /** 크로스헤어 핸들러가 늘 최신 설정을 보게 한다 */
   const prefsRef = useRef(prefs);
   prefsRef.current = prefs;
@@ -923,19 +960,34 @@ export function CandleChart({
       wickUpColor: c.up,
       wickDownColor: c.down,
     });
+    /*
+     * **아래를 몇 칸으로 나눌까** — lightweight-charts v4 에는 창(pane) 이 없어서,
+     * 거래량처럼 **가격축을 따로 파고 여백으로 띠를 만든다.**
+     *
+     * RSI 를 켜면 띠가 하나 더 생기므로 봉과 거래량을 그만큼 위로 민다. 안 그러면
+     * 셋이 같은 자리에 겹쳐 그려진다. 숫자는 한 벌로 묶어 둔다 — 세 군데에 흩어 두면
+     * 하나만 고쳤을 때 띠가 어긋난다.
+     */
+    const band = prefs.rsiOn
+      ? { candle: 0.46, vol: { top: 0.58, bottom: 0.26 }, rsi: { top: 0.8, bottom: 0.04 } }
+      : { candle: 0.3, vol: { top: 0.72, bottom: 0.05 }, rsi: { top: 0.8, bottom: 0.04 } };
     /* 위 여백 5→12% (2026-09-10 — 「고」·S 마커가 위에서 잘렸다). 마커 두 단(고 + S)이 들어갈 자리 */
-    candleSeries.priceScale().applyOptions({ scaleMargins: { top: 0.12, bottom: 0.3 } });
+    candleSeries.priceScale().applyOptions({ scaleMargins: { top: 0.12, bottom: band.candle } });
     candleRef.current = candleSeries;
 
     maRefs.current = maLines.map(({ color }) =>
       chart.addLineSeries({ color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false }),
     );
 
-    // 볼린저는 위·아래 두 줄. 점선으로 둬야 이평선과 구분된다
+    /*
+     * 볼린저는 위·아래 두 줄. 점선으로 둬야 이평선과 구분된다.
+     * 색은 **테두리(`c.border`)에서 전용 색(`c.bb`)으로** 바꿨다 (2026-10-07) — 테두리는
+     * 격자와 같은 톤이라 다크에서 켜도 안 보였다.
+     */
     bbRefs.current = prefs.bbOn
       ? [0, 1].map(() =>
           chart.addLineSeries({
-            color: c.border,
+            color: c.bb,
             lineWidth: 1,
             lineStyle: LineStyle.Dashed,
             priceLineVisible: false,
@@ -951,8 +1003,36 @@ export function CandleChart({
       priceLineVisible: false,
       lastValueVisible: false,
     });
-    volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.72, bottom: 0.05 }, visible: false });
+    volumeSeries.priceScale().applyOptions({ scaleMargins: band.vol, visible: false });
     volRef.current = volumeSeries;
+
+    /*
+     * **RSI 띠** (2026-10-07). 0~100 으로 눈금을 고정한다 — 자동이면 값이 60~65 에만 머문 날
+     * 띠가 그 좁은 폭으로 확대돼 **잔물결이 큰 파도처럼 보인다.** 과매수·과매도를 보는
+     * 지표인데 30·70 의 자리가 날마다 달라지면 볼 수가 없다.
+     */
+    if (prefs.rsiOn) {
+      const rsiSeries = chart.addLineSeries({
+        priceScaleId: "rsi",
+        color: "#f0a04b",
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: true,
+        autoscaleInfoProvider: () => ({ priceRange: { minValue: 0, maxValue: 100 } }),
+      });
+      rsiSeries.priceScale().applyOptions({ scaleMargins: band.rsi, visible: false });
+      /* 30·70 — 이 지표를 보는 이유 자체라 선으로 박아 둔다 */
+      for (const v of [30, 70])
+        rsiSeries.createPriceLine({
+          price: v,
+          color: c.border,
+          lineWidth: 1,
+          lineStyle: LineStyle.Dotted,
+          axisLabelVisible: false,
+          title: "",
+        });
+      rsiRef.current = rsiSeries;
+    } else rsiRef.current = null;
 
     /**
      * 봉 위에 올렸을 때 그 봉의 정보를 띄운다 (키움 차트와 같은 방식).
@@ -1341,8 +1421,8 @@ export function CandleChart({
       maRefs.current = [];
       volRef.current = null;
     };
-    // maKey·볼린저 설정이 바뀌면 시리즈 구성이 달라지므로 차트를 다시 만든다
-  }, [intraday, theme, name, code, maKey, prefs.bbOn]);
+    // maKey·볼린저·RSI 설정이 바뀌면 시리즈 구성과 띠 나눔이 달라지므로 차트를 다시 만든다
+  }, [intraday, theme, name, code, maKey, prefs.bbOn, prefs.rsiOn]);
 
   /*
    * ── 그리기: 클릭·미리보기·화면 이동 구독 (차트가 새로 태어날 때마다) ──
@@ -1632,6 +1712,7 @@ export function CandleChart({
       bbRefs.current[0].setData(bb.upper);
       bbRefs.current[1].setData(bb.lower);
     }
+    if (prefs.rsiOn && rsiRef.current) rsiRef.current.setData(rsi(candles, prefs.rsiPeriod));
     /* 거래량 봉도 테마 색으로 (2026-08-27) — 여기만 빨강·파랑이 박혀 있어서
        엑셀 모드에서 봉은 무채색인데 거래량만 주식 색으로 남았다 */
     const vc = chartColors(theme);

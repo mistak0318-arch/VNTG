@@ -297,6 +297,8 @@ export function chartColors(theme: ThemeName) {
       volume: "#bfbfbf",
       up: "#4a4a4a",
       down: "#a6a6a6",
+      /* 흑백 테마는 흑백을 지킨다 — 격자보다 진한 회색이면 띠로 읽힌다 */
+      bb: "#8a8a8a",
     };
   /* 메모 — 흑백 인쇄한 메모. 오름은 진한 잉크, 내림은 옅은 잉크 (엑셀과 같은 규칙, 종이색 위에) */
   if (theme === "note")
@@ -307,6 +309,7 @@ export function chartColors(theme: ThemeName) {
       volume: "#d9d3c5",
       up: "#3a3631",
       down: "#b0aba0",
+      bb: "#9b958a",
     };
   /*
    * 읽기 — 종이빛 위의 차트 (2026-09-19). **격자가 제일 중요하다.**
@@ -318,11 +321,20 @@ export function chartColors(theme: ThemeName) {
    * 격자는 바탕과 거의 같은 톤으로 깔아 **있는 줄 모르게** 둔다. 봉은 테마의 채도 낮춘 빨강·파랑(--red/--blue)과
    * 같은 값이라 표의 숫자 색과 화면에서 어긋나지 않는다.
    */
+  /*
+   * `bb` — **볼린저 밴드 색** (2026-10-07). 벤티지: "불린저밴드 보이지도 않는다... 색을 좀 어떻게 좀 해봐".
+   *
+   * 여태 테두리 색(`border`)으로 그렸다. 그건 **격자와 거의 같은 톤**이라 다크에서는
+   * 사실상 안 보였다. 띠는 봉을 가리면 안 되지만 **안 보이면 켠 뜻이 없다.**
+   *
+   * 이평선 색(빨강·초록·파랑·갈색·노랑·보라·회색) 중 어느 것과도 안 겹치는 청록으로 둔다 —
+   * 점선이라 이평선과 모양으로도 갈린다.
+   */
   if (theme === "reading")
-    return { text: "#665f4f", grid: "#e7dfd0", border: "#dcd2bf", volume: "#d2c8b4", up: "#b23b32", down: "#2d5f8f" };
+    return { text: "#665f4f", grid: "#e7dfd0", border: "#dcd2bf", volume: "#d2c8b4", up: "#b23b32", down: "#2d5f8f", bb: "#1c7a72" };
   return theme === "light"
-    ? { text: "#5b6673", grid: "#e8ecf1", border: "#d0d7e0", volume: "#c9d2dc", up: "#ff5c5c", down: "#4c8dff" }
-    : { text: "#8b98a5", grid: "#1a232d", border: "#223040", volume: "#3a4553", up: "#ff5c5c", down: "#4c8dff" };
+    ? { text: "#5b6673", grid: "#e8ecf1", border: "#d0d7e0", volume: "#c9d2dc", up: "#ff5c5c", down: "#4c8dff", bb: "#0f8f86" }
+    : { text: "#8b98a5", grid: "#1a232d", border: "#223040", volume: "#3a4553", up: "#ff5c5c", down: "#4c8dff", bb: "#4fd1c5" };
 }
 
 /**

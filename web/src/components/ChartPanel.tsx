@@ -618,6 +618,42 @@ export function ChartPanel({
           </button>
         </>
       )}
+      {/*
+        **지표 켜고 끄기** (2026-10-07). 벤티지: "불린저 밴드는 어떻게 봐? 보드에서 차트 카드에서는
+        못하는데" · "보드의 차트 카드에 저쪽에 위치시켜줘 키고 끄는거".
+
+        여태 볼린저는 **설정 > 화면 > 차트** 에만 있었다. 차트는 설정을 스스로 읽으므로 보드 카드에도
+        그려지긴 했는데, 켜고 끄려면 매번 설정까지 들어갔다 와야 했다 — 지표는 **보면서 켜고 끄는** 것이라
+        그 왕복이 곧 「못 쓰는 기능」이 된다.
+
+        여기는 **켜고 끄기만** 둔다. 기간·표준편차 같은 세부는 설정에 그대로다
+        (벤티지: "세부설정은 옵션에서 하더라고") — 한 번 정하면 잘 안 바꾸는 값이라 자리를 차지할 값어치가 없다.
+
+        누르면 `useChartPrefs` 가 바뀌고, 그 설정을 읽는 **모든 차트**가 같이 따라온다.
+      */}
+      <span className="period-sep" />
+      <button
+        className={`period-btn ind${prefs.bbOn ? " active" : ""}`}
+        onClick={() => savePrefs({ ...prefs, bbOn: !prefs.bbOn })}
+        title={
+          prefs.bbOn
+            ? "볼린저 밴드 끄기"
+            : `볼린저 밴드 — ${prefs.bbPeriod}일 이동평균 ± 표준편차×${prefs.bbStdDev} (기간·배수는 설정 > 화면 > 차트)`
+        }
+      >
+        볼린저
+      </button>
+      <button
+        className={`period-btn ind${prefs.rsiOn ? " active" : ""}`}
+        onClick={() => savePrefs({ ...prefs, rsiOn: !prefs.rsiOn })}
+        title={
+          prefs.rsiOn
+            ? "RSI 끄기"
+            : `RSI ${prefs.rsiPeriod} — 거래량 아래 띠로. 30·70 점선 (기간은 설정 > 화면 > 차트)`
+        }
+      >
+        RSI
+      </button>
       {/* 복기 — 내 매수▲·매도▼ 를 봉에. 「크게」 옆 (2026-09-10) */}
       <button
         className={`period-btn review${review ? " active" : ""}`}
