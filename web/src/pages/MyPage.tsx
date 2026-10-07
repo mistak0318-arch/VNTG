@@ -595,12 +595,20 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
       const code = normalizeStockCode(r.code);
       const info = (await api.stockInfo(code)) as Record<string, unknown>;
       const price = Math.abs(Number(String(info.cur_prc ?? "").replace(/[+,]/g, ""))) || 0;
-      await api.watchlistAdd({
-        code,
-        name: r.name,
-        addedPrice: price,
-        group: activeGroup === ALL ? DEFAULT_GROUP : activeGroup,
-      });
+      /*
+       * **기존 그룹에 더한다 — 갈아치우지 않는다** (2026-10-07).
+       *
+       * ⚠️ 서버(`addWatchItem`)는 이미 담긴 종목이면 보낸 그룹으로 **통째로 바꾼다.**
+       * 그게 별표 창에서는 맞다 — 거기선 원하는 그룹 전체를 보내니까. 그런데 여기서는
+       * 지금 그룹 하나만 보내므로, 그대로 두면 **다른 그룹에서 조용히 빠진다.**
+       * 다른 그룹에 있는 종목을 담을 수 있게 푼 이상 여기서 합쳐 보내야 한다.
+       */
+      const target = activeGroup === ALL ? DEFAULT_GROUP : activeGroup;
+      const had = items.find((i) => i.code === code);
+      const groups = had
+        ? Array.from(new Set([...(had.groups ?? [DEFAULT_GROUP]), target]))
+        : [target];
+      await api.watchlistAdd({ code, name: r.name, addedPrice: price, groups });
       /* 새로 담긴 한 종목만 서버가 그 자리에서 채운다 — 전체를 다시 받지 않는다 */
       await load();
     } catch (err) {
@@ -652,7 +660,27 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
         <StockSearchBox
           placeholder={`종목명·코드로 검색해서 ${activeGroup === ALL ? DEFAULT_GROUP : activeGroup} 그룹에 추가`}
           disabled={adding}
-          note={(code) => (items.some((i) => i.code === code) ? "이미 담김" : null)}
+          /*
+           * ⚠️ 예전엔 「관심종목에 있기만 하면」 회색으로 막았다 (2026-10-07 에 고침).
+           * 그런데 종목 상세의 별표(`WatchAddSheet`)로는 **여러 그룹에 담긴다.** 같은 앱이
+           * 두 말을 한 셈이고, 그룹을 나눠 쓰는 사람은 이 화면으로는 더 담을 수가 없었다.
+           *
+           * 이제 **지금 그룹에 이미 있을 때만** 막는다. 다른 그룹에 있는 것은 알려 주되
+           * 누를 수 있다 — 한 종목은 성격이 하나가 아니다.
+           */
+          note={(code) => {
+            const had = items.find((i) => i.code === code);
+            if (!had) return null;
+            const target = activeGroup === ALL ? DEFAULT_GROUP : activeGroup;
+            const gs = had.groups ?? [DEFAULT_GROUP];
+            return gs.includes(target) ? "이미 이 그룹" : `${gs.join("·")} 그룹에 있음 — 여기에도 담기`;
+          }}
+          blocked={(code) => {
+            const had = items.find((i) => i.code === code);
+            if (!had) return false;
+            const target = activeGroup === ALL ? DEFAULT_GROUP : activeGroup;
+            return (had.groups ?? [DEFAULT_GROUP]).includes(target);
+          }}
           onPick={(code, name) => void addStock({ code, name, marketName: "" })}
         />
       </div>

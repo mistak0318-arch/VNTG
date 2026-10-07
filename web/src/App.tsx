@@ -409,6 +409,12 @@ export default function App() {
   const excel = appearance.theme === "excel";
   /* 메모 모드 (2026-09-07) — 엑셀과 같은 급의 위장. 둘 중 하나면 동그란 메뉴 버튼을 내린다 */
   const note = appearance.theme === "note";
+  /*
+   * 읽기 모드 (2026-10-07) — 도구 칸에서 바로 켜고 끈다.
+   * ⚠️ `disguised` 에는 **안 넣는다.** 엑셀·메모는 「남이 봤을 때 주식 화면이 아닌 척」하는
+   * 위장이라 동그란 메뉴 버튼까지 감추지만, 읽기 모드는 그냥 읽기 좋은 테마다.
+   */
+  const reading = appearance.theme === "reading";
   const disguised = excel || note;
   /* 창들을 한 프로그램처럼 묶는다 — 꺼져 있으면 아무 일도 안 한다 */
   const focus = useStockFocus();
@@ -1263,6 +1269,24 @@ export default function App() {
             >
               <span className="nav-icon">📡</span>
               <span className="nav-label">{focus.on ? "종목 연동 켜짐" : "종목 연동"}</span>
+            </button>
+            {/*
+              읽기 모드도 **여기서 바로** (2026-10-07). 벤티지: "설정에서 읽기모드도 여기에
+              넣어줘 엑셀모드 위쪽에 넣어줘 바로 설정할 수 있게".
+
+              엑셀·메모와 같은 이유다 — 긴 글(뉴스·공시·복기 노트·가이드)을 만났을 때
+              켜는 것이라, 설정 화면까지 들어갔다 와야 하면 정작 그 순간에 안 쓰게 된다.
+              되돌리는 방식도 같다(직전 다크/라이트를 기억).
+            */}
+            <button
+              className="nav-item foot-btn"
+              onClick={() =>
+                appearance.set({ theme: reading ? (prevTheme.current ?? "dark") : "reading" })
+              }
+              title={reading ? "읽기 모드 끄기" : "읽기 모드 — 긴 글을 오래 읽을 때"}
+            >
+              <span className="nav-icon">📖</span>
+              <span className="nav-label">{reading ? "읽기 모드 끄기" : "읽기 모드"}</span>
             </button>
             {/*
               엑셀 모드는 **급할 때 눌러야** 뜻이 있다. 설정 화면까지 들어가야 한다면

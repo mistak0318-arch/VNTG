@@ -31,6 +31,7 @@ export function StockSearchBox({
   autoFocus = false,
   disabled = false,
   note,
+  blocked,
 }: {
   placeholder?: string;
   onPick: (code: string, name: string) => void;
@@ -43,6 +44,15 @@ export function StockSearchBox({
    * 화면마다 사정이 달라서(관심종목은 중복, 원장은 이미 있는 것) 판단은 부르는 쪽이 한다.
    */
   note?: (code: string, name: string) => string | null;
+  /**
+   * 그 줄을 **못 누르게 할지** (2026-10-07). 안 주면 예전처럼 `note` 가 있으면 막는다.
+   *
+   * ⚠️ 원래는 `note` 하나가 「알림」과 「막기」를 겸했다. 그래서 관심종목 화면에서
+   * **다른 그룹에 담긴 종목이 전부 회색**이 돼 더 담을 수가 없었다 — 정작 종목 상세의
+   * 별표(`WatchAddSheet`)로는 여러 그룹에 담겼으니 같은 앱이 두 말을 한 셈이다.
+   * 둘을 갈라 두면 「알려 주되 막지는 않는다」가 된다.
+   */
+  blocked?: (code: string, name: string) => boolean;
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<StockSearchResult[]>([]);
@@ -133,18 +143,21 @@ export function StockSearchBox({
 
   /*
    * 최근 목록과 검색 결과가 **동시에는 안 뜨므로** 훅 하나를 같이 쓴다 — 어느 쪽이
-   * 떠 있든 지금 보이는 목록(`activeList`)이 그 자리를 채운다. 이미 담긴 종목(`note`
-   * 가 있는 줄)은 원래 클릭도 막혀 있었으니 방향키로 짚어 엔터를 눌러도 건너뛴다.
+   * 떠 있든 지금 보이는 목록(`activeList`)이 그 자리를 채운다. **막힌 줄**(`isBlocked`)은
+   * 클릭이 안 되므로 방향키로 짚어 엔터를 눌러도 건너뛴다 — 두 길이 같아야 한다.
    */
   const activeList: (RecentStock | StockSearchResult)[] = showRecent
     ? recentShown
     : showResults
       ? results
       : [];
+  /** 막혔나 — `blocked` 가 있으면 그것이, 없으면 예전처럼 `note` 의 유무가 정한다 */
+  const isBlocked = (code: string, name: string): boolean =>
+    blocked ? blocked(normalizeStockCode(code), name) : Boolean(note?.(normalizeStockCode(code), name));
   const keys = useListKeys(
     activeList,
     (r) => {
-      if (note?.(normalizeStockCode(r.code), r.name)) return;
+      if (isBlocked(r.code, r.name)) return;
       pick(r.code, r.name);
     },
     { itemClass: "ssb-pick", onEscape: () => setOpen(false) },
@@ -173,11 +186,23 @@ export function StockSearchBox({
               비우기
             </button>
           </div>
+          {/*
+            ⚠️ 최근 목록은 `note` 를 아예 안 봤다 — 방향키로는 막히는데 **마우스로는 눌렸다.**
+            한 상자가 두 말을 하면 안 된다. 검색 결과와 같은 규칙으로 맞춘다 (2026-10-07).
+          */}
           {recentShown.map((r, i) => (
             <div className="ssb-row" key={r.code}>
-              <button type="button" {...keys.itemProps(i)} onClick={() => pick(r.code, r.name)}>
+              <button
+                type="button"
+                {...keys.itemProps(i)}
+                disabled={isBlocked(r.code, r.name)}
+                onClick={() => pick(r.code, r.name)}
+              >
                 <b>{r.name}</b>
                 <span>{r.code}</span>
+                {note?.(normalizeStockCode(r.code), r.name) && (
+                  <small>{note(normalizeStockCode(r.code), r.name)}</small>
+                )}
               </button>
               {/* 잘못 눌러 들어간 것을 뺄 길이 없으면 목록이 지저분해진다 */}
               <button
@@ -207,7 +232,7 @@ export function StockSearchBox({
               <button
                 type="button"
                 key={r.code}
-                disabled={Boolean(n)}
+                disabled={isBlocked(r.code, r.name)}
                 onClick={() => pick(r.code, r.name)}
                 {...keys.itemProps(i)}
               >
