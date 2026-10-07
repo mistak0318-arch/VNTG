@@ -1023,6 +1023,16 @@ export const api = {
   ) => postJson<AskResult>("/api/ask", { question, history, ...opts }),
   /* 시스 도우미 — 일반(우리 데이터만) / AI(묶음을 문맥으로 Claude + 웹 검색) */
   sysStatus: () => getJson<{ aiReady: boolean }>("/api/sys/status"),
+  /**
+   * 서버 메모리 계기판·손으로 비우기 (2026-10-08).
+   * `/api/sys/` 는 과부하 관문을 안 타므로 **서버가 바쁠 때도 답한다** — 바쁠 때 못 보는
+   * 계기판과 못 누르는 버튼은 있으나 마나다.
+   */
+  sysMem: () => getJson<SysMem>("/api/sys/mem"),
+  sysRecover: () =>
+    postJson<{ 놓은것: string; 이전MB: number; 이후MB: number; 거둔MB: number; GC가능: boolean }>(
+      "/api/sys/recover",
+    ),
   sysInterpret: (question: string, focus?: SysStockRef | null) =>
     postJson<{ intent: SysPack["intent"]; titles: string[] }>("/api/sys/interpret", { question, focus }),
   /* 정지 버튼이 있어야 해서 signal 을 받는다 — postJson 은 그걸 못 넘긴다 */
@@ -7814,6 +7824,20 @@ export interface SignalSuperSimResult {
   listsTotal: number;
   minLists: number;
   rows: SignalSuperSimRow[];
+}
+
+/** 서버 메모리 — `/api/sys/mem` (2026-10-08). 서버 recovery.ts·loadGate.ts 와 같은 모양 */
+export interface SysMem {
+  복구: {
+    상태: "정상" | "경계" | "복구";
+    heapMB: number;
+    상한MB: number;
+    퍼센트: number;
+    복구횟수: number;
+    GC호출: number;
+    GC가능: boolean;
+  };
+  관문: { 지금도는것: number; 최고동시: number; 되돌려보냄: number; 상한MB: number };
 }
 
 /* ───────── 실전 성적표 (2026-10-07) — 서버 scoreCard.ts 와 같은 모양 ───────── */

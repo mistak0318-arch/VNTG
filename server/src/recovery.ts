@@ -91,6 +91,35 @@ export function isStressed(): boolean {
   return state !== "정상";
 }
 
+/**
+ * **손으로 지금 비운다** (2026-10-08).
+ *
+ * 벤티지: "모니터 3개에 보드 창을 연동해서 사용하고 있고… 캐시 지우기나 메모리 비우기
+ * 같은 버튼을 만들던가 수동으로 처리할 수 있는 로직을 만들어라."
+ *
+ * 보드를 세 창에 띄우고 종목연동을 쓰면 **종목 하나를 누를 때 화면 셋이 같은 길을 동시에**
+ * 연다. 요청이 3배가 되니 봉우리도 3배다. 자동 복구는 78% 를 넘어야 도는데, 그 아래에서도
+ * 「지금 굼뜨다」가 느껴지는 구간이 있다 — 그때 사람이 직접 누를 길이 있어야 한다.
+ *
+ * 자동 복구와 **같은 일**을 한다(캐시 놓기 + 전체 GC). 다른 길로 만들면 둘이 어긋난다.
+ * `/api/sys/` 는 과부하 관문을 안 타므로 **서버가 바쁠 때도 이 버튼은 먹는다** — 바쁠 때
+ * 못 누르는 버튼은 있으나 마나다.
+ */
+export function recoverNow(): {
+  놓은것: string;
+  이전MB: number;
+  이후MB: number;
+  거둔MB: number;
+  GC가능: boolean;
+} {
+  const before = Math.round(memoryUsage().heapUsed / 1048576);
+  const 놓은것 = dropWhatWeCan();
+  forceGc();
+  const after = Math.round(memoryUsage().heapUsed / 1048576);
+  noteLife("WARN", `손으로 비움 — ${놓은것}, ${before} → ${after}MB`);
+  return { 놓은것, 이전MB: before, 이후MB: after, 거둔MB: before - after, GC가능: canGc };
+}
+
 /** 놓을 수 있는 것만 놓는다. 다시 만드는 값이 비싼 것(일봉)은 건드리지 않는다 */
 function dropWhatWeCan(): string {
   const out: string[] = [];

@@ -2632,6 +2632,28 @@ body {
 .ss-sep { height: 1px; background: var(--border); margin: 0.4rem 0; }
 .ss-note { font-size: 0.7rem; color: var(--muted); margin-top: 0.3rem; line-height: 1.5; }
 /* 수동계좌 CSV 들여오기 (2026-10-07) — 양식 받기 → 파일 → 미리보기 → 적용 */
+/*
+ * ── 서버 메모리 칩 (2026-10-08) ──
+ * 평소에는 **점 하나**다. 숫자가 늘 떠 있으면 그것만 보게 된다 — 경계를 넘어서야 올라온다.
+ */
+.memchip { display: inline-flex; align-items: center; }
+.memchip-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: none; border: 1px solid transparent; border-radius: 999px;
+  padding: 2px 7px; cursor: pointer; color: var(--muted);
+  font: inherit; font-size: 0.72rem; line-height: 1.6;
+}
+.memchip-btn:hover { border-color: var(--border); }
+.memchip-btn:disabled { cursor: default; opacity: 0.6; }
+.memchip-btn b { font-variant-numeric: tabular-nums; }
+.memchip-btn em { font-style: normal; }
+.memchip-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
+.memchip-ok .memchip-dot { background: color-mix(in srgb, var(--muted) 55%, transparent); }
+.memchip-warn .memchip-dot { background: var(--accent); }
+.memchip-warn .memchip-btn { color: var(--accent); }
+.memchip-bad .memchip-dot { background: var(--red, #ff5c5c); }
+.memchip-bad .memchip-btn { color: var(--red, #ff5c5c); border-color: currentColor; }
+
 /* ── 실전 성적표 (2026-10-07) ── 「잰 것이 적은 줄은 흐리게」가 이 블록의 핵심이다 */
 .sc { margin-bottom: 12px; }
 .sc-pick { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }

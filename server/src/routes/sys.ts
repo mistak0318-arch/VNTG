@@ -3,6 +3,9 @@ import type { KiwoomClient } from "../kiwoomClient.js";
 import { act, askSys, getTopicExamples, interpret, isSysAiReady, recapToday, saveTopicExamples, type SysStockRef } from "../sysAssist.js";
 import type { AskTurn } from "../askMarket.js";
 import { addAsk } from "../askHistory.js";
+/* 메모리 계기판·손으로 비우기 (2026-10-08) */
+import { recoverNow, recoveryStats } from "../recovery.js";
+import { loadGateStats } from "../loadGate.js";
 
 /**
  * 시스 도우미 (2026-09-03). 켜고 끄는 건 화면 설정(`vntg.sys.enabled`)이라 서버는 늘 받는다.
@@ -15,6 +18,27 @@ export function createSysRouter(client: KiwoomClient): Router {
 
   router.get("/status", (_req, res) => {
     res.json({ aiReady: isSysAiReady() });
+  });
+
+  /**
+   * **서버 상태 한 눈** (2026-10-08) — heap·복구 상태·관문을 화면이 읽어 띄운다.
+   *
+   * `/api/sys/` 는 과부하 관문을 안 타므로, **서버가 바쁠 때도 이 길은 열려 있다.**
+   * 바쁠 때 못 보는 계기판은 있으나 마나다.
+   */
+  router.get("/mem", (_req, res) => {
+    res.json({ 복구: recoveryStats(), 관문: loadGateStats() });
+  });
+
+  /**
+   * **손으로 비우기** — 캐시를 놓고 전체 GC 를 지금 부른다.
+   *
+   * 벤티지: 보드를 세 창에 띄우고 종목연동으로 쓰면 종목 하나에 화면 셋이 같은 길을
+   * 동시에 열어 요청이 3배가 된다. 자동 복구는 78% 를 넘어야 도는데, 그 아래에서도
+   * 굼뜨게 느껴지는 구간이 있다 — 그때 직접 누를 길이다.
+   */
+  router.post("/recover", (_req, res) => {
+    res.json(recoverNow());
   });
 
   /** 해석만 (수 ms) — 화면이 「종목 두산에너빌리티 긁는 중」을 먼저 띄운다 */

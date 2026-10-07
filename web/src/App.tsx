@@ -4,6 +4,8 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { RunningJobsBar } from "./components/RunningJobsBar";
 import { QuickStockSearch } from "./components/QuickStockSearch";
 import { NotifyBell } from "./components/NotifyBell";
+/* 서버 메모리 칩 — 굼뜰 때 손으로 비운다 (2026-10-08) */
+import { MemoryChip } from "./components/MemoryChip";
 import { MobileClock } from "./components/MobileClock";
 import { SysAssist } from "./components/SysAssist";
 import { useBuildWatch } from "./useBuildWatch";
@@ -1377,6 +1379,16 @@ export default function App() {
                 🧹<span className="qss-close-label"> 탭 모두 닫기</span> ({openTabs.length})
               </button>
             )}
+            {/*
+              **서버 메모리** (2026-10-08) — 벤티지: "모니터 3개에 보드 창을 연동해서 쓰고…
+              캐시 지우기나 메모리 비우기 같은 버튼을 만들던가".
+
+              보드를 세 창에 띄우고 종목연동을 쓰면 종목 하나에 화면 셋이 같은 길을 동시에
+              연다. 요청이 3배라 봉우리도 3배다. 자동 복구는 78% 를 넘어야 도는데 그 아래에서도
+              굼뜬 구간이 있어서, **눈으로 보고 직접 누를 자리**를 늘 보이는 곳에 둔다.
+              설정까지 들어가야 하면 정작 굼뜰 때 못 쓴다 — 엑셀 모드를 도구 칸에 꺼낸 것과 같은 이유다.
+            */}
+            <MemoryChip />
           </div>
           <header className="mobile-header">
             <span className="mobile-title">{tabLabel(tab)}</span>
