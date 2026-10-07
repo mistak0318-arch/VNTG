@@ -201,6 +201,29 @@ function slot(): Promise<void> {
 const shared = new Map<string, { done: number | null; p: Promise<unknown> }>();
 const SHARE_MS = 3_000;
 
+/**
+ * **느리게 변하는 조회는 더 오래 합친다** (2026-10-08).
+ *
+ * 벤티지가 보드를 **모니터 셋**에 띄우고 종목연동으로 쓴다 — 세 화면이 **같은 종목**을 본다.
+ * 그런데 보드마다 카드가 뜨는 시차가 3초보다 커서, 같은 조회가 **세 번 따로** 나갔다.
+ * 한투는 초당 2.5건이라 그 3배가 그대로 줄 길이가 된다(실측: 한투 줄 20, 그때 키움은 2).
+ *
+ * 창을 넓히면 그 셋이 하나가 된다. 다만 **시세성 조회는 안 된다** — 현재가·야간선물이
+ * 15초 묵으면 그 값으로 판단하게 된다. 그래서 **아래 다섯만** 넓힌다:
+ * 재무비율·분기실적·투자의견·추정실적·기업개요 — 전부 하루 단위로나 바뀌는 것들이고,
+ * 부르는 쪽도 이미 몇 시간짜리 캐시를 갖고 있다(여기서 합치는 것은 **그 캐시가 비어 있는
+ * 첫 조회**가 세 화면에서 동시에 일어나는 경우다).
+ */
+const SLOW_TRS = new Set([
+  "FHKST66430300", // 재무비율
+  "FHKST66430200", // 분기실적
+  "FHKST663300C0", // 투자의견
+  "HHKST668300C0", // 추정실적
+  "CTPF1002R", // 기업개요
+]);
+const SLOW_SHARE_MS = 60_000;
+const shareMsOf = (trId: string) => (SLOW_TRS.has(trId) ? SLOW_SHARE_MS : SHARE_MS);
+
 export async function hantooGet<T = Record<string, unknown>>(
   path: string,
   trId: string,
@@ -208,8 +231,9 @@ export async function hantooGet<T = Record<string, unknown>>(
   feature: string,
 ): Promise<T> {
   const key = `${trId}|${path}|${JSON.stringify(params)}`;
+  const share = shareMsOf(trId);
   const hit = shared.get(key);
-  if (hit && (hit.done === null || Date.now() - hit.done < SHARE_MS)) {
+  if (hit && (hit.done === null || Date.now() - hit.done < share)) {
     return structuredClone(await hit.p) as T;
   }
   const p = hantooGetRaw<T>(path, trId, params, feature);
@@ -220,7 +244,7 @@ export async function hantooGet<T = Record<string, unknown>>(
       entry.done = Date.now();
       const t = setTimeout(() => {
         if (shared.get(key) === entry) shared.delete(key);
-      }, SHARE_MS);
+      }, share);
       t.unref?.();
     },
     /* 실패는 나누지 않는다 — 다음 호출이 새로 부른다 */
