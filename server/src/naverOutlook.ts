@@ -42,8 +42,6 @@ async function cached<T>(key: string, fn: () => Promise<T>): Promise<T> {
 
 /* ───────────────────────── 미국 ───────────────────────── */
 
-import { peekSnapshot } from "./marketSnapshot.js";
-
 export interface UsConsensus {
   /** 리피니티브 코드 (NVDA.O) */
   reuters: string;
@@ -169,23 +167,27 @@ export async function krOutlook(code: string): Promise<KrOutlook | null> {
        * 등락률·현재가는 **우리 전종목 스냅샷**으로 덮는다. 조회는 0회고, 테마 강도가
        * 쓰는 것과 같은 자라 화면끼리 숫자가 어긋나지 않는다.
        */
-      peers: (() => {
-        const snap = peekSnapshot();
-        return (integ.industryCompareInfo ?? [])
-          .filter((p) => p.itemCode !== bare)
-          .slice(0, 6)
-          .map((p) => {
-            const mine = snap?.byCode.get(p.itemCode);
-            return {
-              code: p.itemCode,
-              name: p.stockName,
-              /* 스냅샷에 없으면(상장폐지·신규) 네이버 값으로 물러선다 — 없는 것을 지어내지 않는다 */
-              changeRate: mine ? mine.changeRate : signed(p),
-              marketCap: num(p.marketValue),
-              price: mine?.price ?? null,
-            };
-          });
-      })(),
+      /*
+       * ⚠️ **여기서 시세를 채우면 안 된다** (2026-10-08에 바로잡음).
+       *
+       * 이 함수는 **6시간 캐시** 안이다. 처음엔 여기서 전종목 스냅샷으로 등락률을 덮었는데,
+       * 그러면 그 값이 여섯 시간 묵는다 — 실시간처럼 보이는데 실시간이 아닌 것이 제일 나쁘다.
+       * 게다가 스냅샷은 **정규장 기준**이라 프리장이 안 들어온다
+       * (벤티지: "지금 프리장 시세가 전혀 반영이 안 되고 전날 종가 기준으로 보이거든").
+       *
+       * 그래서 여기서는 **누가 같은 업종인가**만 담는다. 시세는 라우트가 요청마다
+       * `ka10095` 한 번으로 덮는다 — 그건 NXT 통합이라 프리·애프터가 그대로 들어온다.
+       */
+      peers: (integ.industryCompareInfo ?? [])
+        .filter((p) => p.itemCode !== bare)
+        .slice(0, 6)
+        .map((p) => ({
+          code: p.itemCode,
+          name: p.stockName,
+          changeRate: signed(p),
+          marketCap: num(p.marketValue),
+          price: null as number | null,
+        })),
     };
   });
 }

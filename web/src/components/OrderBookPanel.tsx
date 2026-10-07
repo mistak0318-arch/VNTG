@@ -1,4 +1,6 @@
 import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
+/* 체결강도 오늘 흐름 — 강도 막대 바로 아래 (2026-10-08) */
+import { StrengthTrendLine } from "./StrengthTrendLine";
 import { useViNow } from "../useViNow";
 import { ViMark } from "./ViMark";
 import { api, fmtNum, signClass, type OrderBook } from "../api";
@@ -454,6 +456,19 @@ export function OrderBookPanel({
               </span>
             </div>
           )}
+
+          {/*
+            **오늘 흐름** (2026-10-08) — 벤티지: "체결강도 그래프로 보여줄 수 있어? 그래서 아,
+            장 초반엔 체결강을 셌다가 이게 체결강 좀 떨어지네? 이렇게 할 수 있도록."
+
+            위 막대는 **지금 값 하나**다. 120% 라는 숫자로는 「아침부터 120 이었나」와
+            「160 이었다가 식는 중인가」를 못 가르는데, 매매에서 쓰는 건 뒤쪽이다.
+
+            그래프는 이미 있었다(`StrengthChart`) — 체결강도 **탭** 안에서만 그려지고 있었다.
+            보는 자리가 여기인데 그래프는 저기 있으면 안 본다. 같은 조회(`ka10046`)를 쓰고
+            키움이 09:00부터 **빈 구간 없이** 주므로 우리가 따로 쌓을 것도 없다.
+          */}
+          <StrengthTrendLine code={code} />
 
           {book.ticks.length > 0 &&
             (() => {

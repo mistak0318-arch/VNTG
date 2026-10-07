@@ -9,6 +9,8 @@ import { bridgeForTheme, bridgePairs, overnightBridge, usIndustryTop } from "../
 import { clearHidden, listHidden, setHidden } from "../hiddenThemes.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { alCode } from "../alCode.js";
+/* 같은 업종 시세를 요청마다 덮을 때 — 순위 표와 같은 파서를 쓴다 (2026-10-08) */
+import { bare, toNum } from "../rankExtras.js";
 import { afterMarketTradable, krxAfterMarket, sessionOf } from "../marketHours.js";
 import { isTradingDay } from "../tradingDay.js";
 import { peekRealtime } from "../realtimeHub.js";
@@ -1442,7 +1444,49 @@ export function createMarketRouter(client: KiwoomClient): Router {
    */
   router.get("/naver-outlook/:code", async (req, res, next) => {
     try {
-      res.json({ outlook: await krOutlook(String(req.params.code)) });
+      const outlook = await krOutlook(String(req.params.code));
+      /*
+       * **같은 업종 시세는 요청마다 새로 덮는다** (2026-10-08).
+       *
+       * 벤티지: "실시간 시세 반영은 안 되는 것 같다 … 지금 프리장 시세가 전혀 반영이
+       * 안 되고 전날 종가 기준으로 보이거든."
+       *
+       * 분류(누가 같은 업종인가)는 `krOutlook` 이 6시간 캐시로 들고 있다 — 그건 하루에도
+       * 안 바뀌는 값이다. 하지만 **시세를 그 캐시 안에서 채우면 여섯 시간 묵는다.**
+       * 그래서 여기서 덮는다.
+       *
+       * `ka10095` 는 한 번에 50종목까지 받으므로 **조회는 한 번**이고, `alCode` 로 붙이면
+       * KRX+NXT 통합이라 **프리장·애프터가 그대로** 들어온다(스냅샷은 정규장 기준이라 안 된다).
+       * 실패하면 네이버 값 그대로 둔다 — 한 줄 때문에 화면 전체가 비면 안 된다.
+       */
+      if (outlook?.peers?.length) {
+        try {
+          const codes = outlook.peers.map((p) => p.code);
+          const { data } = await client.request<Record<string, unknown>>(
+            "/api/dostk/stkinfo",
+            "ka10095",
+            { stk_cd: codes.map((c) => alCode(c)).join("|") },
+          );
+          const live = new Map<string, { rate: number | null; price: number | null }>();
+          for (const r of (data.atn_stk_infr ?? []) as Record<string, unknown>[]) {
+            const c = bare(r.stk_cd);
+            if (!c) continue;
+            live.set(c, {
+              rate: toNum(r.flu_rt),
+              price: Math.abs(toNum(r.cur_prc) ?? 0) || null,
+            });
+          }
+          for (const p of outlook.peers) {
+            const v = live.get(p.code);
+            if (!v) continue;
+            if (v.rate !== null) p.changeRate = v.rate;
+            p.price = v.price;
+          }
+        } catch {
+          /* 시세를 못 받아도 「누가 같은 업종인가」는 그대로 쓸모 있다 */
+        }
+      }
+      res.json({ outlook });
     } catch (err) {
       next(err);
     }

@@ -2642,6 +2642,12 @@ body {
  * 그걸 없애려고 만든 화면이다. 좁아지면 둘씩, 더 좁으면 하나씩 — 폰에서는
  * 가로로 긁게 만들지 않는다(긁어야 보이는 표는 안 보는 표다).
  */
+/* 체결강도 오늘 흐름 — 강도 막대 바로 아래 (2026-10-08) */
+.ob-str-trend { margin-top: 6px; }
+.ob-str-trend-h { display: flex; align-items: baseline; gap: 8px; font-size: 0.72rem; color: var(--muted); }
+.ob-str-trend-h b { font-variant-numeric: tabular-nums; }
+.ob-str-trend svg { width: 100%; height: auto; display: block; }
+
 /* 같은 업종 — 누를 수 있는 종목, 그리고 묶음 평균 (2026-10-08) */
 .ss-peer {
   background: none; border: none; padding: 0; margin: 0;
