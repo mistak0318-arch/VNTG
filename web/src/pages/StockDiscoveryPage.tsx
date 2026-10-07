@@ -500,7 +500,7 @@ export function StockDiscoveryPage({
             <IntradayFlow code={code} basePrice={Math.abs(Number(info?.base_pric))} />
           )}
           <IntradayLevelsBar code={code} />
-          <StockSummaryPanel code={code} />
+          <StockSummaryPanel code={code} onSelectStock={goStock} />
           <StockTabsSection
             code={code}
             name={current?.name ?? ""}

@@ -265,7 +265,17 @@ const INST_COLORS: Record<string, string> = {
   etc_fnnc: "#f59e0b",
 };
 
-export function StockSummaryPanel({ code }: { code: string }) {
+export function StockSummaryPanel({
+  code,
+  /**
+   * 「같은 업종」 줄에서 다른 종목을 눌렀을 때 — 없으면 이름만 보이고 안 눌린다 (2026-10-08).
+   * 네 군데서 쓰는 부품이라 선택값으로 둔다. 안 넘기는 자리가 깨지면 안 된다.
+   */
+  onSelectStock,
+}: {
+  code: string;
+  onSelectStock?: (code: string, name: string) => void;
+}) {
   const [d, setD] = useState<StockSummaryData | null>(null);
   /** 1 = 당일(곡선 없음) */
   const [spanState, setSpan] = useState(20);
@@ -468,7 +478,7 @@ export function StockSummaryPanel({ code }: { code: string }) {
       </div>
 
       {/* 앞을 보는 값 — 네이버 컨센서스·추정치 (2026-09-24) */}
-      <OutlookStrip code={code} price={typeof (d as unknown as { price?: unknown }).price === "number" ? (d as unknown as { price: number }).price : null} />
+      <OutlookStrip onSelectStock={onSelectStock} code={code} price={typeof (d as unknown as { price?: unknown }).price === "number" ? (d as unknown as { price: number }).price : null} />
 
       {/* 못 받은 조각은 **못 받았다고 적는다** — 0 으로 보이면 「안 움직였다」로 읽힌다 */}
       {d.missing.length > 0 && (
@@ -483,7 +493,15 @@ export function StockSummaryPanel({ code }: { code: string }) {
  * 네이버 컨센서스: 목표주가 평균(지금 대비)·투자의견(1~5, 5 적극매수)·**추정 PER/EPS**·다음 해 추정 매출·영업이익·순이익
  * (마지막 실적 해 대비 %) · 같은 업종 종목의 오늘 등락. 6시간 캐시라 조회 부담 없음. 못 받으면 줄 자체가 없다.
  */
-function OutlookStrip({ code, price }: { code: string; price: number | null }) {
+function OutlookStrip({
+  code,
+  price,
+  onSelectStock,
+}: {
+  code: string;
+  price: number | null;
+  onSelectStock?: (code: string, name: string) => void;
+}) {
   const [o, setO] = useState<KrOutlook | null>(null);
   useEffect(() => {
     let alive = true;
@@ -551,16 +569,50 @@ function OutlookStrip({ code, price }: { code: string; price: number | null }) {
           {o.last && <i className="pt-n">({o.last.year} 실적 대비)</i>}
         </div>
       )}
-      {o.peers.length > 0 && (
-        <div className="ss-outlook-row">
-          <span className="ss-outlook-k">같은 업종</span>
-          {o.peers.map((p) => (
-            <span key={p.code} className="num" title={p.marketCap !== null ? `시총 ${eok(p.marketCap / 100)}` : undefined}>
-              {p.name} <em className={cls(p.changeRate)}>{p.changeRate === null ? "-" : `${p.changeRate > 0 ? "+" : ""}${p.changeRate.toFixed(2)}%`}</em>
-            </span>
-          ))}
-        </div>
-      )}
+      {/*
+        **같은 업종** — 벤티지: "같은 업종의 종목의 어떤 선별을 네이버가 해주고 그 직군별로
+        그 집단별로 움직임을 볼 수 있는 게 요건데" · "클릭해도 해당 종목으로 안 들어가죠"
+
+        두 가지를 고쳤다 (2026-10-08).
+         · **누르면 그 종목으로 간다.** 묶음이 같이 가는 걸 보고 나면 바로 그 종목을 보고
+           싶어지는데, 이름만 적혀 있으면 검색창으로 돌아가 다시 쳐야 했다.
+         · **묶음 평균을 맨 앞에 둔다.** 종목 여섯의 등락률을 눈으로 평균 내게 하면 안 된다 —
+           이 줄을 보는 까닭이 「이 집단이 같이 움직이나」이므로 그 답을 먼저 적는다.
+           ±2% 를 넘으면 굵게: 그 정도면 종목이 아니라 **업종이 움직인 것**이다.
+      */}
+      {o.peers.length > 0 && (() => {
+        const vals = o.peers.map((p) => p.changeRate).filter((v): v is number => v !== null);
+        const avg = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+        const up = vals.filter((v) => v > 0).length;
+        return (
+          <div className="ss-outlook-row">
+            <span className="ss-outlook-k">같은 업종</span>
+            {avg !== null && (
+              <span
+                className={`ss-peer-avg num ${cls(avg)}${Math.abs(avg) >= 2 ? " strong" : ""}`}
+                title={`같은 업종 ${vals.length}종목 평균 — 오른 것 ${up}/${vals.length}. 종목 하나가 아니라 집단이 움직였는지를 봅니다`}
+              >
+                평균 {avg > 0 ? "+" : ""}
+                {avg.toFixed(2)}% <i>({up}/{vals.length}↑)</i>
+              </span>
+            )}
+            {o.peers.map((p) => (
+              <button
+                type="button"
+                key={p.code}
+                className="num ss-peer"
+                onClick={() => onSelectStock?.(p.code, p.name)}
+                title={`${p.name}${p.price ? ` · ${p.price.toLocaleString("ko-KR")}원` : ""}${p.marketCap !== null ? ` · 시총 ${eok(p.marketCap / 100)}` : ""}\n눌러서 이 종목 보기`}
+              >
+                {p.name}{" "}
+                <em className={cls(p.changeRate)}>
+                  {p.changeRate === null ? "-" : `${p.changeRate > 0 ? "+" : ""}${p.changeRate.toFixed(2)}%`}
+                </em>
+              </button>
+            ))}
+          </div>
+        );
+      })()}
     </div>
   );
 }

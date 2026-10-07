@@ -284,7 +284,7 @@ export function StockAnalysisPage({
           </div>
           {/* 한 장 요약 — 시트와 같은 자리, 같은 컴포넌트 */}
           <div className="sd-blk">
-            <StockSummaryPanel code={stock.code} />
+            <StockSummaryPanel code={stock.code} onSelectStock={onSelectStock} />
           </div>
 
           <div className="sd-blk">

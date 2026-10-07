@@ -4739,7 +4739,8 @@ export interface KrOutlook {
   est: { year: string; sales: number | null; op: number | null; net: number | null } | null;
   last: { year: string; sales: number | null; op: number | null; net: number | null } | null;
   /** 시총은 백만원 */
-  peers: { code: string; name: string; changeRate: number | null; marketCap: number | null }[];
+  /** 같은 업종 — 분류는 네이버, 등락률·현재가는 우리 스냅샷 (2026-10-08) */
+  peers: { code: string; name: string; changeRate: number | null; marketCap: number | null; price?: number | null }[];
 }
 /** CSV 들여오기 미리보기 (서버 manualImport.ts 와 같은 모양) */
 export interface ManualImportPlan {

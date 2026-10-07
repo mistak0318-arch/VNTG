@@ -42,6 +42,8 @@ async function cached<T>(key: string, fn: () => Promise<T>): Promise<T> {
 
 /* ───────────────────────── 미국 ───────────────────────── */
 
+import { peekSnapshot } from "./marketSnapshot.js";
+
 export interface UsConsensus {
   /** 리피니티브 코드 (NVDA.O) */
   reuters: string;
@@ -98,7 +100,8 @@ export interface KrOutlook {
   /** 마지막 실적 해 — 억원. 추정과 견줄 기준 */
   last: { year: string; sales: number | null; op: number | null; net: number | null } | null;
   /** 같은 업종 종목 — 오늘 등락률·시총(억) */
-  peers: { code: string; name: string; changeRate: number | null; marketCap: number | null }[];
+  /** 같은 업종 종목 — 분류는 네이버, 등락률·현재가는 우리 스냅샷 (2026-10-08) */
+  peers: { code: string; name: string; changeRate: number | null; marketCap: number | null; price?: number | null }[];
 }
 
 export async function krOutlook(code: string): Promise<KrOutlook | null> {
@@ -152,10 +155,37 @@ export async function krOutlook(code: string): Promise<KrOutlook | null> {
       consensusDate: integ.consensusInfo?.createDate ?? null,
       est: mk(estCol),
       last: mk(lastCol),
-      peers: (integ.industryCompareInfo ?? [])
-        .filter((p) => p.itemCode !== bare)
-        .slice(0, 6)
-        .map((p) => ({ code: p.itemCode, name: p.stockName, changeRate: signed(p), marketCap: num(p.marketValue) })),
+      /*
+       * **분류는 네이버 것, 숫자는 우리 것** (2026-10-08).
+       *
+       * 벤티지: "네이버에서 가져오는 거라 실시간 시세가 안 보이고 … 내가 캐치한 거 보여주면
+       * 다 0%지 전기랑 엮여있는 애들 말이야."
+       *
+       * 네이버가 주는 `industryCompareInfo` 의 등락률을 그대로 썼더니 **장 전·장 후에는
+       * 전부 0.00%** 였다. 묶음이 같이 움직이는지를 보려고 띄우는 줄인데 0 만 늘어서면
+       * 아무 말도 안 하는 줄이다.
+       *
+       * 「어느 종목이 같은 업종인가」는 네이버가 잘 골라 준다 — 그건 그대로 쓴다.
+       * 등락률·현재가는 **우리 전종목 스냅샷**으로 덮는다. 조회는 0회고, 테마 강도가
+       * 쓰는 것과 같은 자라 화면끼리 숫자가 어긋나지 않는다.
+       */
+      peers: (() => {
+        const snap = peekSnapshot();
+        return (integ.industryCompareInfo ?? [])
+          .filter((p) => p.itemCode !== bare)
+          .slice(0, 6)
+          .map((p) => {
+            const mine = snap?.byCode.get(p.itemCode);
+            return {
+              code: p.itemCode,
+              name: p.stockName,
+              /* 스냅샷에 없으면(상장폐지·신규) 네이버 값으로 물러선다 — 없는 것을 지어내지 않는다 */
+              changeRate: mine ? mine.changeRate : signed(p),
+              marketCap: num(p.marketValue),
+              price: mine?.price ?? null,
+            };
+          });
+      })(),
     };
   });
 }

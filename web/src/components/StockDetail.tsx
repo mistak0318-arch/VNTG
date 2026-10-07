@@ -410,7 +410,7 @@ export function StockDetail({
           {/* 한 장 요약 — 탭을 고르기 전에 「지금 어떤가」가 먼저 보여야 한다 */}
           <div className="sd-blk" style={{ order: cards.orderOf("summary") }}>
             {late && <InvestorEstimate code={code} />}
-            <StockSummaryPanel code={code} />
+            <StockSummaryPanel code={code} onSelectStock={onSelectStock} />
           </div>
 
           {onOpenAnalysis && (

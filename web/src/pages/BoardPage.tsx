@@ -459,7 +459,16 @@ function summarize(pick: string[]): string {
  * **같은 컴포넌트 셋**이라 두 화면이 다른 값을 말할 일이 없다.
  * 현재가는 3초로 산다 — 보드는 곁눈 화면이라 1초까지는 필요 없다.
  */
-function PriceSummaryCell({ code, name }: { code: string; name?: string }) {
+function PriceSummaryCell({
+  code,
+  name,
+  /* 「같은 업종」에서 다른 종목을 누르면 — 없으면 이름만 보인다 (2026-10-08) */
+  onSelectStock,
+}: {
+  code: string;
+  name?: string;
+  onSelectStock?: (c: string, n: string) => void;
+}) {
   const live = useLive(() => api.stockInfo(code), [code], 3000);
   const info = (live.data ?? null) as Record<string, unknown> | null;
   return (
@@ -471,7 +480,7 @@ function PriceSummaryCell({ code, name }: { code: string; name?: string }) {
       <StockStatusBanner code={code} compact />
       <PriceHeader info={info} code={code} />
       <IntradayLevelsBar code={code} />
-      <StockSummaryPanel code={code} />
+      <StockSummaryPanel code={code} onSelectStock={onSelectStock} />
     </>
   );
 }
@@ -1306,7 +1315,7 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
                     사용자가 가리킨 건 그 위의 종가·장마감 블록(PriceHeader)이다.
                     상세 종합과 같은 조합(가격 헤더 + 수급)을 그대로 쓴다.
                   */}
-                  {b.key === "priceSummary" && <PriceSummaryCell key={code} code={code} name={name} />}
+                  {b.key === "priceSummary" && <PriceSummaryCell key={code} code={code} name={name} onSelectStock={onSelectStock} />}
                   {/*
                     `key={code}` 를 준다. 종목이 바뀌면 패널을 **새로 만든다** —
                     안 그러면 어떤 패널은 이전 종목의 값을 그대로 들고 있다가
