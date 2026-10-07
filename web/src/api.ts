@@ -15,7 +15,62 @@ export type RawRecord = Record<string, unknown>;
  * 보고 있는 도중에도 끝나므로, 그때 데이터를 부르던 화면이 401 을 받는다.
  * 여기 한 곳만 보면 되는 게 이 함수를 지나지 않는 요청이 없기 때문이다.
  */
+/* ───────── 떠난 종목의 조회는 끊는다 (2026-10-08) ───────── */
+
+/**
+ * 벤티지: "방금 오래걸린 이후에 다른 종목들 누르면 또 오래걸린다" ·
+ * "이전의 오래걸린 상태가 이후의 동작에 영향을 미치는 구조인지도 봐야겠다."
+ *
+ * 그렇다. 종목을 옮겨도 **앞 종목의 조회는 서버에서 계속 돈다** — 화면만 바뀌고 요청은
+ * 취소되지 않기 때문이다. 아무도 안 보는 그 일이 서버의 자리를 쥐고 메모리를 계속 쓰니,
+ * heap 이 안 내려가고 GC 가 멈춰 **다음에 누른 종목이 그 상태를 그대로 물려받는다.**
+ * 실측에서 줄이 84까지 쌓였다.
+ *
+ * 그래서 **떠날 때 끊는다.** 서버의 과부하 관문은 연결이 끊기면 자리를 놓게 돼 있어
+ * (`res.on("close")`), 브라우저가 끊어 주기만 하면 그 자리가 즉시 풀린다.
+ *
+ * ⚠️ **그 종목의 조회만** 끊는다. 전부 끊으면 시황·관심종목처럼 종목과 무관한 것까지
+ * 죽어서 화면이 텅 빈다. 주소에 종목코드가 든 `GET` 만 그 코드 밑에 묶어 둔다.
+ * ⚠️ `GET` 만이다. 주문·저장을 중간에 끊으면 **갔는지 안 갔는지 모르는 상태**가 된다.
+ */
+const perCode = new Map<string, Set<AbortController>>();
+
+/** 주소에서 종목코드를 찾는다 — 여섯 자리 숫자·영숫자(ETF 는 `0091P0` 처럼 영문이 섞인다) */
+function codeOf(path: string): string | null {
+  const m = path.match(/\/([0-9]{5}[0-9A-Z]|[0-9]{6})(?:_AL|_NX)?(?:[/?]|$)/);
+  return m ? m[1] : null;
+}
+
+/** 이 종목의 조회를 전부 끊는다. 끊은 수를 돌려준다 */
+export function abortStock(code: string): number {
+  const set = perCode.get(code);
+  if (!set) return 0;
+  const n = set.size;
+  for (const c of set) {
+    try {
+      c.abort();
+    } catch {
+      /* 이미 끝난 것은 무시 */
+    }
+  }
+  perCode.delete(code);
+  return n;
+}
+
 async function req(path: string, init?: RequestInit): Promise<Response> {
+  /* 종목 조회면 그 종목 밑에 묶어 둔다 — 떠날 때 한꺼번에 끊으려고 */
+  let ctrl: AbortController | null = null;
+  let code: string | null = null;
+  if (!init?.method || init.method === "GET") {
+    code = codeOf(path);
+    if (code) {
+      ctrl = new AbortController();
+      const set = perCode.get(code) ?? new Set<AbortController>();
+      set.add(ctrl);
+      perCode.set(code, set);
+      init = { ...(init ?? {}), signal: ctrl.signal };
+    }
+  }
   try {
     const res = await fetch(path, init);
     /*
@@ -42,6 +97,11 @@ async function req(path: string, init?: RequestInit): Promise<Response> {
      */
     return res;
   } catch (e) {
+    /*
+     * **끊은 것은 고장이 아니다** — 종목을 옮기며 우리가 일부러 끊은 것이라, 「서버에 닿지
+     * 못했습니다」 띠를 세우면 안 된다. 그 종목 화면은 이미 사라지고 없다.
+     */
+    if (e instanceof DOMException && e.name === "AbortError") throw e;
     noteFetchFailure();
     /*
      * 「Failed to fetch」는 사람 말이 아니다 (2026-09-24 10:22 — 벤티지 폰 캡처: 주요뉴스 탭에 그 한 줄뿐).
@@ -55,6 +115,18 @@ async function req(path: string, init?: RequestInit): Promise<Response> {
       );
     }
     throw e;
+  } finally {
+    /*
+     * 끝났으면 묶음에서 뺀다. 안 빼면 종목을 옮길 때마다 지도가 자라 **그 자체가 샘**이 된다
+     * (끊을 일도 없는 것을 들고 있게 된다).
+     */
+    if (ctrl && code) {
+      const set = perCode.get(code);
+      if (set) {
+        set.delete(ctrl);
+        if (set.size === 0) perCode.delete(code);
+      }
+    }
   }
 }
 

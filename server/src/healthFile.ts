@@ -11,6 +11,7 @@ import v8 from "node:v8";
 import { lifeSummary, noteLife, selfHeal } from "./lifecycle.js";
 import { loadGateStats } from "./loadGate.js";
 import { recoveryStats } from "./recovery.js";
+import { shareGetStats } from "./shareGet.js";
 import { dropSamplesCache } from "./signalSamples.js";
 import { peekRealtime, subscribedCount } from "./realtimeHub.js";
 import { hantooRealtimeStatus } from "./hantooRealtime.js";
@@ -206,6 +207,11 @@ async function writeOnceInner(): Promise<void> {
      * `--expose-gc` 가 빠진 것이라 복구가 반쪽으로 돈다.
      */
     복구: recoveryStats(),
+    /*
+     * 같은 조회를 겹쳐서 아낀 건수 (2026-10-08). `/api/sys/mem` 에만 넣었다가 **여기 빠뜨려서**
+     * 밖에서 효과를 확인할 수가 없었다 — 계기판은 두 곳이 같은 것을 적어야 한다.
+     */
+    합치기: shareGetStats(),
     국내실시간: rt
       ? {
           state: rt.state,

@@ -1,5 +1,5 @@
 ﻿import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { api } from "./api";
+import { abortStock, api } from "./api";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { RunningJobsBar } from "./components/RunningJobsBar";
 import { QuickStockSearch } from "./components/QuickStockSearch";
@@ -554,6 +554,19 @@ export default function App() {
    * ETF 구성종목 팝업(8/25)을 남긴 이유도 정확히 같다 — 닫으면 ETF 화면 그대로.
    */
   function onSelectStock(code: string, name: string) {
+    /*
+     * **떠나는 종목의 조회를 끊는다** (2026-10-08). 벤티지: "방금 오래걸린 이후에 다른 종목들
+     * 누르면 또 오래걸린다" · "이전의 오래걸린 상태가 이후의 동작에 영향을 미치는 구조인지도 봐야겠다."
+     *
+     * 그 구조가 맞았다. 종목을 옮겨도 앞 종목의 조회는 **서버에서 계속 돈다** — 화면만 바뀌고
+     * 요청은 취소되지 않는다. 아무도 안 보는 그 일이 서버 자리를 쥐고 메모리를 계속 쓰니
+     * heap 이 안 내려가고, 다음에 누른 종목이 그 상태를 그대로 물려받는다(실측: 줄 84까지 쌓임).
+     *
+     * 서버의 과부하 관문은 연결이 끊기면 자리를 놓는다(`res.on("close")`). 여기서 끊어 주면
+     * 그 자리가 **즉시** 풀린다. 상세를 여는 문이 이것 하나뿐이라 여기 한 줄이면 전부 따라온다.
+     */
+    const prev = selected?.code;
+    if (prev && prev !== code) abortStock(prev);
     navigate({ stock: { code, name } });
     focus.publish(code, name);
     /*
