@@ -6,6 +6,7 @@ import { addAsk } from "../askHistory.js";
 /* 메모리 계기판·손으로 비우기 (2026-10-08) */
 import { brokerQueues, recoverNow, recoveryStats } from "../recovery.js";
 import { loadGateStats } from "../loadGate.js";
+import { shareGetStats } from "../shareGet.js";
 
 /**
  * 시스 도우미 (2026-09-03). 켜고 끄는 건 화면 설정(`vntg.sys.enabled`)이라 서버는 늘 받는다.
@@ -27,7 +28,7 @@ export function createSysRouter(client: KiwoomClient): Router {
    * 바쁠 때 못 보는 계기판은 있으나 마나다.
    */
   router.get("/mem", (_req, res) => {
-    res.json({ 복구: recoveryStats(), 관문: loadGateStats(), 증권사줄: brokerQueues() });
+    res.json({ 복구: recoveryStats(), 관문: loadGateStats(), 증권사줄: brokerQueues(), 합치기: shareGetStats() });
   });
 
   /**

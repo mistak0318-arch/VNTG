@@ -91,6 +91,8 @@ import { loadCloses, startClosesScheduler } from "./dailyCloses.js";
 import { warmEtfIndex } from "./stockListCache.js";
 /* 과부하 관문 — 죽는 대신 느려지게 (2026-10-07 밤) */
 import { loadGate } from "./loadGate.js";
+/* 같은 조회 합치기 — 창을 여럿 띄워 쓰는 사람을 위한 한 겹 (2026-10-08) */
+import { shareGet } from "./shareGet.js";
 /* 복구 루틴 — 나빠진 뒤 스스로 돌아온다 (2026-10-07 밤) */
 import { startRecovery } from "./recovery.js";
 import { createAiRouter } from "./routes/ai.js";
@@ -209,6 +211,11 @@ app.use(
  * 동시에 도는 무거운 요청 수를 묶고, 한계 가까이 가면 503 으로 돌려보낸다.
  * 아래 「무거운 요청」 기록보다 **먼저** 와야 줄에서 기다린 시간까지 같이 적힌다.
  */
+/*
+ * **같은 조회 합치기는 관문보다 앞** (2026-10-08) — 합쳐진 요청은 자리를 아예 안 쓴다.
+ * 뒤에 두면 보드 셋이 자리를 셋 잡고서 하나로 합쳐지는 꼴이라 반만 버는 셈이다.
+ */
+app.use(shareGet);
 app.use(loadGate);
 /*
  * **무거운 요청을 스스로 일러바치게 한다** (2026-10-07).
