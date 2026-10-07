@@ -25,13 +25,29 @@ export function EtfPanel({
 }) {
   const [info, setInfo] = useState<Info | null>(null);
   /*
-   * 구성종목 클릭 → **팝업**(종목 상세 시트) (2026-08-25 — 사용자 요청).
-   * 개별종목분석으로 페이지를 옮기면 ETF 화면으로 돌아오는 데 뒤로가기가 필요했다.
-   * 팝업이면 닫는 순간 보던 ETF 가 그대로 있다. 팝업 안에서 또 다른 종목으로
-   * 갈아타는 것도 팝업 안에서 돈다.
+   * 구성종목 클릭 → **열려 있는 시트에서 종목만 갈아낀다** (2026-10-08에 고침).
+   *
+   * 벤티지: "각 종목을 누르면 각 종목의 종목 상세를 이용하는데, 이게 자꾸 화면이 껐다
+   * 켜졌다 동작이 이상하거든? 그리고 각 종목 들어가서 모바일에서 뒤로 가기 버튼 누르면은
+   * 다시 ETF 화면으로 넘어야 되는데 그것도 안 돼. 아예 메뉴를 뒤로 넘겨버리더라고."
+   *
+   * ⚠️ 여태 여기서 **시트 위에 시트를 또 띄웠다**(아래 `popup`). 그런데 `StockDetail` 은
+   * 스스로 뒤로가기 칸을 쌓는데(`useSheetBack`), 그 훅은 인스턴스끼리 칸을 물려받게 돼
+   * 있어서 **겹쳐 뜬 둘이 칸 하나를 나눠 썼다.** 그래서 뒤로가기 한 번에 둘 다 닫히고,
+   * 다음 뒤로가기가 **탭 전환**을 빼 버려 메뉴가 통째로 넘어갔다. 깜빡임도 모달이 겹쳐
+   * 다시 그려지던 것이다.
+   *
+   * 부르는 쪽이 준 `onSelectStock` 을 쓰면 그 모든 게 저절로 풀린다 — 같은 시트에서
+   * 종목만 바뀌고 해시가 한 칸 쌓이므로 **뒤로 = ETF 로 복귀, 한 번 더 = 닫힘**이다.
+   * 새 장치를 만들 일이 아니라 **있는 길을 안 쓰고 있었던 것**이다.
+   *
+   * 핸들러를 안 주는 자리에서는 예전처럼 팝업으로 연다 — 아무 일도 안 일어나면 안 된다.
    */
   const [popup, setPopup] = useState<{ code: string; name: string } | null>(null);
-  void onSelectStock;
+  const openStock = (c: string, n: string) => {
+    if (onSelectStock) onSelectStock(c, n);
+    else setPopup({ code: c, name: n });
+  };
 
   useEffect(() => {
     let alive = true;
@@ -104,7 +120,7 @@ export function EtfPanel({
             key={c.code || c.name}
             className="etf-row"
             disabled={!c.code}
-            onClick={() => c.code && setPopup({ code: normalizeStockCode(c.code), name: c.name })}
+            onClick={() => c.code && openStock(normalizeStockCode(c.code), c.name)}
           >
             <span className="etf-name">{c.name}</span>
             <span className="etf-bar">
@@ -131,7 +147,7 @@ export function EtfPanel({
           code={popup.code}
           name={popup.name}
           onClose={() => setPopup(null)}
-          onSelectStock={(c, n) => setPopup({ code: c, name: n })}
+          onSelectStock={openStock}
         />
       )}
     </div>
