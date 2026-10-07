@@ -432,8 +432,15 @@ export function ManualAccountPage({
 
   async function createAccount() {
     if (!newBroker) return;
+    /*
+     * **별칭을 비워도 추가된다** (2026-10-08) — 벤티지: "등록하는 로직이나 이런 것도 좀 더
+     * 편하게". 계좌가 하나뿐인 증권사가 흔한데 거기까지 이름을 지어내라고 할 이유가 없다.
+     * 같은 증권사가 둘 이상이면 번호를 붙여 서로 구분만 되게 한다(나중에 고칠 수 있다).
+     */
+    const same = accounts.filter((a) => a.broker === newBroker).length;
+    const name = newName.trim() || (same === 0 ? "기본" : `계좌 ${same + 1}`);
     try {
-      const res = await api.manualAccountAdd(newBroker, newName);
+      const res = await api.manualAccountAdd(newBroker, name);
       setAccounts(res.accounts);
       setNewName("");
     } catch (err) {
@@ -543,9 +550,13 @@ export function ManualAccountPage({
           </select>
           <input
             className="ma-input wide"
-            placeholder="계좌 별칭 (예: 연금저축, ISA)"
+            placeholder="계좌 별칭 (비워도 됩니다 — 예: 연금저축, ISA)"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
+            /* 적고 바로 엔터 — 단추까지 손을 옮기지 않아도 되게 (2026-10-08) */
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void createAccount();
+            }}
           />
           <button className="filter-btn active" onClick={createAccount}>
             계좌 추가
@@ -553,7 +564,7 @@ export function ManualAccountPage({
         </div>
         <div className="table-note">
           키움 외 증권사 보유분을 직접 적어두는 곳입니다. 현재가는 키움 시세로 자동 계산되며,
-          주문 기능은 없습니다.
+          주문 기능은 없습니다. 종목은 <b>CSV 로 한꺼번에</b> 넣는 편이 빠릅니다(아래).
         </div>
       </CollapsibleCard>
 
@@ -566,6 +577,15 @@ export function ManualAccountPage({
         </div>
       )}
 
+      {/*
+        **계좌를 격자에 담는다** (2026-10-08) — 벤티지: "4개를 등록하는데 한 번에 보기가
+        힘들거든. 조금 더 위아래 폭을 좀 줄여가지고 한눈에 보일 수 있게끔."
+
+        넓은 화면에서는 두 칸, 좁으면 한 칸. **펼친 카드만 두 칸을 다 쓴다**(`.open` 이
+        붙는 것을 CSS 가 본다) — 접힌 것은 작게 늘어놓고, 들여다볼 때만 넓게 쓰는 것이
+        「한눈에」와 「자세히」를 다 얻는 길이다. 접힌 요약도 한 줄로 눕혔다.
+      */}
+      <div className="ma-grid">
       {accounts.map((a, idx) => {
         const today = todayPnl(a.holdings);
         return (
@@ -645,15 +665,20 @@ export function ManualAccountPage({
               </span>
               {a.holdings.length > 0 && (
                 <span className="ma-hint-hold">
+                  {/*
+                    8 → 5 (2026-10-08). 칩이 두세 줄로 접히면서 접힌 카드가 길어졌다 —
+                    계좌 넷을 한눈에 보려면 **한 줄을 넘지 않아야** 한다. 비중 큰 다섯이면
+                    「뭘 들고 있나」는 충분히 보이고, 나머지는 `+N` 으로 알린다(펼치면 다 있다).
+                  */}
                   {[...a.holdings]
                     .sort((x, y) => y.value - x.value)
-                    .slice(0, 8)
+                    .slice(0, 5)
                     .map((h) => (
                       <span key={h.code} className={`ma-hold-chip ${signClass(h.profit)}`} title={`${h.name} · ${fmtNum(h.qty)}주 · 평가 ${fmtNum(Math.round(h.value))} · 손익 ${h.profit > 0 ? "+" : ""}${fmtNum(Math.round(h.profit))}`}>
                         {h.name} <b>{h.returnRate === null ? "-" : pct(h.returnRate)}</b>
                       </span>
                     ))}
-                  {a.holdings.length > 8 && <span className="ma-hold-chip more">+{a.holdings.length - 8}</span>}
+                  {a.holdings.length > 5 && <span className="ma-hold-chip more">+{a.holdings.length - 5}</span>}
                 </span>
               )}
             </span>
@@ -876,6 +901,7 @@ export function ManualAccountPage({
         </CollapsibleCard>
         );
       })}
+      </div>
     </div>
   );
 }

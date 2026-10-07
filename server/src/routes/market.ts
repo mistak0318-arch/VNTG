@@ -29,7 +29,7 @@ import { CHART_RANGES, yahooChart } from "../yahooChart.js";
 import { usEtfHoldings } from "../usEtfHoldings.js";
 import { themeStrength } from "../themeStrength.js";
 /* 대세 테마 분석 — 기간별 흐름 (2026-10-08) */
-import { themeTrend, TREND_DAYS } from "../themeTrend.js";
+import { themeTrend, themeTrendOverview, TREND_DAYS } from "../themeTrend.js";
 import { marketThermo, themeRotation, usOvernight } from "../marketLens.js";
 import { buildCloses, closesProgress, loadCloses, regularCloseOf } from "../dailyCloses.js";
 import { themeLinks } from "../themeLinks.js";
@@ -1120,6 +1120,21 @@ export function createMarketRouter(client: KiwoomClient): Router {
    * 관심이 쏠린 것과 찐으로 가는 것은 다른 물음이라 한 줄로 못 답한다.
    * 파일과 일봉 캐시만 쓰므로 **조회가 0회**다.
    */
+  /**
+   * **한눈에** (2026-10-08) — 시장 셋 × 기간 넷 × 줄 세우기 둘을 **한 번에**.
+   *
+   * 벤티지: "일일이 하나씩 클릭해서 봐야 돼 … 한눈에 보는 게 필요하다고."
+   * 클릭해서 비교하게 만들면 사람은 비교를 안 한다. 전부 파일·캐시라 한 번에 내도 싸다.
+   */
+  router.get("/theme-trend-overview", async (req, res, next) => {
+    try {
+      const top = Math.min(Math.max(Number(req.query.top) || 5, 3), 10);
+      res.json(await themeTrendOverview(top));
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.get("/theme-trend/:market", async (req, res, next) => {
     try {
       const m = req.params.market;

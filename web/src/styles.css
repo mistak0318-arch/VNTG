@@ -2637,40 +2637,39 @@ body {
  * 두 줄을 **나란히** 두는 것이 이 화면의 전부다 — 눈이 좌우로 오가며 같은 테마를 찾게 한다.
  * 좁은 화면에서는 위아래로 접힌다(가로로 긁게 만들면 아무도 안 본다).
  */
-.tt-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
-@media (max-width: 1100px) { .tt-two { grid-template-columns: 1fr; } }
-.tt-count { margin: 6px 0; }
-.tt-list { margin-bottom: 0; }
-.tt-cols, .tt-head {
-  display: grid;
-  grid-template-columns: 1.6em minmax(0, 1fr) 4.6em 3.6em 4.6em 2.6em 1.2em;
-  gap: 6px; align-items: center;
+/*
+ * 기간 넷을 **가로로** 편다. 세로로 쌓으면 다시 스크롤해 가며 비교하게 되는데,
+ * 그걸 없애려고 만든 화면이다. 좁아지면 둘씩, 더 좁으면 하나씩 — 폰에서는
+ * 가로로 긁게 만들지 않는다(긁어야 보이는 표는 안 보는 표다).
+ */
+.tt-mk { margin-bottom: 10px; }
+.tt-cells { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 1280px) { .tt-cells { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 680px) { .tt-cells { grid-template-columns: 1fr; } }
+.tt-cell { border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; min-width: 0; }
+.tt-cell-h { font-weight: 700; font-size: 0.8rem; margin-bottom: 4px; }
+.tt-sub { font-size: 0.68rem; color: var(--muted); margin: 2px 0; }
+.tt-sub2 { border-top: 1px dashed var(--border); padding-top: 4px; margin-top: 6px; }
+.tt-none { color: var(--muted); font-size: 0.74rem; padding: 2px 0; }
+.tt-five { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.tt-five li {
+  display: grid; grid-template-columns: minmax(0, 1fr) 3.4em; gap: 4px;
+  align-items: baseline; font-size: 0.76rem; min-width: 0;
 }
-.tt-cols { padding: 0 6px 4px; font-size: 0.7rem; }
-.tt-cols span:nth-child(n+3) { text-align: right; }
-.tt-head {
-  width: 100%; background: none; border: none; border-top: 1px solid var(--border);
-  color: var(--text); font: inherit; text-align: left; cursor: pointer; padding: 6px;
+/* 대표주는 셋째 칸이 아니라 **둘째 줄**이다 — 한 줄에 셋을 넣으면 폰에서 이름이 다 잘린다 */
+.tt-five li .tt-lead { grid-column: 1 / -1; }
+.tt-nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.tt-rt { text-align: right; font-variant-numeric: tabular-nums; }
+/* 둘 다에 오른 테마 — 이 점이 이 화면의 결론이다 */
+.tt-dot { font-style: normal; color: var(--accent); margin-right: 3px; font-size: 0.6rem; vertical-align: middle; }
+.tt-five li.tt-hit .tt-nm { font-weight: 700; }
+.tt-lead {
+  background: none; border: none; padding: 0 0 0 10px; margin: 0;
+  color: var(--muted); font: inherit; font-size: 0.68rem; text-align: left;
+  cursor: pointer; text-decoration: underline dotted;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.tt-head:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
-.tt-rank { color: var(--muted); font-size: 0.74rem; font-variant-numeric: tabular-nums; }
-.tt-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tt-ret, .tt-br, .tt-money, .tt-score { text-align: right; font-variant-numeric: tabular-nums; font-size: 0.8rem; }
-.tt-br, .tt-money { color: var(--muted); font-size: 0.74rem; }
-.tt-score { font-weight: 700; }
-.tt-caret { color: var(--muted); text-align: center; }
-/* 둘 다에 오른 테마 — 이 표가 이 화면의 결론이다 */
-.tt-both { margin-left: 5px; font-size: 0.68rem; font-style: normal; color: var(--accent); border: 1px solid currentColor; border-radius: 3px; padding: 0 3px; }
-.tt-group { margin-left: 5px; font-size: 0.68rem; font-style: normal; color: var(--muted); }
-/* 잰 종목이 적은 줄 — 숫자는 그리되 믿지 말라고 흐리게 */
-.tt-row.tt-thin .tt-head { opacity: 0.55; }
-.tt-body { padding: 2px 10px 10px 2.2em; }
-.tt-meta { font-size: 0.72rem; }
-.tt-parts { margin-left: 8px; }
-.tt-leaders { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.tt-leaders li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; font-size: 0.78rem; }
-.tt-stock { background: none; border: none; padding: 0; color: var(--text); font: inherit; font-weight: 600; cursor: pointer; text-decoration: underline dotted; }
-.tt-desc { font-style: normal; font-size: 0.7rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 24em; }
+.tt-lead:hover { color: var(--text); }
 
 /*
  * ── 서버 메모리 칩 (2026-10-08) ──
@@ -10248,6 +10247,30 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .jn-edge-two { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
 
 /* 수동 계좌 접힌 줄 — 총자산은 크게, 주식·예수금은 그것을 나눈 것 */
+/*
+ * ── 수동계좌 한눈에 (2026-10-08) ──
+ * 벤티지: "4개를 등록하는데 한 번에 보기가 힘들거든. 조금 더 위아래 폭을 좀 줄여가지고".
+ *
+ * 둘로 줄인다 — **넓은 화면은 두 칸**으로 늘어놓고, **접힌 요약은 한 줄**로 눕힌다.
+ * 펼친 카드(`.open`)만 두 칸을 다 쓴다. 들여다볼 때는 표가 넓어야 하기 때문이다 —
+ * 「한눈에」와 「자세히」는 같은 폭으로 못 얻는다.
+ */
+.ma-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; }
+.ma-grid > .collapsible.open { grid-column: 1 / -1; }
+/* 좁으면 한 칸 — 폰에서 두 칸이면 숫자가 줄바꿈돼 오히려 길어진다 */
+@media (max-width: 1200px) { .ma-grid { grid-template-columns: 1fr; } }
+/* 격자 안에서는 카드끼리 간격을 격자가 맡는다 — 카드 제 여백이 겹치면 또 길어진다 */
+.ma-grid > .collapsible { margin-bottom: 0; }
+
+/* 접힌 요약을 한 줄로 — 주식·예수금·총자산을 나란히, 막대는 그 아래 실오라기처럼 */
+.ma-grid .ma-hint-split2 { grid-template-columns: 1fr 1fr auto; gap: 0.5rem; }
+.ma-grid .ma-hint-total { margin-left: 0; }
+.ma-grid .ma-hint-cell b, .ma-grid .ma-hint-total b { font-size: 0.9rem; }
+.ma-grid .ma-hint-bar { height: 3px; margin: 3px 0; }
+/* 보유 칩은 한 줄만 — 넘치면 조용히 자른다(`+N` 이 몇인지 말해 준다) */
+.ma-grid .ma-hint-hold { display: flex; flex-wrap: nowrap; overflow: hidden; gap: 4px; }
+.ma-grid .ma-hold-chip { flex: none; white-space: nowrap; }
+
 .ma-hint { display: block; margin-top: 0.15rem; }
 .ma-hint em { font-style: normal; color: var(--muted); font-size: 0.68rem; margin-right: 0.25rem; }
 .ma-hint-top { display: flex; align-items: baseline; gap: 0.15rem; }

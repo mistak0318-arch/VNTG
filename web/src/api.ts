@@ -1807,6 +1807,9 @@ export const api = {
   /** 대세 테마 분석 (2026-10-08) — 기간별 흐름. 조회 0회라 마음껏 눌러도 된다 */
   themeTrend: (market: "kr" | "etf" | "us", days: number) =>
     getJson<TrendResult>(`/api/market/theme-trend/${market}?days=${days}`),
+  /** 한눈에 — 시장 셋 × 기간 넷 × 줄 세우기 둘을 한 번에 (2026-10-08) */
+  themeTrendOverview: (top = 5) =>
+    getJson<OverviewResult>(`/api/market/theme-trend-overview?top=${top}`),
   themeStrength: (market: "kr" | "etf" | "us", includeHidden = false) =>
     getJson<{ themes: ThemeStrength[]; at: string; warming?: boolean; hidden: string[] }>(
       `/api/market/theme-strength/${market}${includeHidden ? "?hidden=1" : ""}`,
@@ -7928,6 +7931,26 @@ export interface TrendTheme {
   /** 점수의 속 — 어느 칸이 점수를 만들었나 (각 0~100) */
   parts: { ret: number; breadth: number; money: number };
   leaders: TrendLeader[];
+}
+
+export interface OverviewCell {
+  days: number;
+  byReturn: TrendTheme[];
+  byScore: TrendTheme[];
+}
+
+export interface OverviewMarket {
+  market: "kr" | "etf" | "us";
+  label: string;
+  total: number;
+  note: string | null;
+  cells: OverviewCell[];
+}
+
+export interface OverviewResult {
+  at: string;
+  top: number;
+  markets: OverviewMarket[];
 }
 
 export interface TrendResult {

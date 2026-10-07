@@ -229,3 +229,60 @@ export async function themeTrend(
 
   return { market, days, at, total: rows.length, byReturn, byScore, note };
 }
+
+/* ───────── 한눈에 보기 (2026-10-08) ───────── */
+
+/**
+ * 벤티지: "네가 한 거대로라면 난 일일이 하나씩 클릭해서 봐야 돼. 나는 한눈에 보는 게
+ * 필요하다고. 5일 클릭하고 10일 클릭하고 ETF 클릭했다 해외 클릭했다 그게 아니라
+ * 한눈에 … 상위 5개씩 모아가지고 보여주고."
+ *
+ * 맞는 지적이다. **클릭해서 비교하게 만들면 사람은 비교를 안 한다.** 탭과 기간 단추로
+ * 나눠 두면 「국내 5일」과 「ETF 20일」을 머릿속에서 맞춰야 하는데, 그건 화면이 할 일이다.
+ *
+ * 그래서 **시장 셋 × 기간 넷 × 줄 세우기 둘**을 한 번에 낸다. 전부 파일과 일봉 캐시라
+ * 조회가 0회이므로 한 번에 다 내도 비싸지 않다 — 나눌 이유가 애초에 없었다.
+ */
+export const OVERVIEW_DAYS = [1, 5, 20, 60] as const;
+
+/** 한 칸 — 그 시장·그 기간의 상위 다섯 */
+export interface OverviewCell {
+  days: number;
+  byReturn: TrendTheme[];
+  byScore: TrendTheme[];
+}
+
+export interface OverviewMarket {
+  market: "kr" | "etf" | "us";
+  label: string;
+  total: number;
+  note: string | null;
+  cells: OverviewCell[];
+}
+
+export interface OverviewResult {
+  at: string;
+  top: number;
+  markets: OverviewMarket[];
+}
+
+const MARKET_LABEL: Record<string, string> = { kr: "국내 테마", etf: "ETF", us: "해외 테마" };
+
+export async function themeTrendOverview(top = 5): Promise<OverviewResult> {
+  const markets: OverviewMarket[] = [];
+  let at = "";
+  for (const m of ["kr", "etf", "us"] as const) {
+    const cells: OverviewCell[] = [];
+    let total = 0;
+    let note: string | null = null;
+    for (const d of OVERVIEW_DAYS) {
+      const r = await themeTrend(m, d as TrendDays);
+      if (!at) at = r.at;
+      total = r.total;
+      note = r.note;
+      cells.push({ days: d, byReturn: r.byReturn.slice(0, top), byScore: r.byScore.slice(0, top) });
+    }
+    markets.push({ market: m, label: MARKET_LABEL[m], total, note, cells });
+  }
+  return { at, top, markets };
+}
