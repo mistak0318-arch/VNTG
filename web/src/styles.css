@@ -2642,6 +2642,32 @@ body {
  * 그걸 없애려고 만든 화면이다. 좁아지면 둘씩, 더 좁으면 하나씩 — 폰에서는
  * 가로로 긁게 만들지 않는다(긁어야 보이는 표는 안 보는 표다).
  */
+/* 설명은 ⓘ 안으로 — 날마다 보는 건 숫자다 (2026-10-08) */
+.tt-bar { display: flex; align-items: center; gap: 8px; margin: 2px 0 8px; flex-wrap: wrap; }
+.tt-info {
+  flex: none; width: 1.6em; height: 1.6em; border-radius: 50%;
+  border: 1px solid var(--border); background: none; color: var(--muted);
+  font: inherit; font-size: 0.85rem; line-height: 1; cursor: pointer;
+}
+.tt-info:hover, .tt-info.on { color: var(--text); border-color: currentColor; }
+.tt-warn { font-size: 0.72rem; color: var(--muted); }
+.tt-help { font-size: 0.78rem; line-height: 1.6; margin-bottom: 10px; }
+.tt-help p { margin: 0 0 6px; }
+.tt-help p:last-child { margin-bottom: 0; }
+
+/* 지금 대세 — 격자의 결론을 맨 위 한 줄로 */
+.tt-top { margin-bottom: 10px; }
+.tt-top-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.tt-top-chip {
+  display: inline-flex; align-items: baseline; gap: 5px; flex-wrap: wrap;
+  border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; font-size: 0.78rem;
+}
+.tt-top-chip b { font-weight: 700; }
+.tt-top-chip i { font-style: normal; font-variant-numeric: tabular-nums; }
+.tt-top-mk { font-style: normal; font-size: 0.66rem; color: var(--muted); }
+.tt-top-span { font-size: 0.66rem; color: var(--muted); }
+.tt-top-chip .tt-lead { padding-left: 2px; }
+
 .tt-mk { margin-bottom: 10px; }
 .tt-cells { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 @media (max-width: 1280px) { .tt-cells { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
