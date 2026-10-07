@@ -1,3 +1,4 @@
+import { saveRoster } from "./themeRoster.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -146,6 +147,34 @@ export const ETF_TABS: Record<number, string> = {
   6: "채권",
   7: "기타",
 };
+
+/**
+ * **오늘의 테마 구성원을 남긴다** (2026-10-08) — 벤티지: "매일매일 쌓이잖아".
+ *
+ * 분류 파일(`naverThemes.json`)은 받을 때마다 **덮어쓴다.** 그래서 과거의 어느 날 그
+ * 테마에 무엇이 들어 있었는지는 알 길이 없었다. 일별 **등락률**은 `themeHistory.json` 이
+ * 이미 60일치를 쌓고 있었는데, **구성**은 아무도 안 쌓고 있었다.
+ *
+ * 구성이 따로 필요한 까닭은 되짚기의 거짓말 때문이다 — 오늘 구성으로 과거를 재면
+ * 네이버가 **오른 뒤에 새로 넣은 종목**이 그 테마의 과거에 섞여 들어 실제보다 좋아 보인다.
+ * 자세한 것은 `themeRoster.ts` 에 적어 뒀다.
+ *
+ * 저장 실패가 테마 받아 오기를 깨뜨리면 안 된다 — 명부는 곁다리다. 그래서 삼키고 적기만 한다.
+ */
+async function noteRoster(store: NaverThemeStore): Promise<void> {
+  try {
+    const kr: Record<string, string[]> = {};
+    for (const t of store.themes) kr[String(t.no)] = t.stocks.map((s) => s.code);
+    const us: Record<string, string[]> = {};
+    for (const t of store.us) us[t.code] = t.stocks.map((s) => s.symbol);
+    /* ETF 는 묶음이 곧 분류(tab)다 — 테마 하나에 그 분류의 ETF 들이 든 것으로 본다 */
+    const etf: Record<string, string[]> = {};
+    for (const r of store.etf) (etf[String(r.tab)] ??= []).push(r.code);
+    await saveRoster({ kr, us, etf });
+  } catch (e) {
+    console.warn(`[themeRoster] 오늘 구성을 못 남겼습니다: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
 
 export interface NaverThemeStore {
   /** 마지막으로 받은 시각 (ISO) */
@@ -411,6 +440,7 @@ export async function fetchAllThemes(opts: { limit?: number } = {}): Promise<Nav
     await writeFile(FILE, JSON.stringify(store), "utf-8");
     cache = store;
     reverse = null;
+    await noteRoster(store);
     return store;
   })().finally(() => {
     running = null;
@@ -525,6 +555,7 @@ export async function refreshUsThemes(): Promise<{ themes: number; stocks: numbe
   await mkdir(DIR, { recursive: true });
   await writeFile(FILE, JSON.stringify(store), "utf-8");
   cache = store;
+  await noteRoster(store);
   return { themes: us.length, stocks: us.reduce((n, t) => n + t.stocks.length, 0) };
 }
 
@@ -593,6 +624,7 @@ export async function refreshEtfs(): Promise<{ count: number }> {
   await mkdir(DIR, { recursive: true });
   await writeFile(FILE, JSON.stringify(store), "utf-8");
   cache = store;
+  await noteRoster(store);
   return { count: etf.length };
 }
 
