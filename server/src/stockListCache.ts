@@ -195,10 +195,92 @@ function isChoseongQuery(q: string): boolean {
   return q.length > 0 && [...q].every((ch) => CHOSEONG.includes(ch));
 }
 
-export async function searchStocks(client: KiwoomClient, query: string): Promise<StockEntry[]> {
+/**
+ * **ETF 는 검색에서만 쓴다** (2026-10-07).
+ *
+ * 벤티지: "최상단 돋보기로 etf 조회했을때에는 안들어가지더라."
+ *
+ * 까닭은 이 파일의 목록이 `ka10099` 를 **코스피(0)·코스닥(10)** 으로만 받기 때문이다.
+ * ETF 는 거기 안 들어오므로 돋보기로 **찾아지지도 않았고**, 그러니 최근조회에 남을 일도
+ * 없었다. (ETF 메뉴에서 눌러 연 것은 `onSelectStock` 을 타므로 잘 쌓인다 — 돋보기만 구멍이었다.)
+ *
+ * ⚠️ **`ensureCache` 에는 절대 넣지 않는다.** 그 목록은 앱의 **보통주 필터**다 —
+ * 신호등 찾기·백테스트·슈퍼신호등·신호등 분석의 모집단이 전부 거기 있는 코드만 남긴다.
+ * ETF 를 섞으면 모든 모집단이 조용히 오염된다. 그래서 검색할 때만 얹는다.
+ *
+ * 재료는 **이미 도는 ETF 전체시세(`ka40004`)** 라 조회가 안 는다. 이름·코드만 쓰므로
+ * 하루 한 번이면 충분하다(상장 목록은 장중에 안 바뀐다) — 글자를 칠 때마다 3분 캐시를
+ * 깨우지 않게 여기서 따로 하루를 들고 있는다.
+ */
+let etfCache: StockEntry[] | null = null;
+let etfCacheAt = 0;
+let etfWarming = false;
+
+/**
+ * ETF 이름표를 **데운다**. 서버가 뜰 때 한 번 부르고, 식었으면 검색이 뒤에서 다시 부른다.
+ *
+ * ⚠️ **검색이 이걸 기다리면 안 된다.** `etfAll` 은 `ka40004` 를 **15쪽**까지 넘기는 일이라
+ * 조회 15건에 몇 초가 걸린다. 그걸 검색 길에 그대로 두면 글자 하나 칠 때마다 멈춘 듯
+ * 느려지고 조회 예산도 크게 먹는다. 그래서 **데우기는 뒤에서 돌리고 검색은 지금 손에 든
+ * 것으로 바로 답한다** — 처음 한 번은 ETF 없이 나올 수 있지만, 그 뒤로는 하루 종일 있다.
+ */
+export function warmEtfIndex(client: KiwoomClient): void {
+  if (etfWarming) return;
+  if (etfCache && Date.now() - etfCacheAt < TTL_MS) return;
+  etfWarming = true;
+  void (async () => {
+    try {
+      /* 동적 import — `routes/etf.ts` 가 이 파일을 돌아 부를 수 있어 순환을 피한다 */
+      const { etfAll } = await import("./routes/etf.js");
+      const rows = await etfAll(client);
+      /* 빈 응답을 하루 굳히지 않는다 — 보통주 목록이 반쪽을 안 굳히는 것과 같은 이유 */
+      if (rows.length === 0) return;
+      etfCache = rows.map((r) => ({
+        code: r.code,
+        name: r.name,
+        /* 드롭다운 오른쪽에 그대로 찍힌다 — 「ETF」라고 보이는 편이 고르기 쉽다 */
+        marketName: "ETF",
+        sectorName: "",
+        sizeName: "",
+        marketCode: "8",
+        /* 상장좌수는 안 쓴다. 시총 계산에 끼면 안 되므로 0 으로 둔다 */
+        shares: 0,
+      }));
+      etfCacheAt = Date.now();
+      console.log(`[stockList] ETF 이름표 ${etfCache.length}개 — 돋보기에서 찾힙니다`);
+    } catch {
+      /* 못 받아도 보통주 검색은 그대로 된다 — 다음에 다시 데운다 */
+    } finally {
+      etfWarming = false;
+    }
+  })();
+}
+
+/** 지금 손에 든 ETF 이름표. 없거나 식었으면 **뒤에서 데우고 빈손으로 돌아온다**(안 기다린다) */
+function etfEntriesNow(client: KiwoomClient): StockEntry[] {
+  if (etfCache && Date.now() - etfCacheAt < TTL_MS) return etfCache;
+  warmEtfIndex(client);
+  return etfCache ?? [];
+}
+
+export async function searchStocks(
+  client: KiwoomClient,
+  query: string,
+  /** ETF 도 찾을지 — 돋보기(검색 길)만 켠다. 플로팅 도우미 등 다른 쓰임은 예전 그대로 */
+  opts: { etf?: boolean } = {},
+): Promise<StockEntry[]> {
   const q = query.trim().toLowerCase();
   if (!q) return [];
-  const list = await ensureCache(client);
+  const base = await ensureCache(client);
+  /* 보통주를 앞에 둔다 — 같은 글자면 보통주가 먼저 뜨는 편이 자연스럽다 */
+  let list = base;
+  if (opts.etf) {
+    const etfs = etfEntriesNow(client);
+    if (etfs.length > 0) {
+      const have = new Set(base.map((b) => b.code));
+      list = [...base, ...etfs.filter((e) => !have.has(e.code))];
+    }
+  }
 
   /*
    * 초성 검색. "ㅅㅅㅈㅈ" 로 삼성전자를 찾는다.

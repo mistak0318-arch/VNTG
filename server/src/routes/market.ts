@@ -87,7 +87,8 @@ export function createMarketRouter(client: KiwoomClient): Router {
   router.get("/search", async (req, res, next) => {
     try {
       const q = typeof req.query.q === "string" ? req.query.q : "";
-      const results = await searchStocks(client, q);
+      /* ETF 도 찾는다 (2026-10-07) — 돋보기로 ETF 를 못 찾던 구멍. `stockListCache` 주석 참고 */
+      const results = await searchStocks(client, q, { etf: true });
       res.json({ results });
     } catch (err) {
       next(err);

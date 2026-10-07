@@ -87,6 +87,8 @@ import { startFillStore } from "./fillStore.js";
 import { startEtfHoldersScheduler } from "./etfHolders.js";
 import { startThemeScheduler } from "./naverThemes.js";
 import { loadCloses, startClosesScheduler } from "./dailyCloses.js";
+/* 돋보기가 ETF 도 찾게 — 이름표를 기동 때 미리 받아 둔다 (2026-10-07) */
+import { warmEtfIndex } from "./stockListCache.js";
 import { createAiRouter } from "./routes/ai.js";
 import { createAskRouter } from "./routes/ask.js";
 import { createSysRouter } from "./routes/sys.js";
@@ -615,6 +617,12 @@ app.listen(port, host, () => {
       .then((s) => console.log(`[dailyCloses] 예열 완료 — ${Object.keys(s.bars ?? {}).length}종목 · ${Date.now() - t0}ms`))
       .catch(() => undefined);
   }, 2000).unref?.();
+  /*
+   * ETF 이름표도 같이 데운다 (2026-10-07) — 돋보기로 ETF 를 찾으려면 있어야 한다.
+   * 조회 15건짜리라 **검색이 기다리게 두면 안 되고**, 여기서 미리 받아 두면 하루 종일 쓴다.
+   * 일봉 예열(84MB 파싱)과 겹치지 않게 조금 뒤로 미룬다.
+   */
+  setTimeout(() => warmEtfIndex(client), 20_000).unref?.();
 });
 for (const extra of extraHosts) {
   /*
