@@ -57,7 +57,10 @@ export function MemoryChip() {
     setSaid(null);
     try {
       const r = await api.sysRecover();
-      setSaid(r.거둔MB > 0 ? `${r.거둔MB}MB 비움` : "비울 것이 없었습니다");
+      const parts: string[] = [];
+      if (r.거둔MB > 0) parts.push(`${r.거둔MB}MB`);
+      if (r.한투줄비움 > 0) parts.push(`한투 줄 ${r.한투줄비움}건`);
+      setSaid(parts.length > 0 ? `${parts.join(" · ")} 비움` : "비울 것이 없었습니다");
       load();
     } catch {
       setSaid("실패");
@@ -82,6 +85,7 @@ export function MemoryChip() {
         disabled={busy}
         title={
           `서버 메모리 ${mem.복구.heapMB}/${mem.복구.상한MB}MB (${pct}%) · 상태 ${mem.복구.상태}` +
+          `\n증권사 줄 — 키움 ${mem.증권사줄.키움줄} · 한투 ${mem.증권사줄.한투줄}` +
           `\n동시에 도는 요청 ${mem.관문.지금도는것}/${mem.관문.동시한도} · 줄 선 것 ${mem.관문.기다리는것}` +
           `\n오늘 최고: 동시 ${mem.관문.최고동시} · 줄 ${mem.관문.최고기다림} · 가장 오래 기다린 ${(mem.관문.최대기다림ms / 1000).toFixed(1)}초` +
           (mem.관문.되돌려보냄 > 0 ? `\n바빠서 되돌려보냄 ${mem.관문.되돌려보냄}건` : "") +

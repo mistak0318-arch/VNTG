@@ -150,13 +150,38 @@ let queue: Promise<void> = Promise.resolve();
  * 카드가 「지금 붐빔」이라 말하고 다음 새로고침에 받는 쪽이, 모든 카드가 2분씩 매달려 있는 것보다 낫다.
  * 줄이 짧아지니 앞쪽도 제때 끝난다. 한투는 **조회 전용**이라 포기해도 잃는 것은 그 화면 한 칸뿐이다.
  */
-const MAX_QUEUE_WAIT_MS = 20_000;
-const MAX_QUEUED = Math.floor(MAX_QUEUE_WAIT_MS / MIN_GAP_MS); // 50건
+/**
+ * 줄에서 기다릴 수 있는 최대 시간 — **20초에서 8초로** (2026-10-08).
+ *
+ * ⚠️ 한투를 기다리는 요청이 **과부하 관문의 자리를 쥔 채로** 기다린다. 그래서 줄이 길어지면
+ * 한투와 아무 상관 없는 길(시황 대시보드는 키움·파일만 쓴다)까지 자리가 없어 같이 막혔다.
+ * 벤티지: "한투 요청을 기다리고 있어서 다른데 요청 들어가도 같이 안되는거 같은데."
+ *
+ * 그러니 **한투는 빨리 포기하는 편이 전체에 이롭다.** 카드 하나가 「잠시 뒤 다시 받습니다」로
+ * 뜨는 대신, 그 자리를 놓아 다른 화면이 돈다. 부르는 쪽은 대개 이 실패를 받아 제 값만 비운다.
+ */
+const MAX_QUEUE_WAIT_MS = 8_000;
+const MAX_QUEUED = Math.floor(MAX_QUEUE_WAIT_MS / MIN_GAP_MS); // 20건
 let queued = 0;
+
+/**
+ * **줄 비우기용 세대 번호** (2026-10-08) — 벤티지: "비우기 하면 각 요청도 비워주면 안되?"
+ *
+ * 줄이 약속 사슬이라 선 것을 하나씩 집어 뺄 수가 없다. 대신 번호를 하나 올리면,
+ * 그 전에 줄 선 것들은 차례가 와도 **제 번호가 낡은 걸 보고 스스로 물러난다.**
+ */
+let generation = 0;
 
 /** 지금 한투 줄에 선 수 — health 가 적는다 */
 export function hantooQueueDepth(): number {
   return queued;
+}
+
+/** 줄을 통째로 비운다. 비운 건수를 돌려준다 — 「비우기」 단추가 부른다 */
+export function dropHantooQueue(): number {
+  const n = queued;
+  if (n > 0) generation += 1;
+  return n;
 }
 
 function slot(): Promise<void> {
@@ -169,10 +194,19 @@ function slot(): Promise<void> {
     );
   }
   queued += 1;
+  /* 줄에 설 때의 번호. 기다리는 사이 비우기가 눌리면 번호가 달라져 있다 */
+  const gen = generation;
   const mine = queue
     .then(async () => {
+      if (gen !== generation) {
+        throw new HantooError("DROPPED", "한투 줄을 비웠습니다 — 다시 눌러 주세요");
+      }
       const wait = lastAt + MIN_GAP_MS - Date.now();
       if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+      /* 기다리는 동안 비웠을 수도 있다 — 쉰 뒤에 한 번 더 본다 */
+      if (gen !== generation) {
+        throw new HantooError("DROPPED", "한투 줄을 비웠습니다 — 다시 눌러 주세요");
+      }
       lastAt = Date.now();
     })
     .finally(() => {

@@ -3,6 +3,8 @@ import v8 from "node:v8";
 import { noteLife } from "./lifecycle.js";
 import { dropSamplesCache } from "./signalSamples.js";
 import { dropAccountCache } from "./orders.js";
+import { dropHantooQueue, hantooQueueDepth } from "./hantooClient.js";
+import { KiwoomClient } from "./kiwoomClient.js";
 
 /**
  * 복구 루틴 — **나빠진 뒤 스스로 돌아온다** (2026-10-07 밤).
@@ -118,14 +120,31 @@ export function recoverNow(): {
   이전MB: number;
   이후MB: number;
   거둔MB: number;
+  한투줄비움: number;
   GC가능: boolean;
 } {
   const before = Math.round(memoryUsage().heapUsed / 1048576);
   const 놓은것 = dropWhatWeCan();
+  /*
+   * **줄도 같이 비운다** (2026-10-08) — 벤티지: "비우기 하면 각 요청도 비워주면 안되?"
+   *
+   * 메모리만 비우고 줄을 그대로 두면, 비운 직후부터 **아까 쌓인 것들이 다시 쏟아진다.**
+   * 게다가 그것들은 대개 **이미 떠난 화면**이 부른 것이다 — 종목을 옮겼는데 앞 종목의
+   * 조회가 줄에 남아 자리를 먹는다. 비우기는 「지금부터 새로」라는 뜻이라야 한다.
+   *
+   * 키움은 안 비운다. 초당 4.5건이라 줄이 길어도 금방 빠지고(실측 최대 대기 221ms),
+   * 비우면 멀쩡히 돌던 배경 수집까지 깨진다.
+   */
+  const 한투줄비움 = dropHantooQueue();
   forceGc();
   const after = Math.round(memoryUsage().heapUsed / 1048576);
-  noteLife("WARN", `손으로 비움 — ${놓은것}, ${before} → ${after}MB`);
-  return { 놓은것, 이전MB: before, 이후MB: after, 거둔MB: before - after, GC가능: canGc };
+  noteLife("WARN", `손으로 비움 — ${놓은것}, ${before} → ${after}MB, 한투 줄 ${한투줄비움}건`);
+  return { 놓은것, 이전MB: before, 이후MB: after, 거둔MB: before - after, 한투줄비움, GC가능: canGc };
+}
+
+/** 증권사 줄 — 계기판이 「어느 줄에 걸렸나」를 답하려면 같이 보여야 한다 (2026-10-08) */
+export function brokerQueues(): { 키움줄: number; 한투줄: number } {
+  return { 키움줄: KiwoomClient.queueDepth(), 한투줄: hantooQueueDepth() };
 }
 
 /** 놓을 수 있는 것만 놓는다. 다시 만드는 값이 비싼 것(일봉)은 건드리지 않는다 */

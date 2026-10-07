@@ -4,7 +4,7 @@ import { act, askSys, getTopicExamples, interpret, isSysAiReady, recapToday, sav
 import type { AskTurn } from "../askMarket.js";
 import { addAsk } from "../askHistory.js";
 /* 메모리 계기판·손으로 비우기 (2026-10-08) */
-import { recoverNow, recoveryStats } from "../recovery.js";
+import { brokerQueues, recoverNow, recoveryStats } from "../recovery.js";
 import { loadGateStats } from "../loadGate.js";
 
 /**
@@ -27,7 +27,7 @@ export function createSysRouter(client: KiwoomClient): Router {
    * 바쁠 때 못 보는 계기판은 있으나 마나다.
    */
   router.get("/mem", (_req, res) => {
-    res.json({ 복구: recoveryStats(), 관문: loadGateStats() });
+    res.json({ 복구: recoveryStats(), 관문: loadGateStats(), 증권사줄: brokerQueues() });
   });
 
   /**

@@ -1030,7 +1030,7 @@ export const api = {
    */
   sysMem: () => getJson<SysMem>("/api/sys/mem"),
   sysRecover: () =>
-    postJson<{ 놓은것: string; 이전MB: number; 이후MB: number; 거둔MB: number; GC가능: boolean }>(
+    postJson<{ 놓은것: string; 이전MB: number; 이후MB: number; 거둔MB: number; 한투줄비움: number; GC가능: boolean }>(
       "/api/sys/recover",
     ),
   sysInterpret: (question: string, focus?: SysStockRef | null) =>
@@ -7847,6 +7847,8 @@ export interface SysMem {
     되돌려보냄: number;
     상한MB: number;
   };
+  /** 증권사 줄 — 「어느 줄에 걸렸나」는 이것과 관문을 같이 봐야 갈린다 (2026-10-08) */
+  증권사줄: { 키움줄: number; 한투줄: number };
 }
 
 /* ───────── 실전 성적표 (2026-10-07) — 서버 scoreCard.ts 와 같은 모양 ───────── */
