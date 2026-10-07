@@ -1804,6 +1804,9 @@ export const api = {
   naverThemeFetch: () => postJson<{ started: boolean }>("/api/market/naver-themes/fetch", {}),
   naverThemeFetchUs: () => postJson<{ started: boolean }>("/api/market/naver-themes/fetch-us", {}),
   /** 테마 강도 — 등락률·상승비율·연속성. **조회 0회**(분류는 파일, 시세는 스냅샷) */
+  /** 대세 테마 분석 (2026-10-08) — 기간별 흐름. 조회 0회라 마음껏 눌러도 된다 */
+  themeTrend: (market: "kr" | "etf" | "us", days: number) =>
+    getJson<TrendResult>(`/api/market/theme-trend/${market}?days=${days}`),
   themeStrength: (market: "kr" | "etf" | "us", includeHidden = false) =>
     getJson<{ themes: ThemeStrength[]; at: string; warming?: boolean; hidden: string[] }>(
       `/api/market/theme-strength/${market}${includeHidden ? "?hidden=1" : ""}`,
@@ -7896,6 +7899,47 @@ export interface SignalSuperSimResult {
   listsTotal: number;
   minLists: number;
   rows: SignalSuperSimRow[];
+}
+
+/* ───────── 대세 테마 분석 (2026-10-08) — 서버 themeTrend.ts 와 같은 모양 ───────── */
+
+export interface TrendLeader {
+  code: string;
+  name: string;
+  ret: number | null;
+  tradeValue: number | null;
+  /** 이 테마 거래대금에서 차지하는 비중(%) */
+  share: number | null;
+  desc: string;
+}
+
+export interface TrendTheme {
+  key: string;
+  name: string;
+  group?: string;
+  members: number;
+  /** 그중 일봉으로 잴 수 있었던 수 — `members` 와 벌어지면 평균이 얇다 */
+  measured: number;
+  ret: number | null;
+  breadth: number | null;
+  tradeValue: number;
+  marketCap: number;
+  score: number;
+  /** 점수의 속 — 어느 칸이 점수를 만들었나 (각 0~100) */
+  parts: { ret: number; breadth: number; money: number };
+  leaders: TrendLeader[];
+}
+
+export interface TrendResult {
+  market: string;
+  days: number;
+  at: string;
+  total: number;
+  /** 많이 오른 순 — 잡주가 끌어올린 것도 그대로 온다(관심이 쏠린 것도 정보다) */
+  byReturn: TrendTheme[];
+  /** 종합 점수 순 — 수익률·상승비율·거래대금을 묶은 것 */
+  byScore: TrendTheme[];
+  note: string | null;
 }
 
 /** 서버 메모리 — `/api/sys/mem` (2026-10-08). 서버 recovery.ts·loadGate.ts 와 같은 모양 */

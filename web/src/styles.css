@@ -2633,6 +2633,46 @@ body {
 .ss-note { font-size: 0.7rem; color: var(--muted); margin-top: 0.3rem; line-height: 1.5; }
 /* 수동계좌 CSV 들여오기 (2026-10-07) — 양식 받기 → 파일 → 미리보기 → 적용 */
 /*
+ * ── 대세 테마 분석 (2026-10-08) ──
+ * 두 줄을 **나란히** 두는 것이 이 화면의 전부다 — 눈이 좌우로 오가며 같은 테마를 찾게 한다.
+ * 좁은 화면에서는 위아래로 접힌다(가로로 긁게 만들면 아무도 안 본다).
+ */
+.tt-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+@media (max-width: 1100px) { .tt-two { grid-template-columns: 1fr; } }
+.tt-count { margin: 6px 0; }
+.tt-list { margin-bottom: 0; }
+.tt-cols, .tt-head {
+  display: grid;
+  grid-template-columns: 1.6em minmax(0, 1fr) 4.6em 3.6em 4.6em 2.6em 1.2em;
+  gap: 6px; align-items: center;
+}
+.tt-cols { padding: 0 6px 4px; font-size: 0.7rem; }
+.tt-cols span:nth-child(n+3) { text-align: right; }
+.tt-head {
+  width: 100%; background: none; border: none; border-top: 1px solid var(--border);
+  color: var(--text); font: inherit; text-align: left; cursor: pointer; padding: 6px;
+}
+.tt-head:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+.tt-rank { color: var(--muted); font-size: 0.74rem; font-variant-numeric: tabular-nums; }
+.tt-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-ret, .tt-br, .tt-money, .tt-score { text-align: right; font-variant-numeric: tabular-nums; font-size: 0.8rem; }
+.tt-br, .tt-money { color: var(--muted); font-size: 0.74rem; }
+.tt-score { font-weight: 700; }
+.tt-caret { color: var(--muted); text-align: center; }
+/* 둘 다에 오른 테마 — 이 표가 이 화면의 결론이다 */
+.tt-both { margin-left: 5px; font-size: 0.68rem; font-style: normal; color: var(--accent); border: 1px solid currentColor; border-radius: 3px; padding: 0 3px; }
+.tt-group { margin-left: 5px; font-size: 0.68rem; font-style: normal; color: var(--muted); }
+/* 잰 종목이 적은 줄 — 숫자는 그리되 믿지 말라고 흐리게 */
+.tt-row.tt-thin .tt-head { opacity: 0.55; }
+.tt-body { padding: 2px 10px 10px 2.2em; }
+.tt-meta { font-size: 0.72rem; }
+.tt-parts { margin-left: 8px; }
+.tt-leaders { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.tt-leaders li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; font-size: 0.78rem; }
+.tt-stock { background: none; border: none; padding: 0; color: var(--text); font: inherit; font-weight: 600; cursor: pointer; text-decoration: underline dotted; }
+.tt-desc { font-style: normal; font-size: 0.7rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 24em; }
+
+/*
  * ── 서버 메모리 칩 (2026-10-08) ──
  * 평소에는 **점 하나**다. 숫자가 늘 떠 있으면 그것만 보게 된다 — 경계를 넘어서야 올라온다.
  */

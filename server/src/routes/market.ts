@@ -28,6 +28,8 @@ import { tradeSizeMix } from "../tradeSizeMix.js";
 import { CHART_RANGES, yahooChart } from "../yahooChart.js";
 import { usEtfHoldings } from "../usEtfHoldings.js";
 import { themeStrength } from "../themeStrength.js";
+/* 대세 테마 분석 — 기간별 흐름 (2026-10-08) */
+import { themeTrend, TREND_DAYS } from "../themeTrend.js";
 import { marketThermo, themeRotation, usOvernight } from "../marketLens.js";
 import { buildCloses, closesProgress, loadCloses, regularCloseOf } from "../dailyCloses.js";
 import { themeLinks } from "../themeLinks.js";
@@ -1106,6 +1108,27 @@ export function createMarketRouter(client: KiwoomClient): Router {
       const includeHidden = req.query.hidden === "1";
       const r = await themeStrength(market, { includeHidden });
       res.json({ ...r, hidden: await listHidden() });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * **대세 테마 분석** (2026-10-08) — 기간을 주면 그 기간으로 다시 줄 세운다.
+   *
+   * MAP 은 오늘의 지도고 이쪽은 흐름이다. 「많이 오른 순」과 「종합 점수 순」 둘을 같이 준다 —
+   * 관심이 쏠린 것과 찐으로 가는 것은 다른 물음이라 한 줄로 못 답한다.
+   * 파일과 일봉 캐시만 쓰므로 **조회가 0회**다.
+   */
+  router.get("/theme-trend/:market", async (req, res, next) => {
+    try {
+      const m = req.params.market;
+      const market = m === "us" ? "us" : m === "etf" ? "etf" : "kr";
+      const want = Number(req.query.days) || 5;
+      const days = (TREND_DAYS as readonly number[]).includes(want)
+        ? (want as (typeof TREND_DAYS)[number])
+        : 5;
+      res.json(await themeTrend(market, days));
     } catch (err) {
       next(err);
     }

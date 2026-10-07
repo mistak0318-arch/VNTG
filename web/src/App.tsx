@@ -28,6 +28,8 @@ import { TabActiveContext } from "./tabActive";
 import { TabTitleContext } from "./tabTitle";
 import { SuperDashboardPage } from "./pages/SuperDashboardPage";
 import { ListTrackPage } from "./pages/ListTrackPage";
+/* 대세 테마 분석 — 기간별 흐름 (2026-10-08) */
+import { ThemeTrendPage } from "./pages/ThemeTrendPage";
 import { UsWatchPage } from "./pages/UsWatchPage";
 import { UsScreenerPage } from "./pages/UsScreenerPage";
 import { UsStockPage } from "./pages/UsStockPage";
@@ -99,6 +101,7 @@ type Tab =
   | "leaders"
   | "report"
   | "map"
+  | "themeTrend"
   | "themedb"
   | "program"
   | "news"
@@ -183,6 +186,12 @@ const MENU: {
       { key: "leaders", label: "주도주", icon: "🏁" },
       { key: "report", label: "데일리 리포트", icon: "📰" },
       { key: "map", label: "테마/업종 MAP", icon: "🗺️" },
+      /*
+        대세 테마 분석 (2026-10-08) — MAP 바로 아래. MAP 이 **오늘의 지도**라면 이쪽은 **흐름**이다
+        (벤티지: "이건 별도 메뉴로 가야 돼. 왜냐면 흐름을 보는 거기 때문에 기존의 맵이랑은 달라").
+        붙여 두면 지도에서 눈에 띈 테마를 바로 기간으로 확인하게 된다.
+      */
+      { key: "themeTrend", label: "대세 테마 분석", icon: "🌊" },
       /* 테마 DB (2026-08-28) — 네이버 분류를 우리 눈금(등락률·상승비율·연속성)으로 다시 그린다 */
       { key: "themedb", label: "테마 DB", icon: "🧭" },
       { key: "program", label: "프로그램 매매", icon: "🤖" },
@@ -820,6 +829,7 @@ export default function App() {
       case "overview": return <OverviewPage onSelectStock={onSelectStock} />;
       case "report": return <DailyReportPage onSelectStock={onSelectStock} />;
       case "map": return <MapPage onSelectStock={onSelectStock} />;
+      case "themeTrend": return <ThemeTrendPage onSelectStock={onSelectStock} />;
       case "themedb": return <ThemeDbPage onSelectStock={onSelectStock} />;
       case "program": return <ProgramTradePage />;
       case "news": return <NewsPage onSelectStock={onSelectStock} />;
