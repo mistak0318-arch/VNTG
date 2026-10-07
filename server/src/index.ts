@@ -91,6 +91,8 @@ import { loadCloses, startClosesScheduler } from "./dailyCloses.js";
 import { warmEtfIndex } from "./stockListCache.js";
 /* 과부하 관문 — 죽는 대신 느려지게 (2026-10-07 밤) */
 import { loadGate } from "./loadGate.js";
+/* 복구 루틴 — 나빠진 뒤 스스로 돌아온다 (2026-10-07 밤) */
+import { startRecovery } from "./recovery.js";
 import { createAiRouter } from "./routes/ai.js";
 import { createAskRouter } from "./routes/ask.js";
 import { createSysRouter } from "./routes/sys.js";
@@ -631,6 +633,16 @@ app.listen(port, host, () => {
    * 일봉 예열(84MB 파싱)과 겹치지 않게 조금 뒤로 미룬다.
    */
   setTimeout(() => warmEtfIndex(client), 20_000).unref?.();
+  /*
+   * **복구 루틴** (2026-10-07 밤) — 3초마다 heap 을 보고, 차면 캐시를 놓고 GC 를 직접 부르고,
+   * 그래도 안 내려오면 깨끗하게 내려간다(감시자가 다시 띄운다).
+   * 막는 것(관문·상한)만으로는 나빠진 상태에 갇힌다 — 돌아오는 길이 있어야 한다.
+   */
+  startRecovery((why) => {
+    noteLife("EXIT", why);
+    /* 쓰던 응답이 마저 나가도록 한 박자 뒤에 — OOM 즉사와 다른 점이 이것이다 */
+    setTimeout(() => process.exit(0), 1500).unref?.();
+  });
 });
 for (const extra of extraHosts) {
   /*

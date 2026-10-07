@@ -58,14 +58,36 @@ async function req(path: string, init?: RequestInit): Promise<Response> {
   }
 }
 
+/**
+ * **서버가 바쁘면 스스로 다시 묻는다** (2026-10-07 밤).
+ *
+ * 벤티지: "느려지는 순간이 있으면 뭔가 조치라도 할수이ㅆ게 해줘야지."
+ *
+ * 서버에 과부하 관문이 생기면서, 몰릴 때 카드가 「서버가 많이 바쁩니다」로 끝나 버렸다.
+ * 그런데 그건 **몇 초 뒤면 되는 일**이다 — 사람에게 다시 누르라고 시킬 까닭이 없다.
+ * 503(과부하)일 때만 조용히 다시 묻는다. 서너 번 안에 대개 채워진다.
+ *
+ * ⚠️ **503 일 때만**이다. 400·404·500 은 다시 물어도 같은 답이고, 재시도하면 고장을
+ * 숨기면서 서버만 더 때린다.
+ * ⚠️ 간격을 벌리고 **흔들어 준다**(jitter) — 카드 열 장이 같은 박자로 다시 물으면
+ * 그 자체가 또 한 번의 몰림이 된다.
+ */
+const BUSY_WAITS_MS = [900, 2200, 4500];
+
 async function getJson<T = RawRecord>(path: string): Promise<T> {
-  const res = await req(path);
-  const body = (await res.json()) as T & { error?: string };
-  if (!res.ok) {
+  for (let tries = 0; ; tries += 1) {
+    const res = await req(path);
+    const body = (await res.json()) as T & { error?: string; 과부하?: boolean };
+    if (res.ok) return body;
+    const busy = res.status === 503 && Boolean((body as { 과부하?: boolean }).과부하);
+    if (busy && tries < BUSY_WAITS_MS.length) {
+      const base = BUSY_WAITS_MS[tries];
+      await new Promise((r) => setTimeout(r, base + Math.random() * base * 0.6));
+      continue;
+    }
     const message = (body as { error?: string }).error ?? `요청 실패 (${res.status})`;
-    throw new Error(message);
+    throw new Error(busy ? `${message} (${tries + 1}번 시도함)` : message);
   }
-  return body;
 }
 
 async function postJson<T = RawRecord>(path: string, body?: unknown): Promise<T> {

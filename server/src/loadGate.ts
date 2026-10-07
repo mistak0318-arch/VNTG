@@ -2,6 +2,7 @@ import { memoryUsage } from "node:process";
 import v8 from "node:v8";
 import type { NextFunction, Request, Response } from "express";
 import { noteLife } from "./lifecycle.js";
+import { isStressed } from "./recovery.js";
 
 /**
  * 과부하 관문 — **서버가 죽는 대신 느려지게 한다** (2026-10-07 밤).
@@ -92,12 +93,18 @@ export function loadGate(req: Request, res: Response, next: NextFunction): void 
    * **크게 보이는 쪽이 안전**하다 — 늦게 막느니 일찍 막는다.
    */
   const usedMB = Math.round(memoryUsage().heapUsed / 1048576);
-  if (usedMB > limitMB * SHED_AT) {
+  /*
+   * **복구 중이면 더 적게 받는다** (2026-10-07 밤). 복구 루틴이 캐시를 놓고 GC 를 도는
+   * 동안에도 들어오는 쪽이 계속 밀어 넣으면 영영 못 내려온다 — 내보내는 것보다 들어오는
+   * 것이 많으면 복구가 아니라 버티기일 뿐이다. 잠깐 더 거절해서 내려올 틈을 준다.
+   */
+  const shedAt = isStressed() ? 0.7 : SHED_AT;
+  if (usedMB > limitMB * shedAt) {
     shed += 1;
     /* 로그가 초당 수십 줄로 불어나지 않게 10초에 한 번만 적는다 */
     if (Date.now() - lastShedNote > 10_000) {
       lastShedNote = Date.now();
-      noteLife("WARN", `과부하 — ${usedMB}/${limitMB}MB, 되돌려보냄 ${shed}건 (${req.path})`);
+      noteLife("WARN", `과부하 — ${usedMB}/${limitMB}MB${isStressed() ? " (복구 중)" : ""}, 되돌려보냄 ${shed}건 (${req.path})`);
     }
     res
       .status(503)

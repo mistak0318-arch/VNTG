@@ -10,6 +10,7 @@ import os from "node:os";
 import v8 from "node:v8";
 import { lifeSummary, noteLife, selfHeal } from "./lifecycle.js";
 import { loadGateStats } from "./loadGate.js";
+import { recoveryStats } from "./recovery.js";
 import { dropSamplesCache } from "./signalSamples.js";
 import { peekRealtime, subscribedCount } from "./realtimeHub.js";
 import { hantooRealtimeStatus } from "./hantooRealtime.js";
@@ -139,7 +140,14 @@ function processStats(): Record<string, unknown> {
    * 메모리 폭주의 진짜 원인은 캐시가 아니라 **동시 파싱**이었고 그건 단일 비행으로 막았다.
    * 여기서는 다시 읽어도 싼 표본(38MB)만 놓는다.
    */
-  selfHeal(mb(m.heapUsed), limit, () => (dropSamplesCache() ? "표본" : "놓을 것 없음"));
+  /*
+   * ⚠️ `selfHeal` 은 **더 이상 여기서 안 부른다** (2026-10-07 밤).
+   *
+   * 복구를 `recovery.ts` 가 맡게 하면서, 이 자리는 **상태를 바꾸지 않고 적기만** 한다.
+   * 재시작을 결정하는 곳이 둘이면 서로 싸운다 — 감시자와 `start-prod.cmd` 가 그랬고
+   * 그때도 「책임은 한 곳에」로 풀었다. 게다가 이 함수는 health.json 을 쓸 때만 불려서
+   * 주기가 들쭉날쭉했고, 복구는 **3초마다 또박또박** 봐야 한다.
+   */
   noteHourlyMem();
   return {
     rssMB: mb(m.rss),
@@ -192,6 +200,12 @@ async function writeOnceInner(): Promise<void> {
      * ③큰 파일을 통째로 드는 것 — 셋 중 하나를 다시 봐야 한다.
      */
     과부하관문: loadGateStats(),
+    /*
+     * 복구 루틴 (2026-10-07 밤) — 「지금 어떤 상태인가」와 「몇 번 복구했나」.
+     * `상태` 가 자주 「복구」면 봉우리가 구조적으로 큰 것이고, `GC가능: false` 면
+     * `--expose-gc` 가 빠진 것이라 복구가 반쪽으로 돈다.
+     */
+    복구: recoveryStats(),
     국내실시간: rt
       ? {
           state: rt.state,

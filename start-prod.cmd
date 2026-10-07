@@ -48,5 +48,8 @@ REM near the ceiling (see index.ts) -- this number is the safety margin behind
 REM that, not the fix.  Not holding whole files in heap is the real cure.
 echo.>> "%LOG%"
 echo ==== %date% %time% server start ====>> "%LOG%"
-node --max-old-space-size=6144 dist\index.js >> "%LOG%" 2>&1
+REM --expose-gc lets the recovery routine (recovery.ts) run a full GC on demand
+REM instead of waiting for V8 to get around to it.  Waiting is what turned a
+REM busy minute into a 40-second-per-request crawl.
+node --expose-gc --max-old-space-size=6144 dist\index.js >> "%LOG%" 2>&1
 echo ==== %date% %time% server exit %errorlevel% ====>> "%LOG%"
