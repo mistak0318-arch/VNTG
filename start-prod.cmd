@@ -37,8 +37,16 @@ REM Raise the heap ceiling.  Node defaults to 2,240MB on this box, and the
 REM server loads dailyCloses.json (84MB) and signalSamples.json (38MB) whole --
 REM 931MB of heap 32 seconds after boot.  Intraday caches then hit the ceiling
 REM and the process died of OOM every ~10 minutes on the night of 10/6.
-REM 3,584MB buys time; not holding whole files is the real cure.
+REM
+REM 3,584 -> 6,144 on 2026-10-07 night.  It died twice more (exit 134 at 22:13
+REM and 22:20) with heap peaking at 3,100MB while the box still had 8,202MB of
+REM free RAM.  One stock page fans out to ~15 routes at once and a board with
+REM three chart cards multiplies that, so the peak is baseline + the SUM of
+REM whatever happens to be in flight.
+REM The server now also caps how many heavy requests run at once and sheds load
+REM near the ceiling (see index.ts) -- this number is the safety margin behind
+REM that, not the fix.  Not holding whole files in heap is the real cure.
 echo.>> "%LOG%"
 echo ==== %date% %time% server start ====>> "%LOG%"
-node --max-old-space-size=3584 dist\index.js >> "%LOG%" 2>&1
+node --max-old-space-size=6144 dist\index.js >> "%LOG%" 2>&1
 echo ==== %date% %time% server exit %errorlevel% ====>> "%LOG%"

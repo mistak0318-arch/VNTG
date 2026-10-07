@@ -89,6 +89,8 @@ import { startThemeScheduler } from "./naverThemes.js";
 import { loadCloses, startClosesScheduler } from "./dailyCloses.js";
 /* 돋보기가 ETF 도 찾게 — 이름표를 기동 때 미리 받아 둔다 (2026-10-07) */
 import { warmEtfIndex } from "./stockListCache.js";
+/* 과부하 관문 — 죽는 대신 느려지게 (2026-10-07 밤) */
+import { loadGate } from "./loadGate.js";
 import { createAiRouter } from "./routes/ai.js";
 import { createAskRouter } from "./routes/ask.js";
 import { createSysRouter } from "./routes/sys.js";
@@ -200,6 +202,12 @@ app.use(
     }
   }),
 );
+/*
+ * **과부하 관문** (2026-10-07 밤) — 죽는 대신 느려지게 한다.
+ * 동시에 도는 무거운 요청 수를 묶고, 한계 가까이 가면 503 으로 돌려보낸다.
+ * 아래 「무거운 요청」 기록보다 **먼저** 와야 줄에서 기다린 시간까지 같이 적힌다.
+ */
+app.use(loadGate);
 /*
  * **무거운 요청을 스스로 일러바치게 한다** (2026-10-07).
  *

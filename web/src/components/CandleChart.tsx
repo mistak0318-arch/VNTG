@@ -1061,13 +1061,26 @@ export function CandleChart({
         autoscaleInfoProvider: () => ({ priceRange: { minValue: 0, maxValue: 100 } }),
       });
       rsiSeries.priceScale().applyOptions({ scaleMargins: band.rsi, visible: false });
-      /* 과매수·과매도 선 — 이 지표를 보는 이유 자체라 선으로 박아 둔다 */
-      for (const v of [prefs.rsiLow, prefs.rsiHigh])
+      /*
+       * 과매수·과매도 선 — 이 지표를 보는 이유 자체다.
+       *
+       * ⚠️ 테두리 색(`c.border`)으로 그렸더니 **격자에 묻혀 안 보였다** (2026-10-07,
+       * 볼린저와 똑같은 실수를 같은 날 두 번 했다 — 테두리는 격자와 같은 톤이다).
+       *
+       * 색을 **뜻으로** 준다: 과매수는 오름색, 과매도는 내림색. 봉 색과 같은 말이라
+       * 범례를 안 읽어도 어느 쪽 선인지 알 수 있다. 점선·가늘기는 그대로 둔다 —
+       * 보이되 RSI 선보다 뒤에 있어야 한다.
+       */
+      for (const [v, color] of [
+        [prefs.rsiLow, c.down],
+        [prefs.rsiHigh, c.up],
+      ] as const)
         rsiSeries.createPriceLine({
           price: v,
-          color: c.border,
+          color,
           lineWidth: 1,
-          lineStyle: LineStyle.Dotted,
+          lineStyle: LineStyle.Dashed,
+          /* 라벨은 끈다 — RSI 축은 숨겨져 있어 70·30 이 **가격 축**에 엉뚱하게 찍힌다 */
           axisLabelVisible: false,
           title: "",
         });

@@ -9,6 +9,7 @@ import { join } from "node:path";
 import os from "node:os";
 import v8 from "node:v8";
 import { lifeSummary, noteLife, selfHeal } from "./lifecycle.js";
+import { loadGateStats } from "./loadGate.js";
 import { dropSamplesCache } from "./signalSamples.js";
 import { peekRealtime, subscribedCount } from "./realtimeHub.js";
 import { hantooRealtimeStatus } from "./hantooRealtime.js";
@@ -185,6 +186,12 @@ async function writeOnceInner(): Promise<void> {
      * 숫자만 적는다(계좌·종목·키 없음). `최고` 는 이번 생애의 최대치.
      */
     프로세스: processStats(),
+    /*
+     * 과부하 관문 (2026-10-07 밤) — **「되돌려보냄」이 늘면 손볼 때다.**
+     * 0 이면 관문이 하는 일 없이 지나가는 것이고, 꾸준히 늘면 ①heap 상한 ②동시 실행 수
+     * ③큰 파일을 통째로 드는 것 — 셋 중 하나를 다시 봐야 한다.
+     */
+    과부하관문: loadGateStats(),
     국내실시간: rt
       ? {
           state: rt.state,
