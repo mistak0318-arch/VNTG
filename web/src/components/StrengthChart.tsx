@@ -56,9 +56,15 @@ export function StrengthChart({ points }: { points: StrengthPoint[] }) {
   const y = (v: number) => PAD.t + ((max - v) / (max - min)) * ih;
   const x = (i: number) => (i / (points.length - 1)) * W;
   const line = points.map((p, i) => `${i === 0 ? "M" : "L"}${x(i)},${y(p.strength)}`).join("");
+  /*
+   * 평균선 — 자리(가로축)는 **원래 차례**로, 그릴 점은 평균이 있는 것만.
+   * 점이 60개일 땐 `indexOf` 로 자리를 되찾았는데, 하루치가 되며 600점이라
+   * 그 되찾기가 600×600 이 된다. 자리를 먼저 들고 다니면 한 번에 끝난다 (2026-10-08).
+   */
   const avgLine = points
-    .filter((p) => p.avg > 0)
-    .map((p, i) => `${i === 0 ? "M" : "L"}${x(points.indexOf(p))},${y(p.avg)}`)
+    .map((p, i) => ({ p, i }))
+    .filter(({ p }) => p.avg > 0)
+    .map(({ p, i }, k) => `${k === 0 ? "M" : "L"}${x(i)},${y(p.avg)}`)
     .join("");
 
   const last = points[points.length - 1];
