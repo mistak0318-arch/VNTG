@@ -55,6 +55,7 @@ import { getEtfInfo } from "../etfInfo.js";
 import { etfRowOf, etfTaxInfo } from "./etf.js";
 import { futuresFlow } from "../naverFuturesFlow.js";
 import { intradayFlow, type FlowMarket } from "../naverIntradayFlow.js";
+import { strengthDay } from "../strengthDay.js";
 
 const MRKCOND_RESOURCE = "/api/dostk/mrkcond";
 const CHART_RESOURCE = "/api/dostk/chart";
@@ -772,15 +773,26 @@ export function createMarketRouter(client: KiwoomClient): Router {
     }
   });
 
-  // 체결강도 추이 (ka10046 시간별 / ka10047 일별)
+  /*
+   * 체결강도 추이 (ka10046 시간별 / ka10047 일별).
+   *
+   * 시간별은 **한 번에 60줄 — 최근 한 시간**뿐이다(2026-10-08 실측). 그래서 장중에 봐도
+   * 「장 초반엔 셌는데 지금 식네」가 안 보였다. `strengthDay` 가 연속조회로 09:00 까지
+   * 뒤로 걸어가 하루치를 모아 들고 있다가, 그 뒤로는 맨 앞 한 쪽만 덧댄다.
+   * 키움 차례(최신이 앞)를 그대로 지켜 돌려준다 — 화면이 이미 그 차례로 뒤집어 읽는다.
+   */
   router.get("/strength/:code", async (req, res, next) => {
     try {
-      const daily = req.query.mode === "daily";
-      const { data } = await client.request(MRKCOND_RESOURCE, daily ? "ka10047" : "ka10046", {
-        // 통합(_AL) — 체결강도도 전체 체결 기준
-        stk_cd: alCode(req.params.code),
-      });
-      res.json(data);
+      if (req.query.mode === "daily") {
+        const { data } = await client.request(MRKCOND_RESOURCE, "ka10047", {
+          // 통합(_AL) — 체결강도도 전체 체결 기준
+          stk_cd: alCode(req.params.code),
+        });
+        res.json(data);
+        return;
+      }
+      const rows = await strengthDay(client, req.params.code.replace(/_(AL|NX)$/i, ""));
+      res.json({ cntr_str_tm: rows.slice().reverse() });
     } catch (err) {
       next(err);
     }
