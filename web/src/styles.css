@@ -2668,9 +2668,19 @@ body {
   display: flex; align-items: center; justify-content: space-between; gap: 6px;
   background: none; border: none; margin: 0;
   padding: 3px 6px 6px; border-radius: 4px;
-  color: inherit; font: inherit; font-size: 0.78rem; cursor: pointer;
+  font: inherit; font-size: 0.78rem; cursor: pointer;
   text-align: left;
 }
+/*
+ * ⚠️ **`color: inherit` 를 쓰면 안 되는 자리였다** (2026-10-08, 벤티지 캡처로 잡음).
+ *
+ * `.positive`/`.negative` 와 같은 0-1-0 특이도인데 이 규칙이 뒤에 있어서, 단추에 색 반을
+ * 붙여 놓고도 전부 흰 글씨였다. 숫자도 띠도 다 회색으로 나온 까닭이 이것이다
+ * (띠는 `currentColor` 라 글자색을 그대로 따라간다).
+ * 색을 여기서 **직접** 정한다 — 두 칸짜리 선택자라 덮일 일이 없다.
+ */
+.ss-peer.positive { color: var(--red); }
+.ss-peer.negative { color: var(--blue); }
 .ss-peer:hover { background: var(--hover, rgba(127, 127, 127, 0.12)); }
 .ss-peer-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ss-peer em { font-style: normal; font-weight: 700; flex: none; }
