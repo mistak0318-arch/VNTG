@@ -584,32 +584,52 @@ function OutlookStrip({
         const vals = o.peers.map((p) => p.changeRate).filter((v): v is number => v !== null);
         const avg = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
         const up = vals.filter((v) => v > 0).length;
+        /*
+         * **센 것부터 위로.** 네이버가 주는 차례는 시총순인데, 이 줄을 보는 까닭은
+         * 「묶음에서 뭐가 끌고 가나」라서 등락률순이 맞다. 못 받은 칸은 맨 뒤로 민다.
+         */
+        const sorted = [...o.peers].sort((a, b) => (b.changeRate ?? -999) - (a.changeRate ?? -999));
+        /* 막대 길이의 기준 — 그날 가장 센 놈. 2% 를 최소 기준으로 둬서 잔물결이 꽉 차 보이지 않게 한다 */
+        const span = Math.max(2, ...vals.map((v) => Math.abs(v)));
         return (
-          <div className="ss-outlook-row">
-            <span className="ss-outlook-k">같은 업종</span>
-            {avg !== null && (
-              <span
-                className={`ss-peer-avg num ${cls(avg)}${Math.abs(avg) >= 2 ? " strong" : ""}`}
-                title={`같은 업종 ${vals.length}종목 평균 — 오른 것 ${up}/${vals.length}. 종목 하나가 아니라 집단이 움직였는지를 봅니다`}
-              >
-                평균 {avg > 0 ? "+" : ""}
-                {avg.toFixed(2)}% <i>({up}/{vals.length}↑)</i>
-              </span>
-            )}
-            {o.peers.map((p) => (
-              <button
-                type="button"
-                key={p.code}
-                className="num ss-peer"
-                onClick={() => onSelectStock?.(p.code, p.name)}
-                title={`${p.name}${p.price ? ` · ${p.price.toLocaleString("ko-KR")}원` : ""}${p.marketCap !== null ? ` · 시총 ${eok(p.marketCap / 100)}` : ""}\n눌러서 이 종목 보기`}
-              >
-                {p.name}{" "}
-                <em className={cls(p.changeRate)}>
-                  {p.changeRate === null ? "-" : `${p.changeRate > 0 ? "+" : ""}${p.changeRate.toFixed(2)}%`}
-                </em>
-              </button>
-            ))}
+          <div className="ss-peers">
+            <div className="ss-peers-h">
+              <span className="ss-outlook-k">같은 업종</span>
+              {avg !== null && (
+                <span
+                  className={`ss-peer-avg num ${cls(avg)}${Math.abs(avg) >= 2 ? " strong" : ""}`}
+                  title={`같은 업종 ${vals.length}종목 평균 — 오른 것 ${up}/${vals.length}. 종목 하나가 아니라 집단이 움직였는지를 봅니다`}
+                >
+                  평균 {avg > 0 ? "+" : ""}
+                  {avg.toFixed(2)}% <i>({up}/{vals.length}↑)</i>
+                </span>
+              )}
+            </div>
+            <div className="ss-peers-grid">
+              {sorted.map((p) => (
+                <button
+                  type="button"
+                  key={p.code}
+                  /* 0.00% 는 프리장에 아직 체결이 없다는 뜻인 때가 많다 — 잰 보합과 같아 보이면 안 되니 흐리게 */
+                  className={`ss-peer ${p.changeRate ? cls(p.changeRate) : "flat"}`}
+                  onClick={() => onSelectStock?.(p.code, p.name)}
+                  title={`${p.name}${p.price ? ` · ${p.price.toLocaleString("ko-KR")}원` : ""}${p.marketCap !== null ? ` · 시총 ${eok(p.marketCap / 100)}` : ""}
+눌러서 이 종목 보기`}
+                >
+                  {/*
+                    **막대** — 숫자만 여섯 개 늘어서면 어느 게 센지 읽어야 알 수 있다.
+                    길이로 두면 안 읽어도 보인다. 그날 가장 센 놈이 꽉 차고 나머지는 그 비율이다.
+                  */}
+                  {p.changeRate !== null && p.changeRate !== 0 && (
+                    <span className="ss-peer-bar" style={{ width: `${Math.min(100, (Math.abs(p.changeRate) / span) * 100)}%` }} />
+                  )}
+                  <span className="ss-peer-n">{p.name}</span>
+                  <em className="num">
+                    {p.changeRate === null ? "-" : `${p.changeRate > 0 ? "+" : ""}${p.changeRate.toFixed(2)}%`}
+                  </em>
+                </button>
+              ))}
+            </div>
           </div>
         );
       })()}

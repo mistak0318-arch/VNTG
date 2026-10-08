@@ -2648,14 +2648,40 @@ body {
 .ob-str-trend-h b { font-variant-numeric: tabular-nums; }
 .ob-str-trend svg { width: 100%; height: auto; display: block; }
 
-/* 같은 업종 — 누를 수 있는 종목, 그리고 묶음 평균 (2026-10-08) */
-.ss-peer {
-  background: none; border: none; padding: 0; margin: 0;
-  color: inherit; font: inherit; cursor: pointer;
-  text-decoration: underline dotted transparent;
+/*
+ * 같은 업종 — 표로 (2026-10-08).
+ *
+ * 벤티지: "로직은 잘 들어갔다 근데 좀 잘 보이게 표로 나눠주던지 할래? 눈에 안 들어오네"
+ *
+ * 처음엔 한 줄에 흘려 썼더니 이름과 등락률이 줄바꿈에 섞여 어디까지가 한 종목인지 안 보였다.
+ * 칸을 나눠 이름은 왼쪽, 숫자는 오른쪽에 고정한다 — 숫자가 세로로 줄 맞으면 눈이 비교를 한다.
+ */
+.ss-peers { margin-top: 0.2rem; }
+.ss-peers-h { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem; }
+.ss-peers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 2px 8px;
 }
-.ss-peer:hover { text-decoration-color: currentColor; }
-.ss-peer-avg { font-weight: 600; margin-right: 2px; }
+.ss-peer {
+  position: relative; overflow: hidden;
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  background: none; border: none; margin: 0;
+  padding: 3px 6px; border-radius: 4px;
+  color: inherit; font: inherit; font-size: 0.78rem; cursor: pointer;
+  text-align: left;
+}
+.ss-peer:hover { background: var(--hover, rgba(127, 127, 127, 0.12)); }
+.ss-peer-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; position: relative; }
+.ss-peer em { font-style: normal; font-weight: 700; position: relative; flex: none; }
+/* 막대는 글자 뒤에 깔린다 — 읽지 않아도 길이로 보이게 */
+.ss-peer-bar {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  background: currentColor; opacity: 0.13; border-radius: 4px;
+  pointer-events: none;
+}
+.ss-peer.flat { color: var(--muted); }
+.ss-peer-avg { font-weight: 600; }
 /* ±2% 를 넘으면 종목이 아니라 업종이 움직인 것이다 — 그때만 눈에 띄게 */
 .ss-peer-avg.strong { text-decoration: underline; text-underline-offset: 3px; }
 .ss-peer-avg i { font-style: normal; font-size: 0.9em; opacity: 0.75; }
@@ -2736,6 +2762,55 @@ body {
 .memchip-warn .memchip-btn { color: var(--accent); }
 .memchip-bad .memchip-dot { background: var(--red, #ff5c5c); }
 .memchip-bad .memchip-btn { color: var(--red, #ff5c5c); border-color: currentColor; }
+
+/*
+ * 눌러서 펼치는 상태판 (2026-10-08 — 벤티지: "모바일에서는 마우스 오버가 안 되니깐
+ * 한번 눌러서 상태보고 버튼 눌러서 정리하게 하자").
+ *
+ * 자리기준은 `.memchip` 이 아니라 **줄**이다 — 칩이 줄 오른쪽 끝에 있어 칩에 걸면
+ * 판이 화면 밖으로 나간다. 실시간 팝업(`.live-pop`)이 같은 까닭으로 같은 선택을 했다.
+ * 폰에서는 머리줄이 가로로 밀리는 상자라 줄을 `static` 으로 돌려 두었고,
+ * 그때는 머리줄 전체(`.top-strip`)가 기준이 된다 — 어느 쪽이든 늘 화면 안이다.
+ */
+.memchip { position: static; }
+.mem-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  left: auto;
+  z-index: 60;
+  width: min(19rem, calc(100vw - 20px));
+  padding: 0.6rem 0.7rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4);
+  font-size: 0.78rem;
+}
+.mem-pop-h { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.45rem; }
+.mem-pop-h b { font-size: 0.9rem; }
+.mem-pop-lv { font-size: 0.72rem; padding: 1px 6px; border-radius: 999px; border: 1px solid currentColor; }
+.mem-pop-ok { color: var(--muted); }
+.mem-pop-warn { color: var(--accent); }
+.mem-pop-bad { color: var(--red, #ff5c5c); }
+.mem-pop-x { margin-left: auto; background: none; border: none; color: var(--muted); cursor: pointer; font-size: 0.9rem; padding: 0 2px; }
+/* 막대 — 숫자 둘보다 길이 하나가 빠르다. 65% 눈금이 서버의 「경계」 문턱이다 */
+.mem-bar { position: relative; height: 7px; border-radius: 4px; background: color-mix(in srgb, var(--text) 10%, transparent); overflow: hidden; margin-bottom: 0.5rem; }
+.mem-bar-f { position: absolute; left: 0; top: 0; bottom: 0; background: currentColor; border-radius: 4px; }
+.mem-bar u { position: absolute; top: 0; bottom: 0; width: 1px; background: color-mix(in srgb, var(--text) 35%, transparent); }
+.mem-row { display: flex; justify-content: space-between; gap: 0.6rem; line-height: 1.75; }
+.mem-row span { color: var(--muted); flex: none; }
+.mem-row b { font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+.mem-row em { font-style: normal; color: var(--muted); font-weight: 400; }
+.mem-pop-n { margin: 0.5rem 0 0.55rem; color: var(--muted); font-size: 0.72rem; line-height: 1.55; word-break: keep-all; }
+.mem-pop-go {
+  width: 100%; padding: 8px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--panel-2, transparent);
+  color: inherit; font: inherit; font-weight: 600; cursor: pointer;
+}
+.mem-pop-go:hover { background: color-mix(in srgb, var(--text) 8%, transparent); }
+.mem-pop-go:disabled { cursor: default; opacity: 0.6; }
+.mem-pop-said { margin-top: 0.4rem; text-align: center; font-size: 0.74rem; color: var(--muted); }
 
 /* ── 실전 성적표 (2026-10-07) ── 「잰 것이 적은 줄은 흐리게」가 이 블록의 핵심이다 */
 .sc { margin-bottom: 12px; }
@@ -19156,6 +19231,41 @@ a.watch-btn { text-decoration: none; }
   .top-strip .mobile-clock { font-size: 0.74rem; padding: 1px 5px; letter-spacing: 0; }
   .top-strip .qss-row { --hdr-h: 28px; }
   .main-inner { padding-top: 8px; }
+
+  /*
+   * **아이콘 줄만 좌우로 민다** (2026-10-08).
+   *
+   * 벤티지: "위에 바가 자꾸 겹치는데 모바일에서 좌우로 스크롤 할수 있게 해줘봐
+   * 시계는 냅두고 옆것들만"
+   *
+   * 칩이 늘어날 때마다(종·시장·🤖·실시간·빗자루·메모리) 줄을 좁히는 규칙을 하나씩 더 얹어
+   * 왔는데, 더 좁힐 자리가 없어 결국 겹쳤다. 좁히는 대신 **넘치면 밀게** 한다 —
+   * 칩이 또 늘어도 이제 아무것도 안 깨진다.
+   *
+   * 시계는 줄 **밖**(`.mobile-header`)이라 저절로 제자리에 남는다. 밀리면 시각을 보려고
+   * 매번 되감아야 한다 — 그래서 벤티지가 "시계는 냅두고"라 한 것이다.
+   *
+   * ⚠️ 스크롤 상자는 **안쪽 절대배치를 잘라낸다.** 종 배지·실시간 팝업·시황 팝업이 다
+   * 그렇다. 그래서 줄과 감싼 칸들을 `static` 으로 돌려 팝업이 **머리줄 전체**(`.top-strip`,
+   * sticky 라 자리기준이 된다)에 걸리게 한다 — 기준이 상자 밖이면 안 잘린다.
+   * 위아래 7px 여백은 종 배지(-6px)가 잘리지 않게 하는 것이다.
+   */
+  .top-strip .qss-row {
+    position: static;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 7px 0;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .top-strip .qss-row::-webkit-scrollbar { display: none; }
+  .top-strip .qss-row > * { flex: 0 0 auto; }
+  .top-strip .nb,
+  .top-strip .hdr-tick,
+  .top-strip .qss,
+  .top-strip .memchip { position: static; }
+  /* 검색을 펼치면 줄이 통째로 검색창이다 — 밀 것이 없으니 가둘 것도 없다 */
+  .top-strip:has(.qss-box) .qss-row { overflow: visible; padding: 0; }
 }
 
 /*
