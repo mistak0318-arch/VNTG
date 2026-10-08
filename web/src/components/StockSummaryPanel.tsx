@@ -614,11 +614,14 @@ function OutlookStrip({
                   className={`ss-peer ${p.changeRate ? cls(p.changeRate) : "flat"}`}
                   onClick={() => onSelectStock?.(p.code, p.name)}
                   title={`${p.name}${p.price ? ` · ${p.price.toLocaleString("ko-KR")}원` : ""}${p.marketCap !== null ? ` · 시총 ${eok(p.marketCap / 100)}` : ""}
+아래 띠는 등락률의 크기 — 묶음에서 가장 센 종목이 꽉 찹니다
 눌러서 이 종목 보기`}
                 >
                   {/*
-                    **막대** — 숫자만 여섯 개 늘어서면 어느 게 센지 읽어야 알 수 있다.
-                    길이로 두면 안 읽어도 보인다. 그날 가장 센 놈이 꽉 차고 나머지는 그 비율이다.
+                    **막대 = 등락률의 크기.** 숫자만 여섯 개 늘어서면 어느 게 센지 읽어야 알 수 있는데,
+                    길이로 두면 안 읽어도 보인다. 묶음에서 가장 센 놈이 꽉 차고 나머지는 그 비율이다.
+                    색은 글자와 같다 — 오르면 빨강, 내리면 파랑. 올랐는지 내렸는지는 **색**,
+                    얼마나 센지는 **길이**다.
                   */}
                   {p.changeRate !== null && p.changeRate !== 0 && (
                     <span className="ss-peer-bar" style={{ width: `${Math.min(100, (Math.abs(p.changeRate) / span) * 100)}%` }} />

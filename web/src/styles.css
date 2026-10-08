@@ -2667,17 +2667,27 @@ body {
   position: relative; overflow: hidden;
   display: flex; align-items: center; justify-content: space-between; gap: 6px;
   background: none; border: none; margin: 0;
-  padding: 3px 6px; border-radius: 4px;
+  padding: 3px 6px 6px; border-radius: 4px;
   color: inherit; font: inherit; font-size: 0.78rem; cursor: pointer;
   text-align: left;
 }
 .ss-peer:hover { background: var(--hover, rgba(127, 127, 127, 0.12)); }
-.ss-peer-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; position: relative; }
-.ss-peer em { font-style: normal; font-weight: 700; position: relative; flex: none; }
-/* 막대는 글자 뒤에 깔린다 — 읽지 않아도 길이로 보이게 */
+.ss-peer-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ss-peer em { font-style: normal; font-weight: 700; flex: none; }
+/*
+ * 막대 = **등락률의 크기**. 묶음에서 가장 센 놈이 꽉 차고 나머지는 그 비율이다.
+ *
+ * 처음엔 글자 뒤에 13% 투명도로 깔았는데 두 가지로 틀렸다 (2026-10-08 고침).
+ * 벤티지: "저 바는 뭘 의미해? 길이가 다 다른데 양봉음봉 표현할거라면 색깔도 다르게 했어야지"
+ *  · **색이 안 보였다.** 오름 빨강·내림 파랑을 넣었는데 13% 로 깔아 놓으니 다크에서
+ *    둘 다 그냥 회색이었다. 구분이 안 되면 넣으나 마나다 — 색은 또렷하게 쓴다.
+ *  · **1등이 칸 전체를 칠했다.** 100% 가 되면 막대가 아니라 「선택된 칸」으로 보인다.
+ *    그래서 뭘 뜻하는지 아무도 못 읽었다.
+ * 바닥에 깔린 띠로 내린다 — 띠는 길이를 재라는 뜻이 저절로 읽힌다.
+ */
 .ss-peer-bar {
-  position: absolute; left: 0; top: 0; bottom: 0;
-  background: currentColor; opacity: 0.13; border-radius: 4px;
+  position: absolute; left: 6px; bottom: 2px; height: 3px;
+  background: currentColor; opacity: 0.85; border-radius: 2px;
   pointer-events: none;
 }
 .ss-peer.flat { color: var(--muted); }
