@@ -1257,11 +1257,33 @@ body {
  * 접혔다. 폰에서는 **이름이 첫 줄을 통째로** 갖고, 가격·버튼이 둘째 줄로 내려온다
  * (가격 왼쪽 · 버튼 오른쪽).
  */
-@media (max-width: 700px) {
+/*
+ * ⚠️ **화면 폭이 아니라 시트 폭으로 건다** (2026-10-08 — 벤티지 태블릿 캡처로 잡음).
+ *
+ * "종목상세 해상도 조정 좀 해야 될 듯. 이게 이렇게 옆으로 빠지고 해가지고 옆으로 넘기는
+ *  액션도 잘 안 먹고 글자도 내려오고."
+ *
+ * 2026-09-10 에 `.sheet` 에 `container-type: inline-size` 를 걸어 놓고 **주석에는
+ * 「시트 폭으로 건다」고 적어 두고도 규칙은 `@media` 로 써 뒀다.** 시트는 어디서나
+ * 480px 인데 `@media` 는 **화면** 폭을 보므로, 태블릿·PC 처럼 화면만 넓으면 이 규칙이
+ * 통째로 안 걸린다 — 480px 상자에 PC 한 줄 머리줄이 들어가 이름이 「삼/성전기」로 쪼개지고
+ * ✕ 가 상자 밖으로 밀려났다. 폰에서만 멀쩡해 보여서 여태 안 들켰다.
+ *
+ * 실제로 깨진 폭은 **태블릿**이었다. CSS 800px 짜리 화면에서 시트가 660px 로 넓어지는데
+ * (`@media (min-width:700) and (max-width:899)` 가 그렇게 키운다), 접는 규칙은
+ * 「화면 700 이하」와 「시트 600 이하」 둘뿐이라 **660 이 그 사이 구멍으로 빠졌다.**
+ * 폰도 PC 도 시트가 480 이라 늘 걸렸고, 안 걸리는 폭이 태블릿 하나뿐이라 안 들켰다.
+ *
+ * `@container` 로 바꾸면 **시트가 좁으면 좁은 대로** 접힌다 — 화면이 얼마든, 시트 폭
+ * 규칙을 또 바꾸든 구멍이 안 생긴다. 접는 기준은 접히는 그 상자가 정해야 한다.
+ */
+@container (max-width: 700px) {
   /*
-   * 폰 두 줄 (2026-09-10 — 벤티지 S25: "닫기 버튼이 밀려서 누르기가 불편하네 위에 버튼들이 많아져서").
+   * 두 줄 (2026-09-10 — 벤티지 S25: "닫기 버튼이 밀려서 누르기가 불편하네 위에 버튼들이 많아져서").
    * 1줄: 배지·이름 … ✕ (닫기는 늘 오른쪽 위 한자리)  /  2줄: 현재가 … ★🛒🪟↻⚙ (조금 작게).
    * 단추가 여섯이 되면서 ✕ 가 셋째 줄로 떨어졌었다.
+   * 정규장·애프터 두 칸까지 들어가 자리가 모자라면 단추 줄이 셋째 줄로 내려간다 —
+   * 첫 단추의 `margin-left: auto` 가 그때도 오른쪽 끝을 지킨다.
    */
   .sheet-header { flex-wrap: wrap; row-gap: 4px; }
   /* 이름은 첫 줄을 ✕ 와 둘이서 — basis 를 0 으로 두면 min-content 로 쪼그라들어 한 글자씩 세로로 선다 */
@@ -1271,15 +1293,7 @@ body {
   .sheet-header .watch-btn { order: 3; width: 28px; height: 28px; font-size: 0.92rem; }
   .sheet-header .watch-btn:first-of-type { margin-left: auto; }
 }
-/* 같은 두 줄 — 화면이 넓어도 시트가 좁으면 (태블릿 480px 시트 · 미니창) */
-@container (max-width: 600px) {
-  .sheet-header { flex-wrap: wrap; row-gap: 4px; }
-  .sheet-header h2 { flex: 1 1 calc(100% - 44px); min-width: 0; order: 0; }
-  .sheet-header .close-btn { order: 1; margin-left: auto; flex: none; }
-  .sheet-header .sheet-live { order: 2; margin-right: auto; }
-  .sheet-header .watch-btn { order: 3; width: 28px; height: 28px; font-size: 0.92rem; }
-  .sheet-header .watch-btn:first-of-type { margin-left: auto; }
-}
+/* (같은 규칙을 600px 로 한 벌 더 두고 있었다 — 위 700px 짜리가 덮으므로 걷는다) */
 .sheet-live b { font-size: 0.95rem; font-variant-numeric: tabular-nums; }
 .sheet-live i { font-style: normal; font-size: 0.75rem; }
 /*
@@ -19386,6 +19400,18 @@ a.watch-btn { text-decoration: none; }
 /* ── 2026-09-10 전수 점검 UI 고침 ── */
 /* 시트: 끝까지 밀어도 뒤 페이지가 안 따라 밀림 */
 .sheet { overscroll-behavior: contain; }
+/*
+ * **가로로는 안 쓸린다** (2026-10-08).
+ *
+ * `overflow-y: auto` 를 걸면 가로축도 함께 `auto` 가 된다(한 축이 visible 이 아니면
+ * 다른 축도 visible 일 수 없다는 규칙). 그래서 머리줄이 조금만 넘쳐도 **시트 전체가
+ * 좌우로 끌려 다녔다** — 벤티지 캡처에서 제목이 왼쪽으로 사라지고 「옆으로 넘기는 액션이
+ * 잘 안 먹던」 것이 이것이다. 탭을 넘기려던 손짓을 이 가로 스크롤이 먼저 먹었다.
+ * 안쪽에 제 스크롤을 가진 줄(탭 띠 따위)은 그대로 민다 — 여기서 막는 건 시트 자신이다.
+ */
+.sheet { overflow-x: hidden; }
+/* 긴 이름이 상자를 밀지 않게 — 밀면 위의 가로 스크롤이 되살아난다 */
+.sheet-header h2 { min-width: 0; overflow-wrap: anywhere; }
 /* 시트가 떠 있으면 시스 단추는 잠깐 숨김 — 폰에서 시트 우하단을 가렸다 */
 .main:has(.overlay) .sys-fab { display: none; }
 @media (max-width: 899px) {
@@ -19505,7 +19531,8 @@ a.watch-btn { text-decoration: none; }
 @media (max-width: 700px) {
   .sheet-header .sheet-live.sheet-reg { margin-right: 4px; }
 }
-@container (max-width: 600px) {
+/* 두 줄로 접히는 폭과 **같은 문턱**이어야 한다 — 660px 태블릿에서 어긋나 있었다 (2026-10-08) */
+@container (max-width: 700px) {
   .sheet-header .sheet-live.sheet-reg { margin-right: 4px; }
 }
 
