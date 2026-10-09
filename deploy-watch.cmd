@@ -64,7 +64,8 @@ if exist "%DROP%\deploy.flag" if not exist "%DROP%\deploy.lock" (
   del /q "%DROP%\deploy.flag"
   REM Same reason as above -- deploy.cmd rewrites itself at its first step.
   copy /y "%VNTG_HOME%deploy.cmd" "%TEMP%\vntg-deploy-run.cmd" >nul
-  call "%TEMP%\vntg-deploy-run.cmd"
+  REM Hand the checkout path over: inside the copy %~dp0 is %TEMP%, not the repo.
+  call "%TEMP%\vntg-deploy-run.cmd" "%VNTG_HOME%"
   del /q "%DROP%\deploy.lock"
   set /a DEAD=0
 )

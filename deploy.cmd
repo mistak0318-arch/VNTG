@@ -15,7 +15,24 @@ REM  killing a healthy server because the new build is broken.
 REM ===========================================================================
 setlocal
 set "PATH=C:\Program Files\nodejs;C:\Program Files\Git\cmd;%PATH%"
-cd /d "%~dp0"
+
+REM ---------------------------------------------------------------------------
+REM  WHERE IS THE REPO  (2026-10-10, learned the hard way)
+REM
+REM  The watcher runs this script from a copy in %TEMP% (see deploy.md), so
+REM  %~dp0 is %TEMP% and NOT the checkout.  The first attempt kept 'cd /d %~dp0'
+REM  and every git command died with "not a git repository" -- deploys were
+REM  bricked until a human ran one git command on the box, because the only way
+REM  to fix a deploy script is to deploy it.
+REM
+REM  The watcher hands the real path over in VNTG_HOME (and as %1).  Fall back to
+REM  %~dp0 for a human double-clicking this file straight out of the checkout.
+REM ---------------------------------------------------------------------------
+if not "%~1"=="" set "VNTG_HOME=%~1"
+if "%VNTG_HOME%"=="" set "VNTG_HOME=%~dp0"
+cd /d "%VNTG_HOME%." || goto :fail
+REM Prove it before anything else leans on it.
+git rev-parse --git-dir >nul 2>&1 || goto :nogit
 
 set "DROP=C:\vntg-deploy"
 set "LOG=%DROP%\deploy.log"
@@ -97,6 +114,15 @@ if not defined WANT (
 )
 if exist "%DROP%\deploy.want" del /q "%DROP%\deploy.want"
 exit /b 0
+
+:nogit
+echo ==== %date% %time% deploy start ====> "%LOG%"
+echo *** "%VNTG_HOME%" is not a git checkout -- nothing was deployed. ***>> "%LOG%"
+echo *** Run this once on this machine, then re-flag:>> "%LOG%"
+echo ***   cd /d "the checkout" ^&^& git fetch origin ^&^& git reset --hard origin/master>> "%LOG%"
+echo FAIL %date% %time%> "%ST%"
+echo NOGIT home=%VNTG_HOME%>> "%ST%"
+exit /b 1
 
 :fail
 echo.>> "%LOG%"
