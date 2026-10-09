@@ -1,13 +1,17 @@
 @echo off
 REM ===========================================================================
-REM  미니PC 전용 ? 무인 배포. `update.cmd` 의 pause 없는 판.
+REM  VNTG unattended deploy (mini PC only).  ASCII ONLY -- notes in deploy.md.
 REM
-REM  사람이 더블클릭하는 update.cmd 와 하는 일은 같지만, 두 가지가 다르다:
-REM    · pause 가 없다 ? 예약작업이 부르므로 멈춰 서면 안 된다
-REM    · 모든 출력을 공유 폴더의 로그로 뺀다 ? 메인 PC 에서 결과를 읽어야 하므로
+REM  !! DO NOT PUT KOREAN (OR ANY NON-ASCII) IN THIS FILE !!
+REM  cmd.exe reads .cmd files as the OEM codepage (CP949 here), so a UTF-8 file
+REM  decodes into garbage, and the garbage can contain a literal '&' which ENDS
+REM  the REM and runs whatever follows.  That is what filled the console with
+REM  "'xxx' is not recognized..." on 2026-10-07.  This file carried 412 non-ASCII
+REM  bytes until 2026-10-10 -- the same loaded gun, simply not yet fired.
 REM
-REM  실패하면 서비스를 **재시작하지 않는다.** 빌드가 깨졌는데 재시작하면
-REM  멀쩡히 돌던 것까지 죽는다. 옛 빌드를 그대로 굴리는 편이 낫다.
+REM  Called by deploy-watch.cmd when C:\vntg-deploy\deploy.flag appears.
+REM  On failure the service is NOT restarted: running the old build beats
+REM  killing a healthy server because the new build is broken.
 REM ===========================================================================
 setlocal
 set "PATH=C:\Program Files\nodejs;C:\Program Files\Git\cmd;%PATH%"
@@ -18,47 +22,86 @@ set "LOG=%DROP%\deploy.log"
 set "ST=%DROP%\deploy.status"
 if not exist "%DROP%" mkdir "%DROP%"
 
-echo ==== %date% %time% 배포 시작 ====> "%LOG%"
+echo ==== %date% %time% deploy start ====> "%LOG%"
 
 echo.>> "%LOG%"
-echo [1/4] 최신 코드 받는 중...>> "%LOG%"
-git pull>> "%LOG%" 2>&1 || goto :fail
+echo [1/4] syncing code to origin/master...>> "%LOG%"
+REM ---------------------------------------------------------------------------
+REM  EXACT MIRROR, not a merge.  'git pull' used to run here, and because this
+REM  checkout had drifted from origin it produced a merge commit on every single
+REM  deploy.  HEAD then never equalled the pushed commit, so the hash written to
+REM  deploy.status could not be compared with the hash in deploy.flag -- the one
+REM  check that answers "did MY code actually go up?" was dead.  On 2026-10-09
+REM  seven deploys went out that way, flag 589e28b vs HEAD 2360376.
+REM
+REM  reset --hard is safe here: this machine is a deploy target, nobody edits
+REM  code on it, and everything it writes (server/data/*.json and friends) is
+REM  gitignored, which reset does not touch.  Anything that WOULD be thrown away
+REM  is listed in the log first, so a surprise leaves a trace instead of silence.
+REM ---------------------------------------------------------------------------
+git fetch --prune origin>> "%LOG%" 2>&1 || goto :fail
+echo -- local commits that will be discarded (should be none) -->> "%LOG%"
+git log --oneline origin/master..HEAD>> "%LOG%" 2>&1
+git reset --hard origin/master>> "%LOG%" 2>&1 || goto :fail
 
 echo.>> "%LOG%"
-echo [2/4] 서버 빌드...>> "%LOG%"
+echo [2/4] building server...>> "%LOG%"
 cd server
 call npm install --no-audit --no-fund>> "%LOG%" 2>&1 || goto :fail
 call npm run build>> "%LOG%" 2>&1 || goto :fail
 cd ..
 
 echo.>> "%LOG%"
-echo [3/4] 웹 빌드...>> "%LOG%"
+echo [3/4] building web...>> "%LOG%"
 cd web
 call npm install --no-audit --no-fund>> "%LOG%" 2>&1 || goto :fail
 call npm run build>> "%LOG%" 2>&1 || goto :fail
 cd ..
 
 echo.>> "%LOG%"
-echo [4/4] 서비스 재시작...>> "%LOG%"
+echo [4/4] restarting service...>> "%LOG%"
 schtasks /End /TN "VNTG HTS" >nul 2>&1
 schtasks /Run /TN "VNTG HTS" >nul 2>&1
 
-REM 서버가 뜨는 데 시간이 걸린다. 8초 주고 살아 있는지 물어본다
+REM Boot takes a while (the 84MB daily-bar file is parsed on the way up).
 timeout /t 8 /nobreak >nul
 echo.>> "%LOG%"
 echo -- /api/health -->> "%LOG%"
 curl -s -m 10 http://localhost:4000/api/health>> "%LOG%" 2>&1
 echo.>> "%LOG%"
 
-echo ==== %date% %time% 완료 ====>> "%LOG%"
+echo ==== %date% %time% done ====>> "%LOG%"
+
+REM ---------------------------------------------------------------------------
+REM  SAY WHETHER THE RIGHT COMMIT LANDED  (2026-10-10)
+REM
+REM  The status file used to carry the deployed hash and nothing else, so the
+REM  comparison with the requested hash was left to whoever read it -- and that
+REM  reader skipped it, every time, for seven deploys in a row.  A check a human
+REM  has to remember to perform is not a check.  The watcher saves the requested
+REM  hash as deploy.want; compare it here and write the verdict in words.
+REM  No parentheses around the 'set /p': inside a block %WANT% would expand to
+REM  its value from before the block, which is empty.
+REM ---------------------------------------------------------------------------
+set "WANT="
+if exist "%DROP%\deploy.want" set /p WANT=<"%DROP%\deploy.want"
+for /f %%h in ('git rev-parse --short HEAD') do set "GOT=%%h"
 echo OK %date% %time%> "%ST%"
-git rev-parse --short HEAD>> "%ST%" 2>&1
+echo %GOT%>> "%ST%"
+if not defined WANT (
+  echo NOWANT no requested hash recorded>> "%ST%"
+) else if /i "%WANT%"=="%GOT%" (
+  echo MATCH %GOT%>> "%ST%"
+) else (
+  echo MISMATCH want=%WANT% head=%GOT%>> "%ST%"
+)
+if exist "%DROP%\deploy.want" del /q "%DROP%\deploy.want"
 exit /b 0
 
 :fail
 echo.>> "%LOG%"
-echo *** 실패했습니다. 위 메시지를 확인하세요. ***>> "%LOG%"
-echo ==== %date% %time% 실패 ====>> "%LOG%"
+echo *** FAILED -- see the messages above. ***>> "%LOG%"
+echo ==== %date% %time% failed ====>> "%LOG%"
 echo FAIL %date% %time%> "%ST%"
 git rev-parse --short HEAD>> "%ST%" 2>&1
 exit /b 1
