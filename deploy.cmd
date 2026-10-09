@@ -58,7 +58,7 @@ REM  is listed in the log first, so a surprise leaves a trace instead of silence
 REM ---------------------------------------------------------------------------
 git fetch --prune origin>> "%LOG%" 2>&1 || goto :fail
 echo -- local commits that will be discarded (should be none) -->> "%LOG%"
-git log --oneline origin/master..HEAD>> "%LOG%" 2>&1
+git --no-pager log --oneline origin/master..HEAD>> "%LOG%" 2>&1
 git reset --hard origin/master>> "%LOG%" 2>&1 || goto :fail
 
 echo.>> "%LOG%"
