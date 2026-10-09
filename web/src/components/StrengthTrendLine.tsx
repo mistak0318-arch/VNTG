@@ -34,6 +34,19 @@ import { useTabActive } from "../tabActive";
  */
 
 const REFRESH_MS = 60_000;
+/**
+ * 하루치가 **아직 덜 왔을 때**만 잠깐 자주 묻는다 (2026-10-10).
+ *
+ * 서버가 08:00 까지 뒤로 걷는 일을 요청 안에서 하다가 화면 전체를 멈춰 세웠다(최고 59초).
+ * 이제 걷기는 뒤에서 돌고 첫 응답은 **최근 한 시간**만 담겨 온다. 그 상태로 60초를
+ * 기다리면 사람 눈에는 「하루치가 안 나온다」로 보인다 — 채워지는 동안만 4초로 당긴다.
+ * 서버는 20초 안의 재요청을 캐시로 돌려주므로 이 빠른 물음에 조회가 안 붙는다.
+ */
+const FILLING_MS = 4_000;
+/** 아침이 들어왔으면 다 온 것으로 본다 — 09:00 전 점이 있으면 프리장까지 닿은 것 */
+const MORNING = "0900";
+/** 영영 안 차는 종목(거래가 뜸해 줄이 적은 날)에 4초마다 묻지 않게 */
+const MAX_FAST_TRIES = 10;
 
 function toPoints(rows: RawRecord[]): StrengthPoint[] {
   const n = (v: unknown) => Number(String(v ?? "").replace(/[+,\s]/g, "")) || 0;
@@ -57,21 +70,33 @@ export function StrengthTrendLine({ code }: { code: string }) {
   useEffect(() => {
     if (!code || !active) return;
     let alive = true;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let fast = 0;
+    /*
+     * `setInterval` 이 아니라 **한 번 받고 다음을 잡는다.** 하루치가 덜 왔는지 보고
+     * 다음 간격을 정해야 하는데, 고정 간격으로는 그 판단을 끼워 넣을 자리가 없다.
+     */
     const load = () => {
       void api
         .strength(code, "time")
         .then((d) => {
-          if (alive) setPoints(toPoints(pickList(d as RawRecord, ["cntr_str_tm"])));
+          if (!alive) return;
+          const pts = toPoints(pickList(d as RawRecord, ["cntr_str_tm"]));
+          setPoints(pts);
+          const gotMorning = pts.length > 0 && pts[0].t.slice(0, 4) <= MORNING;
+          const filling = !gotMorning && fast < MAX_FAST_TRIES;
+          if (filling) fast += 1;
+          timer = setTimeout(load, filling ? FILLING_MS : REFRESH_MS);
         })
         .catch(() => {
-          /* 못 받으면 선을 안 그린다 — 막대는 그대로 보인다 */
+          /* 못 받으면 선을 안 그린다 — 막대는 그대로 보인다. 다음 차례는 그대로 잡는다 */
+          if (alive) timer = setTimeout(load, REFRESH_MS);
         });
     };
     load();
-    const t = setInterval(load, REFRESH_MS);
     return () => {
       alive = false;
-      clearInterval(t);
+      if (timer) clearTimeout(timer);
     };
   }, [code, active]);
 

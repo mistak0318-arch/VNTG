@@ -100,30 +100,82 @@ export async function strengthDay(client: KiwoomClient, code: string): Promise<S
 
   if (Date.now() - d.at < FRESH_MS && d.rows.size > 0) return sorted(d);
 
-  const al = alCode(code);
-  /* 맨 앞 한 쪽은 늘 다시 받는다 — 방금 몇 분이 여기 있다 */
-  const first = await client.request<Record<string, unknown>>(MRKCOND, "ka10046", { stk_cd: al });
+  /* 맨 앞 한 쪽은 늘 다시 받는다 — 방금 몇 분이 여기 있다. 조회 **한 번**이다 */
+  const first = await client.request<Record<string, unknown>>(MRKCOND, "ka10046", { stk_cd: alCode(code) });
   d.at = Date.now();
-  let earliest = merge(d, rowsOf(first.data));
+  merge(d, rowsOf(first.data));
   trim();
 
-  /* 뒤로 걷기는 **종목당 하루 한 번**. 그 뒤로는 맨 앞 한 쪽이면 이어진다 */
-  if (!d.walked) {
-    d.walked = true;
-    let { contYn, nextKey } = first;
-    for (let page = 2; page <= MAX_PAGES; page++) {
-      if (contYn !== "Y" || !nextKey) break;
-      /* 08:00 에 닿았으면 그만 — 그 앞은 장전 시간외 단일가라 흐름이 아니다 */
-      if (earliest <= DAY_START) break;
-      const r = await client.request<Record<string, unknown>>(MRKCOND, "ka10046", { stk_cd: al }, { contYn: "Y", nextKey });
-      const rows = rowsOf(r.data);
-      if (rows.length === 0) break;
-      earliest = Math.min(Number(earliest), Number(merge(d, rows))).toString().padStart(6, "0");
-      contYn = r.contYn;
-      nextKey = r.nextKey;
-    }
+  /* 하루치는 뒤에서 채운다. 줄에 이미 있으면 또 넣지 않는다 */
+  if (!d.walked && !walkQueue.includes(code)) {
+    walkQueue.push(code);
+    void pumpWalk(client);
   }
   return sorted(d);
+}
+
+/**
+ * ⚠️ **뒤로 걷기를 요청 안에서 하면 안 된다** (2026-10-10 — 벤티지: "속도는 왜 이렇게
+ * 느려졌어. 시세분석 들어갈 때랑 각각 종목 눌렀을 때 더 이상해졌잖아").
+ *
+ * 처음엔 첫 요청이 08:00 에 닿을 때까지 **그 자리에서** 걸었다. 애프터까지 끝난 저녁이면
+ * 한 종목에 열두 쪽이고, 그동안 요청 하나가 **과부하 관문의 자리까지 물고** 서 있다.
+ * 10/09 밤 실측:
+ *
+ *   GET /api/market/strength/005930   59.6초
+ *   GET /api/market/strength/034020   30.9초
+ *   GET /krx/measures/005930          66.9초   ← 뒤에 밀린 애먼 요청
+ *
+ * 세 종목을 열면 키움 줄에 서른여섯이 서고 **그 뒤의 모든 창구가 같이 선다.** 선 하나
+ * 보자고 화면 전체를 멈춰 세운 꼴이다 — 값이 비싼 게 아니라 **줄 서는 자리가 틀렸다.**
+ * 「조회가 많다」와 「사람을 기다리게 한다」는 다른 문제이고, 여기서 틀린 것은 뒤쪽이다.
+ *
+ * 그래서 기다리게 하지 않는다. 화면은 최근 한 시간을 바로 받고, 하루치는 다음 번에 묻을 때
+ * 들어온다. 걷기는 **온 서버에 한 번에 하나**만 돈다 — 종목을 연달아 눌러도 걷기가 겹쳐
+ * 쌓이지 않는다. 겹쳐 쌓이는 것이 바로 지금 고치는 그 일이다.
+ */
+let walking = false;
+const walkQueue: string[] = [];
+
+async function walkBack(client: KiwoomClient, code: string): Promise<void> {
+  const d = store.get(code);
+  if (!d || d.walked) return;
+  d.walked = true;
+  const al = alCode(code);
+  let earliest = "999999";
+  for (const t of d.rows.keys()) if (t < earliest) earliest = t;
+  /*
+   * 맨 앞부터 다시 받는다. 이어 걸으려면 `next-key` 가 있어야 하는데 그건 받은 그 자리에서
+   * 한 번 쓰고 버려지는 값이라, 앞선 요청이 들고 있던 것을 여기로 가져올 수 없다.
+   * 한 쪽을 더 쓰는 대신 사람을 안 기다리게 한다.
+   */
+  let r = await client.request<Record<string, unknown>>(MRKCOND, "ka10046", { stk_cd: al });
+  for (let page = 2; page <= MAX_PAGES; page++) {
+    if (r.contYn !== "Y" || !r.nextKey) break;
+    /* 08:00 에 닿았으면 그만 — 그 앞은 장전 시간외 단일가라 흐름이 아니다 */
+    if (earliest <= DAY_START) break;
+    r = await client.request<Record<string, unknown>>(MRKCOND, "ka10046", { stk_cd: al }, { contYn: "Y", nextKey: r.nextKey });
+    const rows = rowsOf(r.data);
+    if (rows.length === 0) break;
+    const got = merge(d, rows);
+    if (got < earliest) earliest = got;
+  }
+}
+
+async function pumpWalk(client: KiwoomClient): Promise<void> {
+  if (walking) return;
+  walking = true;
+  try {
+    for (;;) {
+      const code = walkQueue.shift();
+      if (!code) break;
+      await walkBack(client, code).catch(() => {
+        /* 한 종목이 실패해도 줄은 계속 — 그 종목은 한 시간짜리로 남는다 */
+      });
+    }
+  } finally {
+    walking = false;
+  }
 }
 
 function sorted(d: Day): StrengthRow[] {
