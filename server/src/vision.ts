@@ -19,6 +19,15 @@ export interface VisionResult {
   model: string | null;
   inputTokens: number;
   outputTokens: number;
+  /**
+   * **출력 상한에 걸려 끊겼나** (2026-10-09 — 벤티지: "텔레그램 ai 정리하는데도 글이
+   * 잘리고 좀 문제가 잇어보이네").
+   *
+   * 직접 Anthropic 을 부르는 길(`summarize`)에는 이 판정이 있었는데, 제공자를 고르는
+   * 이 길에는 **아무 데도 없었다.** 그래서 끊긴 답이 「낱말 중간」에서 멈춘 채 그대로
+   * 화면에 올라갔다 — 조용히 나가면 잘린 줄도 모른다.
+   */
+  truncated?: boolean;
   error?: string;
 }
 
@@ -117,7 +126,7 @@ async function callGemini(
   });
 
   const body = (await res.json()) as {
-    candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] } }[];
+    candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] }; finishReason?: string }[];
     usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
     error?: { message?: string };
   };
@@ -148,6 +157,8 @@ async function callGemini(
     model,
     inputTokens: body.usageMetadata?.promptTokenCount ?? 0,
     outputTokens: body.usageMetadata?.candidatesTokenCount ?? 0,
+    /* ⚠️ 제미나이는 **생각 토큰도 이 예산에서 쓴다** — 보이는 글이 짧아도 상한에 걸릴 수 있다 */
+    truncated: body.candidates?.[0]?.finishReason === "MAX_TOKENS",
   };
 }
 
@@ -192,7 +203,7 @@ async function callOpenAI(
   });
 
   const body = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
+    choices?: { message?: { content?: string }; finish_reason?: string }[];
     usage?: { prompt_tokens?: number; completion_tokens?: number };
     error?: { message?: string };
   };
@@ -214,6 +225,7 @@ async function callOpenAI(
     model,
     inputTokens: body.usage?.prompt_tokens ?? 0,
     outputTokens: body.usage?.completion_tokens ?? 0,
+    truncated: body.choices?.[0]?.finish_reason === "length",
   };
 }
 
@@ -254,6 +266,7 @@ async function callAnthropic(
 
   const body = (await res.json()) as {
     content?: { text?: string }[];
+    stop_reason?: string;
     usage?: { input_tokens?: number; output_tokens?: number };
     error?: { message?: string };
   };
@@ -275,6 +288,7 @@ async function callAnthropic(
     model,
     inputTokens: body.usage?.input_tokens ?? 0,
     outputTokens: body.usage?.output_tokens ?? 0,
+    truncated: body.stop_reason === "max_tokens",
   };
 }
 

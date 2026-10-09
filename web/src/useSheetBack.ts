@@ -30,8 +30,24 @@ import { useEffect, useRef } from "react";
  * 운영에서도 시트를 빠르게 여닫으면 같은 경합이 나므로 StrictMode 만의 이야기가 아니다.
  */
 
-/** 우리가 부른 back 이 만든 popstate 를 몇 번 무시할지 — 모든 인스턴스가 함께 본다 */
+/**
+ * 우리가 부른 back 이 만든 popstate 를 몇 번 무시할지 — 모든 인스턴스가 함께 본다.
+ *
+ * ⚠️ **유통기한을 둔다** (2026-10-09 — 벤티지: "텔레그램 방에서 뒤로가기 버튼 누르면
+ * 방목록으로 돌아가게 해줘").
+ *
+ * 주요 채널 방에는 이 훅이 **이미 걸려 있었다.** 그런데도 뒤로가기가 메뉴를 넘겼다.
+ * 까닭은 이 숫자가 **샐 수 있다**는 것이다 — 우리가 `history.back()` 을 불렀는데
+ * 뺄 칸이 없거나(이미 빠졌거나) 다른 길로 먼저 빠지면 popstate 가 안 오고, 그러면
+ * 이 숫자가 1 인 채로 남는다. 그 뒤 **사용자가 누른 진짜 뒤로가기**를 그게 삼킨다.
+ * 시트는 안 닫히고 히스토리 칸만 빠지니, 한 번 더 누르면 탭(메뉴)이 넘어간다.
+ * 시트를 많이 여닫은 세션일수록 잘 나고, 그래서 「어떤 날은 되고 어떤 날은 안 된다」였다.
+ *
+ * 우리가 부른 back 의 popstate 는 **같은 틱 바로 다음**에 온다. 0.5초가 지나도록 안
+ * 왔으면 그건 안 올 것이다 — 그때는 억제를 버린다. 삼키는 것보다 한 번 덜 삼키는 쪽이 낫다.
+ */
 let suppress = 0;
+let suppressUntil = 0;
 /** 아직 실행 안 된 「칸 빼기」 — 곧바로 다시 마운트되면 취소하고 물려받는다 */
 let pendingBack: ReturnType<typeof setTimeout> | null = null;
 
@@ -54,10 +70,12 @@ export function useSheetBack(open: boolean, close: () => void): void {
     }
 
     const onPop = () => {
-      if (suppress > 0) {
+      if (suppress > 0 && Date.now() <= suppressUntil) {
         suppress -= 1; // 우리가 부른 back — 사용자의 뒤로가기가 아니다
         return;
       }
+      /* 유통기한이 지난 억제는 안 온 것이다 — 버리고 사용자의 뒤로가기로 받는다 */
+      suppress = 0;
       poppedRef.current = true;
       closeRef.current();
     };
@@ -71,6 +89,7 @@ export function useSheetBack(open: boolean, close: () => void): void {
       pendingBack = setTimeout(() => {
         pendingBack = null;
         suppress += 1;
+        suppressUntil = Date.now() + 500;
         window.history.back();
       }, 0);
     };

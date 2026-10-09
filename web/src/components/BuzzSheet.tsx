@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useBuzzDays } from "./BuzzBadge";
 import { api, type BuzzDetail, type NewsItem } from "../api";
 import { useSheetBack } from "../useSheetBack";
+import { MsgText } from "./MsgText";
 
 /**
  * 조회순위 「뉴스 N회 · 텔레그램 N회」를 누르면 뜨는 팝업 (2026-09-09).
@@ -236,7 +237,7 @@ export function BuzzSheet({
                           )}
                         </div>
                         {/* 접혀 있으면 앞 두 줄만 — 펼치면 전문 */}
-                        <div className={`buzz-tg-text${open ? "" : " clamp"}`}>{h.text}</div>
+                        <MsgText text={h.text} className={`buzz-tg-text${open ? "" : " clamp"}`} />
                       </li>
                     );
                   })}

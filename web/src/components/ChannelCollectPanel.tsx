@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type ChannelEntry, type ChannelReport, kstYmd } from "../api";
+import { MsgText } from "./MsgText";
 
 /**
  * 구독 채널 수집 설정.
@@ -253,7 +254,7 @@ export function ChannelCollectPanel() {
                   )}
                   <span className="chan-item-time">{new Date(it.at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false })}</span>
                 </div>
-                <div className="chan-item-text">{it.text}</div>
+                <MsgText text={it.text} className="chan-item-text" />
                 <div className="chan-item-src">{it.channels.join(" · ")}</div>
               </div>
             ))}

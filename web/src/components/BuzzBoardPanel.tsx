@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, type BuzzBoard, type BuzzBoardRow, type BuzzKind, type BuzzTermDetail, fmtKst } from "../api";
 import { useSheetBack } from "../useSheetBack";
 import { useStockNames } from "../useStockNames";
+import { msgFlow } from "../msgFlow";
 
 /**
  * 🌋 버즈 — 채널이 지금 무슨 얘기를 하는가 (2026-08-30 요청).
@@ -565,7 +566,7 @@ function BuzzTermSheet({
                       <b>{s.channel}</b>
                       <span>{fmtKst(s.at)}</span>
                     </div>
-                    <p>{s.text}</p>
+                    <p className="buzz-msg-text">{msgFlow(s.text)}</p>
                     {s.link && (
                       <a href={s.link} target="_blank" rel="noreferrer">
                         원문 열기 ›

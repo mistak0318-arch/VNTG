@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { notifyJobStarted } from "./RunningJobsBar";
 import { api, type ChannelReport, type PublishJob } from "../api";
 import { ProgressSteps } from "./ProgressSteps";
+import { MsgText } from "./MsgText";
+import { MdText } from "./MdText";
 
 /**
  * 구독 채널 동향.
@@ -291,8 +293,16 @@ export function ChannelDigestPanel() {
                 </div>
               )}
 
+              {/*
+                **잘렸으면 글 위에 말한다** (2026-10-09). 예전엔 요약이 있으면 `error` 를
+                아예 안 보여 줬다 — 「출력 상한에 걸려 뒤가 잘렸습니다」가 바로 그 자리에서
+                묻혔다. 글은 그대로 쓸 만하니 같이 보이되, **이게 전부가 아님**은 알려야 한다.
+              */}
+              {current.summary && current.error && (
+                <div className="chan-report-cut">⚠️ {current.error}</div>
+              )}
               {current.summary ? (
-                <pre className="alert-preview">{current.summary}</pre>
+                <MdText text={current.summary} className="alert-preview" />
               ) : (
                 <div className="page-note">{current.error ?? "요약이 없습니다."}</div>
               )}
@@ -325,7 +335,7 @@ export function ChannelDigestPanel() {
                             🎯 {it.themes && it.themes.length > 0 ? it.themes.join(", ") : "미정"}
                           </span>
                         </div>
-                        <div className="chan-item-text">{it.text}</div>
+                        <MsgText text={it.text} className="chan-item-text" />
                         <div className="chan-item-src">{it.channels.join(" · ")}</div>
                       </div>
                     ))}

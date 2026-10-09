@@ -124,12 +124,25 @@ export async function summarize(
         choice.model,
         purpose === "pinned" ? "channel" : purpose === "vision" ? "vision" : purpose,
       );
+      /*
+       * **끊긴 답을 조용히 내보내지 않는다** (2026-10-09 — 벤티지: "텔레그램 ai
+       * 정리하는데도 글이 잘리고 좀 문제가 잇어보이네").
+       *
+       * 바로 아래 Anthropic 직통 길에는 이 판정이 있는데 **이 길에는 없었다.** 제공자를
+       * 고르는 쪽(제미나이·OpenAI 포함)으로 가면 상한에 걸려도 아무도 모르고, 낱말 중간에서
+       * 끊긴 글이 그대로 화면에 올라갔다 — 「클라우드 파트」에서 멈춘 그 정리본이 이것이다.
+       * 특히 제미나이는 **생각 토큰도 같은 예산에서 쓰므로** 보이는 글이 짧아도 끊길 수 있다.
+       *
+       * 아래와 같은 처치를 한다 — 마지막 성한 문장까지만 남기고, 잘렸다고 **말한다.**
+       * 글자를 버리는 게 아까워 보여도, 숫자가 반만 적힌 문장이 더 비싸다.
+       */
+      const body = r.text ? stripAiScratch(r.text, anchor) || null : r.text;
       return {
-        text: r.text ? stripAiScratch(r.text, anchor) || null : r.text,
+        text: r.truncated && body ? trimToLastSentence(body) || body : body,
         inputTokens: r.inputTokens,
         outputTokens: r.outputTokens,
         usedModel: r.model ?? choice.model,
-        error: r.error,
+        error: r.error ?? (r.truncated ? `출력 상한(${maxTokens.toLocaleString("ko-KR")}토큰)에 걸려 뒤가 잘렸습니다` : undefined),
       };
     }
   }

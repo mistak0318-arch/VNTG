@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type BuzzTermDetail, fmtKst } from "../api";
+import { msgFlow } from "../msgFlow";
 
 /**
  * 버즈 원문 창 (2026-08-31 요청 —
@@ -83,7 +84,7 @@ export function BuzzSourcePage() {
                 )}
               </div>
               {/* 글이 주인공이다 — 메타는 위에 작게, 본문은 읽기 좋은 크기로 */}
-              <p className="bsrc-text">{s.text}</p>
+              <p className="bsrc-text">{msgFlow(s.text)}</p>
             </article>
           ))}
         </div>

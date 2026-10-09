@@ -6074,6 +6074,52 @@ tr.drag-src td { opacity: 0.45; }
 /* 크기는 [가− 가+] 가 방 컨테이너에 --tgr-fs 로 준다 (기기별 저장) */
 .tgr-text { font-size: var(--tgr-fs, 0.84rem); line-height: 1.5; word-break: break-word; white-space: pre-wrap; }
 .tgr-text a { color: var(--blue); }
+
+/*
+ * **텔레그램 글 줄 세우기** (2026-10-09 — 벤티지: "줄정리라는 게 안 돼 있어서 좀 보기가
+ * 힘든데 이거 가독성 있게 개편 좀 안 되려나?" · "이쪽도 함 봐줘").
+ *
+ * 글자는 하나도 안 바꾼다. 줄마다 무슨 줄인지만 표시해 **크기와 색으로 층을 낸다.**
+ * 제목·요약·종목·꼬리표·시각·출처가 같은 크기 같은 색으로 붙어 있으면 눈이 어디부터
+ * 읽을지를 매번 고르는데, 스무 건이 쌓인 화면에서는 그 고르기가 곧 읽기를 막는다.
+ * 못 알아본 줄은 예전 그대로다 — 알아보기에 실패해서 글이 달라지면 안 된다.
+ */
+.msgt { white-space: normal; }
+.msgt-l { white-space: pre-wrap; word-break: break-word; }
+/* 빈 줄 — 글쓴이가 문단을 나눈 자리라 지우지 않고 **반 줄**로 줄인다 */
+.msgt-gap { height: 0.45em; }
+.msgt-title { font-weight: 700; }
+/* 기계 요약 — 한 칸 들여 「원문이 아님」을 눈으로 가른다 */
+.msgt-ai { padding-left: 0.6em; border-left: 2px solid var(--border); margin: 2px 0; opacity: 0.95; }
+.msgt-rel { font-variant-numeric: tabular-nums; }
+.msgt-tags { font-size: 0.86em; color: var(--muted); }
+.msgt-meta { font-size: 0.84em; color: var(--muted); }
+
+/* 버즈 「실제 문장」 — 여태 class 가 없어 <p> 기본값으로 줄바꿈이 뭉개졌다 */
+.buzz-msg-text { margin: 4px 0 0; white-space: pre-wrap; word-break: break-word; line-height: 1.55; }
+
+/*
+ * **AI 정리본 — 마크다운을 글자로 보여 주던 것** (2026-10-09).
+ *
+ * `<pre>` 에 넣고 있었다. 고정폭 글꼴이라 한글이 띄엄띄엄 벌어지고 `##`·`**` 이 글자로
+ * 보였다. 머리글·목록·굵게 셋만 해석해 층을 낸다 — 이 글에 나오는 것이 그 셋뿐이다.
+ */
+.md { line-height: 1.6; }
+.md-gap { height: 0.5em; }
+.md-h { font-weight: 700; margin: 10px 0 4px; }
+.md-h1 { font-size: 1.02rem; }
+.md-h2 { font-size: 0.94rem; }
+.md-h3 { font-size: 0.88rem; color: var(--muted); }
+.md-h:first-child { margin-top: 0; }
+.md-p { margin: 2px 0; word-break: break-word; }
+.md-li { display: flex; gap: 6px; margin: 3px 0; word-break: break-word; }
+.md-bullet { font-style: normal; color: var(--muted); flex: none; line-height: inherit; }
+/* 잘림 알림 — 글 위에 한 줄. 묻히면 알리는 뜻이 없다 */
+.chan-report-cut {
+  margin-top: 8px; padding: 6px 10px; border-radius: 8px;
+  border: 1px solid var(--accent); color: var(--accent);
+  font-size: 0.78rem; line-height: 1.45;
+}
 .tgr-time { display: block; text-align: right; font-size: 0.64rem; color: var(--muted); margin-top: 2px; }
 .tgr-star {
   flex: none;

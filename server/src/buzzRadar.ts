@@ -221,6 +221,20 @@ async function buildDict(): Promise<BuzzTerm[]> {
  * ⚠️ **다른 회사 이름은 안 지운다.** 하나증권 방이 「삼성증권」을 말하면 그건 진짜
  * 얘깃거리다. 그래서 채널 이름에 든 낱말만 지운다.
  */
+/**
+ * 줄은 살리고 줄 **안의** 공백만 정리한다 (2026-10-09).
+ *
+ * 텔레그램 글은 줄로 뜻을 나눈다. 공백을 한꺼번에 누르면 그 뜻이 같이 눌린다.
+ */
+export function tidy(text: string): string {
+  return text
+    .split("\n")
+    .map((l) => l.replace(/[^\S\n]+/g, " ").trimEnd())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export function stripSignature(text: string, channelName: string): string {
   /* ① 맨 앞 대괄호 — 여러 개 붙어 있는 경우도 있다 */
   let out = text.replace(/^\s*(?:[[［【(].{0,40}?[\]］】)]\s*){1,3}/u, "");
@@ -375,7 +389,19 @@ export async function recordBuzz(messages: ChannelMessage[]): Promise<void> {
            * 가져오는 것은 **글자뿐**이라 늘려도 부담이 작다 — 실측으로 버즈 30일치가
            * 0.05MB 였다. 수집 단계에서 이미 600자로 자르므로 여기서는 그대로 담는다.
            */
-          text: text.replace(/\s+/g, " "),
+          /*
+           * ⚠️ **줄바꿈을 지우지 않는다** (2026-10-09 — 벤티지: "텔레그램 글 읽을 때
+           * 이게 줄정리라는 게 안 돼 있어서 좀 보기가 힘든데").
+           *
+           * 바로 위에 「원문을 거의 그대로 남긴다」고 적어 놓고, 여기서 `\s+ → " "` 로
+           * **원문의 생김새를 지우고 있었다.** 텔레그램 글은 줄로 뜻을 나눈다 —
+           * 「: 항목」·「→ 설명」이 각자 한 줄인데 그걸 이으면 600자짜리 한 덩어리가 된다.
+           * 글자는 다 있는데 읽을 수가 없다. 글자 수만 원문이고 모양은 원문이 아니었다.
+           *
+           * 줄 **안의** 공백만 정리하고 줄은 그대로 둔다. 빈 줄이 셋 넘게 이어지면 둘로
+           * 줄인다 — 서명 자리에 빈 줄을 잔뜩 넣는 방이 있다.
+           */
+          text: tidy(text),
           link: m.link,
         });
         /*

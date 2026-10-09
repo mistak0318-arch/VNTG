@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSheetBack } from "../useSheetBack";
 import { api, type ChannelEntry, type MajorMsg, type MajorRoom } from "../api";
 import { TgFontButtons, linkifyEscaped, useTgFont } from "./TelegramRoomsPanel";
+import { kindOf } from "./MsgText";
 
 /** 평문을 HTML 에 넣기 전에 — 태그로 해석될 글자를 막는다 */
 function escapeHtml(s: string): string {
@@ -265,10 +266,28 @@ export function MajorChannelPanel() {
                       (2026-08-27) — 채널 글은 링크가 본론일 때가 많은데 텍스트로만
                       넣어서 눈에는 보이고 못 눌렀다. HTML 해석은 여전히 없다.
                     */}
-                    <div
-                      className="tgr-text tgr-plain"
-                      dangerouslySetInnerHTML={{ __html: linkifyEscaped(escapeHtml(m.text)) }}
-                    />
+                    {/*
+                      **줄마다 무슨 줄인지 표시를 단다** (2026-10-09 — 벤티지: "이쪽도 함 봐줘").
+
+                      글은 그대로 둔다. 제목·요약·꼬리표·시각·출처가 **같은 크기 같은 색**으로
+                      붙어 있으면 눈이 어디부터 읽을지를 매번 고르는데, 스무 건이 쌓인 화면에서는
+                      그 고르기가 읽기를 막는다. 제목은 굵게, 꼬리표·시각·출처는 작고 흐리게 —
+                      그러면 **제목만 훑다가 걸리는 것만 들여다보는** 읽기가 된다.
+                      링크 바꾸기(linkify)는 줄 단위로 그대로 돈다.
+                    */}
+                    <div className="tgr-text tgr-plain">
+                      {m.text.split("\n").map((l, li, arr) => {
+                        const k = kindOf(l, li === arr.findIndex((x) => x.trim() !== ""));
+                        if (l.trim() === "") return <div key={li} className="msgt-gap" />;
+                        return (
+                          <div
+                            key={li}
+                            className={k ? `msgt-l msgt-${k}` : "msgt-l"}
+                            dangerouslySetInnerHTML={{ __html: linkifyEscaped(escapeHtml(l)) }}
+                          />
+                        );
+                      })}
+                    </div>
                     <span className="tgr-time">
                       {hm(m.at)}
                       {m.link && (

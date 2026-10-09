@@ -317,7 +317,16 @@ export async function buildChannelReport(
   const prompt = `${SYSTEM_RULES}\n\n---\n지금 시각: ${now.toLocaleString("ko-KR")}\n수집 구간: 최근 ${describeWindow(sinceMinutes)} (${span})\n대상 채널 ${channels}개 · 원본 ${messages.length}건 중 ${items.length}건 선별\n\n${toDigestText(items)}`;
 
   progress.start("ai");
-  const res = await summarize(prompt, 2500, "channel", { anchor: ANSWER_ANCHOR });
+  /*
+   * **출력 상한 2,500 → 7,000** (2026-10-09).
+   *
+   * 선별 40건을 주제별로 묶어 쓰라고 시켜 놓고 2,500 토큰을 줬다. 한글은 토큰이 헤퍼
+   * (글자당 1.5~2 토큰) 주제 서넛이면 바닥난다. 게다가 요즘 모델은 **생각 토큰도 같은
+   * 예산에서 쓰므로** 실제로 쓸 수 있는 몫은 그보다 훨씬 적다 — 벤티지 캡처의 정리본은
+   * 첫 주제 한 덩이에서 「클라우드 파트」로 끊겨 있었다(출력 97 토큰).
+   * 조간 리포트가 7,000 으로 도니 같은 자리에 맞춘다. 잘려서 못 읽는 것보다 비싸지 않다.
+   */
+  const res = await summarize(prompt, 7000, "channel", { anchor: ANSWER_ANCHOR });
   if (res.error) progress.fail("ai", res.error);
   else progress.done("ai", `${res.outputTokens.toLocaleString("ko-KR")} 토큰`);
   report.summary = res.text;
