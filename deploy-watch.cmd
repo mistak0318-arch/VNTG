@@ -24,7 +24,29 @@ REM  answer during that.  A hair trigger killed a healthy server twice
 REM  (00:38:23 and 00:39:06 on 2026-10-07) and created a restart loop.
 REM ===========================================================================
 setlocal
-cd /d "%~dp0"
+
+REM ---------------------------------------------------------------------------
+REM  RUN FROM A PRIVATE COPY  (2026-10-10)
+REM
+REM  cmd.exe does not load a batch file; it re-reads the next line from disk by
+REM  BYTE OFFSET after every command.  A deploy updates this very file and
+REM  deploy.cmd while they are executing, so the offset can land mid-line and
+REM  cmd runs a fragment.  It has been a coin flip on every deploy that touched
+REM  these two files -- the kind of fault that shows up once and is never
+REM  reproduced.  Copy first, run the copy, and the file on disk can change all
+REM  it likes.  VNTG_HOME carries the real repo path, because %~dp0 inside the
+REM  copy points at %TEMP%.
+REM ---------------------------------------------------------------------------
+if not "%VNTG_WATCH_RUN%"=="1" (
+  set "VNTG_WATCH_RUN=1"
+  set "VNTG_HOME=%~dp0"
+  copy /y "%~f0" "%TEMP%\vntg-watch-run.cmd" >nul
+  call "%TEMP%\vntg-watch-run.cmd"
+  exit /b %errorlevel%
+)
+
+REM The trailing backslash of %~dp0 would end the quote for cd -- the dot fixes it.
+cd /d "%VNTG_HOME%."
 
 set "DROP=C:\vntg-deploy"
 if not exist "%DROP%" mkdir "%DROP%"
@@ -37,8 +59,12 @@ echo %date% %time%> "%DROP%\watch.alive"
 
 if exist "%DROP%\deploy.flag" if not exist "%DROP%\deploy.lock" (
   echo %date% %time%> "%DROP%\deploy.lock"
+  REM Keep the flag's hash: deploy.cmd compares it with HEAD and says so.
+  copy /y "%DROP%\deploy.flag" "%DROP%\deploy.want" >nul
   del /q "%DROP%\deploy.flag"
-  call "%~dp0deploy.cmd"
+  REM Same reason as above -- deploy.cmd rewrites itself at its first step.
+  copy /y "%VNTG_HOME%deploy.cmd" "%TEMP%\vntg-deploy-run.cmd" >nul
+  call "%TEMP%\vntg-deploy-run.cmd"
   del /q "%DROP%\deploy.lock"
   set /a DEAD=0
 )
