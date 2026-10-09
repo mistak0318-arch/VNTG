@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -133,22 +133,89 @@ async function readReads(): Promise<Record<string, string>> {
 }
 
 /** 방 목록 — 마지막 메시지 미리보기 + 안 읽은 수(말풍선) */
+/**
+ * **방 요약만 들고 있는다** (2026-10-10).
+ *
+ * `roomsSummary()` 가 방마다 `.jsonl` 을 통째로 읽고 **모든 줄을 `JSON.parse`** 했다.
+ * 정작 쓰는 것은 마지막 글 하나와 안 읽은 수와 전체 수뿐인데. 이 길은 하루 234번 불리고,
+ * 10/09 `lifecycle.log` 에서 `GET /rooms` 가 한 번에 최고 2.8GB 까지 찍은 자리다.
+ *
+ * ## 전문을 캐시하지 않는 까닭
+ *
+ * 파싱한 메시지를 통째로 들고 있으면 빨라지기는 한다. 그런데 그러면 **바닥이 높아진다** —
+ * 10/07 에 서버가 죽은 것이 바닥(84MB 일봉)과 봉우리가 겹쳐서였다. 여기서 또 바닥을
+ * 올리면 고치는 게 아니라 옮기는 것이다.
+ *
+ * 그래서 들고 있는 것은 **시각 문자열 배열과 마지막 글 미리보기**뿐이다. 본문·링크·방 이름이
+ * 다 빠지므로 메시지 하나당 수십 바이트면 된다. 안 읽은 수는 읽은 시각이 바뀔 때마다
+ * 달라지므로 미리 셀 수 없는데, 시각만 들고 있으면 세는 일은 문자열 비교라 거저다.
+ *
+ * ## 무르는 열쇠
+ *
+ * 파일의 mtime·크기. 메시지는 덧붙이기만 하므로 새 글이 오면 둘 다 바뀐다. `stat` 한 번이
+ * 파일 전체 읽기와 파싱을 대신한다. 보관 정리가 파일을 줄여도 같은 열쇠로 알아챈다.
+ */
+interface RoomSum {
+  key: string;
+  lastAt: string | null;
+  preview: string;
+  total: number;
+  /** 각 글의 시각만 — 안 읽은 수를 세는 데 필요한 전부다 */
+  ats: string[];
+}
+
+const sumCache = new Map<string, RoomSum>();
+const EMPTY_SUM: RoomSum = { key: "", lastAt: null, preview: "", total: 0, ats: [] };
+
+async function roomSum(channel: string): Promise<RoomSum> {
+  let key: string;
+  try {
+    const st = await stat(join(DIR, `${channel}.jsonl`));
+    key = `${st.mtimeMs}:${st.size}`;
+  } catch {
+    /* 아직 한 줄도 안 쌓인 방 */
+    sumCache.delete(channel);
+    return EMPTY_SUM;
+  }
+  const hit = sumCache.get(channel);
+  if (hit && hit.key === key) return hit;
+
+  const msgs = await readJsonl(channel);
+  const last = msgs[msgs.length - 1];
+  const sum: RoomSum = {
+    key,
+    lastAt: last?.at ?? null,
+    preview: last ? stripHtml(last.text).slice(0, 60) : "",
+    total: msgs.length,
+    /* 여기서 `msgs` 는 버려진다 — 남는 것은 시각뿐이다 */
+    ats: msgs.map((m) => m.at ?? ""),
+  };
+  sumCache.set(channel, sum);
+  return sum;
+}
+
 export async function roomsSummary(): Promise<
   { channel: string; label: string; lastAt: string | null; preview: string; unread: number; total: number }[]
 > {
   const reads = await readReads();
   const out = [];
   for (const ch of ROOM_ORDER) {
-    const msgs = await readJsonl(ch);
-    const last = msgs[msgs.length - 1];
+    const s = await roomSum(ch);
     const readAt = reads[ch] ?? "";
+    /*
+     * 세는 방법은 예전 그대로 — 전부 훑는다. 시각이 늘 오름차순이라 이분 탐색이 더
+     * 빠르겠지만, 그러려면 **순서를 믿어야** 한다. 문자열 비교 몇 만 번은 공짜에 가깝고,
+     * 믿어야 할 것을 하나 안 만드는 쪽이 낫다.
+     */
+    let unread = 0;
+    for (const at of s.ats) if (at > readAt) unread += 1;
     out.push({
       channel: ch,
       label: ROOM_LABELS[ch] ?? ch,
-      lastAt: last?.at ?? null,
-      preview: last ? stripHtml(last.text).slice(0, 60) : "",
-      unread: msgs.filter((m) => m.at > readAt).length,
-      total: msgs.length,
+      lastAt: s.lastAt,
+      preview: s.preview,
+      unread,
+      total: s.total,
     });
   }
   return out;

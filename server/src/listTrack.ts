@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
@@ -169,22 +169,79 @@ interface Store {
 
 const EMPTY: Store = { entries: [], lastRunDate: null };
 
+/**
+ * **원장을 한 벌만 들고 있는다** (2026-10-10).
+ *
+ * `load()` 가 부를 때마다 6MB 짜리 `listTrack.json` 을 읽고 `JSON.parse` 하고 있었다.
+ * 한 요청이 이 함수를 여러 번 부르고, 이 길만 하루 449번 불린다.
+ * 10/09 하루치 `lifecycle.log` 에서 `GET /list-track` 이 **합쳐 60GB** 를 쓰고
+ * 한 번에 최고 1.9GB 까지 찍은 것이 이것이다. 파일은 6MB 인데 파싱한 객체는 그 몇 배이고,
+ * 그게 매번 새로 생겨 GC 를 기다린다. 10/07 에 `dailyCloses.json`(84MB)을 같은 까닭으로
+ * 캐시했는데 **이 파일은 그때 같이 안 봤다.**
+ *
+ * ## 왜 mtime 으로 무르나
+ *
+ * 이 파일을 쓰는 것은 여기만이 아니다 — `ledgerReset` 이 원장을 비울 때 **바깥에서**
+ * 덮어쓴다. 모듈 안에서만 캐시를 무르면 그때 묵은 원장을 들고 있게 된다.
+ * 파일의 mtime·크기를 열쇠로 삼으면 **누가 쓰든** 다음 `load()` 가 알아챈다.
+ * 값은 `stat` 한 번(0.1ms 남짓)이고, 아끼는 것은 6MB 읽기와 파싱이다.
+ *
+ * ⚠️ 돌려주는 것은 **공유 객체**다. 읽는 쪽(요약·원장보기·활성목록)은 건드리지 않고,
+ * 고치는 쪽은 고친 뒤 반드시 `save()` 를 부른다 — 지금 열한 군데가 다 그렇다.
+ * 새로 쓸 때도 그 규칙을 지켜야 한다. 복사본을 돌려주면 아끼려던 것을 도로 쓰게 된다.
+ */
+let cache: { key: string; store: Store } | null = null;
+let loading: Promise<Store> | null = null;
+
+async function fileKey(): Promise<string> {
+  const st = await stat(FILE);
+  return `${st.mtimeMs}:${st.size}`;
+}
+
 async function load(): Promise<Store> {
+  let key: string;
   try {
-    const raw = JSON.parse(await readFile(FILE, "utf-8")) as Partial<Store>;
-    return {
-      entries: Array.isArray(raw.entries) ? raw.entries : [],
-      lastRunDate: raw.lastRunDate ?? null,
-      lastCounts: raw.lastCounts,
-    };
+    key = await fileKey();
   } catch {
+    /* 파일이 아직 없다 — 첫 실행이다. 캐시도 비운다 */
+    cache = null;
     return { ...EMPTY };
   }
+  if (cache && cache.key === key) return cache.store;
+  /*
+   * 읽는 중이면 그 약속을 같이 기다린다. 이게 없으면 캐시가 아직 빈 구간에 들어온
+   * 요청들이 **저마다** 6MB 를 읽고 저마다 파싱한다 — 고치려던 바로 그 일이다.
+   */
+  if (loading) return loading;
+  loading = (async () => {
+    try {
+      const raw = JSON.parse(await readFile(FILE, "utf-8")) as Partial<Store>;
+      const store: Store = {
+        entries: Array.isArray(raw.entries) ? raw.entries : [],
+        lastRunDate: raw.lastRunDate ?? null,
+        lastCounts: raw.lastCounts,
+      };
+      cache = { key, store };
+      return store;
+    } catch {
+      cache = null;
+      return { ...EMPTY };
+    }
+  })().finally(() => {
+    loading = null;
+  });
+  return loading;
 }
 
 async function save(s: Store): Promise<void> {
   await mkdir(dirname(FILE), { recursive: true });
   await writeFile(FILE, JSON.stringify(s), "utf-8");
+  /* 방금 쓴 것이 곧 최신이다 — 다시 읽을 까닭이 없다 */
+  try {
+    cache = { key: await fileKey(), store: s };
+  } catch {
+    cache = null;
+  }
 }
 
 export interface ListTrackJob {
