@@ -56,6 +56,22 @@ export interface ColumnWidthsApi {
   reset: () => void;
 }
 
+/**
+ * **이름 칸에는 더 낮은 바닥을 두지 않는다** (2026-10-10 — 벤티지: "얜 이름이 왜 이렇게 떠").
+ *
+ * 최소가 모든 칸에 똑같이 40px 이었다. 다른 칸은 그래도 된다 — 숫자가 잘리면 그 칸만
+ * 못 읽는다. 그런데 **이름 칸이 40px 이 되면 표 전체가 못 읽는 것이 된다.** 순위와 배지가
+ * 그 폭을 다 먹어서 이름은 「…」만 남고, 어느 줄이 어느 종목인지 가릴 길이 사라진다.
+ * 끌다가 한 번 스치면 그대로 서버에 저장되고 기기를 바꿔도 따라온다.
+ *
+ * `styleOf` 에서도 올려 준다 — 끌 때만 막으면 **이미 저장된 좁은 값**은 그대로 남는다.
+ * 그걸 되돌리려고 사람이 「원래대로」를 찾아 눌러야 하면 고친 것이 아니다.
+ */
+const NAME_KEYS = new Set(["name", "stk_nm"]);
+const MIN_PX = 40;
+const NAME_MIN_PX = 96;
+const minOf = (key: string): number => (NAME_KEYS.has(key) ? NAME_MIN_PX : MIN_PX);
+
 export function useColumnWidths(scope: string): ColumnWidthsApi {
   const [all, setAll] = useState<Record<string, Record<string, number>>>({});
   const [mine, setMine] = useState<Record<string, number>>({});
@@ -114,8 +130,8 @@ export function useColumnWidths(scope: string): ColumnWidthsApi {
       const move = (e: PointerEvent) => {
         const d = drag.current;
         if (!d) return;
-        // 서버와 같은 한계 — 40 보다 좁으면 글자가 한 자도 안 들어간다
-        const w = Math.min(600, Math.max(40, Math.round(d.w + (e.clientX - d.x))));
+        /* 서버와 같은 한계. 이름 칸만 더 높다 — 위 `minOf` 주석 참고 */
+        const w = Math.min(600, Math.max(minOf(d.key), Math.round(d.w + (e.clientX - d.x))));
         setMine((prev) => ({ ...prev, [d.key]: w }));
       };
       const up = () => {
@@ -171,7 +187,8 @@ export function useColumnWidths(scope: string): ColumnWidthsApi {
   return {
     styleOf: (key: string, fallbackPx?: number) =>
       mine[key]
-        ? { width: `${mine[key]}px` }
+        ? /* 예전에 저장된 너무 좁은 값도 여기서 올려 준다 */
+          { width: `${Math.max(minOf(key), mine[key])}px` }
         : Object.keys(mine).length > 0
           ? /* 이름 칸은 어느 표든 넓어야 한다 — 부르는 쪽이 안 정했을 때의 기본 */
             { width: `${fallbackPx ?? (key === "name" || key === "stk_nm" ? 170 : 84)}px` }
