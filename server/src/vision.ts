@@ -110,6 +110,32 @@ async function callGemini(
 ): Promise<VisionResult> {
   const model = modelFor("gemini", modelName);
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY!.trim()}`;
+  /*
+   * ⚠️ **생각 토큰이 출력 예산을 같이 먹는다** (2026-10-09 실측).
+   *
+   * 벤티지 캡처: 「토큰 4637/276 · 출력 상한(7,000토큰)에 걸려 뒤가 잘렸습니다」.
+   * 276 이 7,000 에 걸렸다는 말이 앞뒤가 안 맞아 보이는데, 제미나이 2.5 세대부터
+   * `maxOutputTokens` 는 **생각(thought) + 답**을 합쳐서 센다. 7,000 을 생각이 다 쓰고
+   * 답은 276 토큰만 나온 채 끊긴 것이다. 그래서 상한을 2,500 → 7,000 으로 올렸는데도
+   * 똑같이 잘렸다 — 올린 몫까지 생각이 먹었다.
+   *
+   * 세 가지를 재 보고 골랐다(`tools/geminiThink.ts`, 같은 질문·같은 답 길이 요구):
+   *
+   *   ① 예전 그대로 (700)                 flash: MAX_TOKENS · 생각 668 · 답 28   ← 이게 그 버그
+   *                                        lite : MAX_TOKENS · 생각 0   · 답 696
+   *   ② thinkingConfig 로 생각을 묶기      flash: STOP · 생각 1656 · 답 744
+   *                                        lite : STOP · 생각 1623 · 답 589      ← 생각을 **켜 버린다**
+   *   ③ 여유만 더 주기 (700+2048)          flash: STOP · 생각 1890 · 답 681
+   *                                        lite : STOP · 생각 0    · 답 782      ← 그대로 안 생각한다
+   *
+   * ③ 을 쓴다. ② 는 생각이 기본으로 꺼진 모델(lite)에 **없던 생각을 붙여** 값만 올린다 —
+   * 고치려던 것은 잘림이지 생각의 양이 아니다. 여유만 주면 생각하는 모델은 제 몫을 쓰고
+   * 끝까지 쓰고, 안 하는 모델은 예전 그대로다. `thinkingConfig` 를 모르는 모델이 400 으로
+   * 거절할 걱정도 없어진다 — 안 보내니까.
+   *
+   * 상한은 **쓴 만큼 내는 돈이 아니라 천장**이라 넉넉히 둬도 평소 비용은 그대로다.
+   */
+  const headroom = Math.max(2048, maxTokens);
   const res = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -121,13 +147,13 @@ async function callGemini(
             : [{ text: prompt }],
         },
       ],
-      generationConfig: { temperature: 0, maxOutputTokens: maxTokens },
+      generationConfig: { temperature: 0, maxOutputTokens: maxTokens + headroom },
     }),
   });
 
   const body = (await res.json()) as {
     candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] }; finishReason?: string }[];
-    usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+    usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number };
     error?: { message?: string };
   };
 
@@ -156,8 +182,11 @@ async function callGemini(
     provider: "gemini",
     model,
     inputTokens: body.usageMetadata?.promptTokenCount ?? 0,
-    outputTokens: body.usageMetadata?.candidatesTokenCount ?? 0,
-    /* ⚠️ 제미나이는 **생각 토큰도 이 예산에서 쓴다** — 보이는 글이 짧아도 상한에 걸릴 수 있다 */
+    /*
+     * **생각 토큰도 출력으로 센다** — 돈은 그만큼 나간다. 보이는 글만 세면 「276 토큰
+     * 썼는데 왜 잘렸지」가 되고, 비용 집계도 실제보다 작게 잡힌다.
+     */
+    outputTokens: (body.usageMetadata?.candidatesTokenCount ?? 0) + (body.usageMetadata?.thoughtsTokenCount ?? 0),
     truncated: body.candidates?.[0]?.finishReason === "MAX_TOKENS",
   };
 }
