@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { alCode } from "./alCode.js";
+import { loadLedger } from "./dailyStore.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FILE = resolve(__dirname, "..", "data", "brokerFlow.json");
@@ -120,6 +121,20 @@ export interface BrokerFlow {
    */
   foreignSell: number;
   foreignBuy: number;
+  /**
+   * **장 전이면 지난 장 값** (2026-10-13 — 벤티지: "지금 6시 25분인데 전일 데이터
+   * 표시해줘야 하는 시간인데 왜 0으로 표시된 애들이 있는 거야?" · "우리 이미 데이터를
+   * 다 들고 있지 않아? 일일원장 받아오잖아").
+   *
+   * 맞다. 새벽에는 키움이 이미 **새 날**이라 오늘치가 전부 비는데, 우리는 그 빈 값을
+   * 0 으로 그렸다. 0 은 「거래가 없었다」는 **사실처럼 보이는 거짓말**이다 — 실제로는
+   * 「아직 오늘이 시작 안 했다」이다.
+   *
+   * 그런데 어제 값은 이미 일별 원장(`data/daily/<코드>.json`)에 있다. 조회를 더 쓸 일이
+   * 아니라 **들고 있는 것을 꺼내 쓰면 되는 일**이었다. 가격 카드가 새벽에 어제 일봉으로
+   * 물러서는 것과 같은 처치다.
+   */
+  prev: { date: string; prog: number | null; fgnNet: number | null } | null;
   /** 매수 − 매도. 키움 값에서 */
   foreignNet: number;
   /** 프로그램 순매수(백만원). 못 받으면 null */
@@ -197,6 +212,23 @@ function kstNow(): { date: string; hm: string } {
 
 /* ------------------------------------------------------------------ */
 
+/**
+ * 일별 원장에서 **지난 장**의 프로그램 순매수·외국인 순매수를 꺼낸다 (2026-10-13).
+ * 새벽에는 키움이 이미 새 날이라 오늘치가 비는데, 어제 값은 우리가 이미 들고 있다.
+ */
+async function prevFromLedger(code: string): Promise<{ date: string; prog: number | null; fgnNet: number | null } | null> {
+  try {
+    const l = await loadLedger(code);
+    const p = (l.prog ?? []).slice(-1)[0] ?? null;
+    const f = (l.flow ?? []).slice(-1)[0] ?? null;
+    const date = p?.d ?? f?.d ?? "";
+    if (!date) return null;
+    return { date, prog: p?.net ?? null, fgnNet: (f as { fgn?: number } | null)?.fgn ?? null };
+  } catch {
+    return null;
+  }
+}
+
 export async function brokerFlow(client: KiwoomClient, code: string): Promise<BrokerFlow> {
   const bare = code.replace(/_(AL|NX)$/i, "");
   const empty: BrokerFlow = {
@@ -209,6 +241,7 @@ export async function brokerFlow(client: KiwoomClient, code: string): Promise<Br
     foreignNet: 0,
     foreignNetTop5: 0,
     program: null,
+    prev: null,
     series: [],
     names: {},
     error: null,
@@ -318,6 +351,11 @@ export async function brokerFlow(client: KiwoomClient, code: string): Promise<Br
       program: prog,
       series: entry.points,
       names: entry.names,
+      /*
+       * 장 전이라 오늘치가 비면 **원장에서 지난 장을 꺼내 준다.**
+       * 조회를 더 쓰지 않는다 — 이미 받아 둔 것을 읽을 뿐이다.
+       */
+      prev: foreignBuy === 0 && foreignSell === 0 && (prog === null || prog === 0) ? await prevFromLedger(bare) : null,
     };
   } catch (err) {
     return { ...empty, error: err instanceof Error ? err.message : "거래원 조회 실패" };

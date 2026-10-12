@@ -19695,14 +19695,22 @@ a.watch-btn { text-decoration: none; }
     max-height: 100dvh;
     border-radius: 0;
     border-top: 0;
-    /* 여백을 줄여 글자에 자리를 준다. 옆은 12px — 더 줄이면 글자가 모서리에 붙는다 */
-    padding: 8px 12px 14px;
+    /*
+     * 여백을 줄여 글자에 자리를 준다. 옆은 12px — 더 줄이면 글자가 모서리에 붙는다.
+     * 아래는 0 이다 — 탭 줄이 **바닥에 딱 붙어야** 하는데, 여기 여백이 있으면 붙박이가
+     * 그 여백 위에 서서 틈이 생긴다(벤티지: "하단 메뉴바도 바닥에 붙여야 할 듯 약간 틈이 있다").
+     */
+    padding: 8px 12px 0;
   }
   /* 머리줄이 화면 맨 위에 붙는다 — 상자 모서리가 없어졌으므로 끌어올릴 몫도 없다 */
   html[data-widestock="1"] .sheet-header {
     top: -8px;
     margin-top: -8px;
     padding-top: 8px;
+    /* 탭 줄과의 사이를 좁힌다 — 둘 다 붙박이라 사이가 뜨면 그만큼 본문이 밀린다 */
+    padding-bottom: 2px;
+    margin-bottom: 2px;
+    row-gap: 2px;
   }
   /*
    * 탭은 **손가락 크기**로. 예전엔 상자가 좁아 글자를 줄여 욱여넣었는데, 전체 화면에서는
@@ -19876,7 +19884,7 @@ a.watch-btn { text-decoration: none; }
     bottom: 0;
     z-index: 3;
     background: var(--panel);
-    margin: 0 -12px -14px;
+    margin: 0 -12px;
     padding: 4px 12px calc(4px + env(safe-area-inset-bottom, 0px));
     border-top: 1px solid var(--border);
   }
@@ -19889,7 +19897,8 @@ a.watch-btn { text-decoration: none; }
   html[data-widestock="1"] .stock-tabs > .tabscroll:has(.dt-top) {
     order: 0;
     position: sticky;
-    top: 0;
+    /* 머리줄 **아래**에 — 높이는 재서 알려 준다(종목마다 배지 줄 수가 달라 못 박을 수 없다) */
+    top: var(--sd-head-h, 92px);
     bottom: auto;
     z-index: 3;
     background: var(--panel);

@@ -140,6 +140,25 @@ export function StockDetail({
    * 내려가 있던 자리에 남아서, 새 종목이 **중간부터** 보였다.
    */
   const sheetRef = useRef<HTMLDivElement>(null);
+  /*
+   * **머리줄 높이를 재서 알려 준다** (2026-10-13 — 벤티지: "상단 메뉴바가 아래로 내려가면
+   * 안 보이는데 하단 메뉴바처럼 고정 안 되나?").
+   *
+   * 위 탭 줄도 붙박이인데 `top: 0` 이라 머리줄 **뒤로** 숨었다. 머리줄 아래에 붙으려면
+   * 그 높이를 알아야 하는데, 배지가 한 줄이냐 두 줄이냐로 종목마다 다르다 —
+   * 숫자를 박아 두면 어떤 종목에서는 겹치고 어떤 종목에서는 뜬다. 그래서 잰다.
+   */
+  const headRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = headRef.current;
+    const sheet = sheetRef.current;
+    if (!el || !sheet || !wide) return;
+    const set = () => sheet.style.setProperty("--sd-head-h", `${Math.round(el.offsetHeight)}px`);
+    set();
+    const ro = new ResizeObserver(set);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [wide, code]);
   useEffect(() => {
     sheetRef.current?.scrollTo({ top: 0 });
   }, [code]);
@@ -201,7 +220,7 @@ export function StockDetail({
   return (
     <div className="overlay" onClick={onClose}>
       <div className="sheet" ref={sheetRef} onClick={(e) => e.stopPropagation()}>
-        <div className="sheet-header">
+        <div className="sheet-header" ref={headRef}>
           {/*
             **감싸는 칸만 더한다** (2026-10-12 — 「넓게 보기」 2/4).
             증권플러스는 배지를 이름 아래 한 줄로 모아 둔다. 그러려면 둘을 따로 잡을 수

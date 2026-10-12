@@ -7143,6 +7143,8 @@ export interface OrderBook {
 
 /** 거래원 */
 export interface BrokerFlow {
+  /** 장 전이라 오늘치가 비면 원장에서 꺼낸 지난 장 값 (2026-10-13) */
+  prev?: { date: string; prog: number | null; fgnNet: number | null } | null;
   code: string;
   at: string;
   sell: { rank: number; code: string; name: string; qty: number; delta: number; foreign: boolean }[];

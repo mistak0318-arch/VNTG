@@ -353,6 +353,33 @@ export function BrokerFlowPanel({ code }: { code: string }) {
           외국계 합계 — **키움이 주는 값** (2026-09-08). 여태 상위 5 창구 이름으로 세서
           상위 5 가 전부 국내 증권사인 날은 0 이었다. 이제 응답의 frgn_*_prsm_sum 을 그대로.
         */}
+        {/*
+          **장 전이면 0 대신 지난 장** (2026-10-13 — 벤티지: "지금 6시 25분인데 전일 데이터
+          표시해줘야 하는 시간인데 왜 0으로 표시된 애들이 있는 거야?").
+
+          새벽에는 키움이 이미 새 날이라 오늘치가 전부 빈다. 그걸 0 으로 그리면 「거래가
+          없었다」는 **사실처럼 보이는 거짓말**이 된다 — 실제로는 「아직 오늘이 시작 안 했다」다.
+          어제 값은 일별 원장에 이미 있어서 서버가 `prev` 로 실어 준다. 조회를 더 쓰는 게
+          아니라 들고 있던 것을 꺼내 쓰는 것이다.
+        */}
+        {data.prev && (
+          <div className="bf-prev">
+            <em>{data.prev.date.replace(/^\d{4}(\d\d)(\d\d)$/, "$1/$2")} 장</em>
+            {data.prev.fgnNet !== null && (
+              <span className={signClass(data.prev.fgnNet)}>
+                외국인 {data.prev.fgnNet > 0 ? "+" : ""}
+                {fmtNum(data.prev.fgnNet)}
+              </span>
+            )}
+            {data.prev.prog !== null && (
+              <span className={signClass(data.prev.prog)}>
+                프로그램 {data.prev.prog > 0 ? "+" : ""}
+                {fmtNum(Math.round(data.prev.prog / 100))}억
+              </span>
+            )}
+            <i>아직 오늘 장이 시작되지 않았습니다</i>
+          </div>
+        )}
         <button
           type="button"
           className={`bf-fx-sum${picked === "__fx" ? " on" : ""}`}
