@@ -19731,7 +19731,13 @@ a.watch-btn { text-decoration: none; }
     order: 0;
     font-size: 1.05rem;
   }
-  html[data-widestock="1"] .sheet-header .close-btn { order: 1; }
+  /*
+   * **⋯ 가 왼쪽, ✕ 가 오른쪽** (2026-10-13 — 벤티지 지정).
+   * 닫기는 맨 끝 모서리가 제자리다 — 어느 화면에서나 거기 있고, 손이 그걸 먼저 배운다.
+   * 둘 다 `watch-btn` 이라 예전엔 order 가 ✕(1) → ⋯(2) 로 잡혀 뒤집혀 있었다.
+   */
+  html[data-widestock="1"] .sheet-header .sd-more { order: 1; }
+  html[data-widestock="1"] .sheet-header .close-btn { order: 2; }
   html[data-widestock="1"] .sheet-header .watch-btn { order: 2; }
   /* (값의 자리는 이제 `.sd-prices` 가 정한다 — 낱개 규칙은 걷었다) */
   /*
@@ -19936,7 +19942,8 @@ html[data-widestock="1"] .sd-prices {
   flex-direction: column;
   gap: 1px;
   order: 3;
-  flex: 0 1 auto;
+  /* 선이 옆에 설 자리를 남기고 남는 폭을 가져간다 */
+  flex: 1 1 auto;
   min-width: 0;
 }
 html[data-widestock="1"] .sd-prices .sheet-live { margin: 0; padding: 0; border: 0; }
@@ -19945,14 +19952,19 @@ html[data-widestock="1"] .sd-spark-wrap {
   display: block;
   order: 6;
   /*
-   * **오른쪽을 다 쓴다** (2026-10-13 — 벤티지가 머리줄 오른쪽을 통째로 동그라미 쳤다).
-   * 220px 로 묶어 뒀더니 숫자 옆에 끼인 토막처럼 보였다. 이 선이 하는 일은 「어떻게 와서
-   * 지금 얼마인가」인데, 좁으면 그 「어떻게」가 뭉개진다 — 가로가 곧 시간이라 폭이 정보다.
-   * 값 칸이 쓰고 남는 자리를 다 가져간다.
+   * ⚠️ **작게, 값 옆에** (2026-10-13 — 두 번 고쳤다).
+   *
+   * 「넓게」라는 말을 폭으로 읽고 42%·52px 로 키웠더니, 값 줄 옆에 못 들어가 **제 줄로
+   * 빠지면서 머리줄이 네 줄**이 됐다. 벤티지: "미니스파크가 아래로 빠지면서 위에가 너무
+   * 커졌어. 등락률 오른쪽에 조그맣게 넣기로 했잖아."
+   *
+   * 머리줄의 선은 **곁눈질로 보는 것**이다 — 모양이 오르막인지 내리막인지만 알면 되고,
+   * 자세히 볼 사람은 종합 탭의 큰 그림으로 간다. 자리를 뺏으면 그 순간 제 일을 잃는다.
+   * 값 줄과 **같은 줄에 설 수 있는 크기**로 못 박는다.
    */
-  flex: 1 1 42%;
-  min-width: 120px;
-  height: 52px;
+  flex: 0 0 auto;
+  width: 88px;
+  height: 34px;
   align-self: center;
 }
 /* 값 칸은 글자만큼만 — 남는 자리를 선에게 넘긴다 */
