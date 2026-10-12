@@ -427,6 +427,9 @@ function savePanes(v: { vol?: number; rsi?: number }): void {
   }
 }
 
+/** 사이 줄 높이(px) — CSS 의 `.chart-split` 과 **같은 값**이어야 한다. 어긋나면 그만큼 넘친다 */
+const SPLIT_H = 6;
+
 const paneHeights = (h: number, rsiOn: boolean) => {
   const saved = savedPanes();
   /* 끌어 둔 값이 있으면 그것 — 없으면 비례. 바닥·천장은 둘 다에 건다 */
@@ -1552,7 +1555,15 @@ export function CandleChart({
       const barH = narrow && bar ? bar.offsetHeight : 0;
       /* 아래 칸 몫을 빼고 남는 것이 봉 차트 — 전체 높이는 예전 그대로다 */
       const p = paneHeights(heightRef.current, prefs.rsiOn);
-      chart.applyOptions({ width: w, height: Math.max(120, heightRef.current - barH - p.vol - p.rsi) });
+      /*
+       * **사이 줄도 자리를 먹는다** (2026-10-12 — 벤티지: "크게 했을 때 밑에가 잘려버리네").
+       *
+       * 칸 높이만 빼고 그 사이의 줄은 안 뺐다. 줄 둘이 12px 인데, 전체화면처럼 **높이를
+       * 정확히 맞춰 준 자리**에서는 그 12px 이 그대로 넘쳐 맨 아래 칸(RSI)이 잘렸다.
+       * 차트 밖에 있는 것은 전부 빼야 한다 — 띠(barH)를 뺐던 것과 같은 까닭이다.
+       */
+      const splitH = SPLIT_H * (1 + (prefs.rsiOn ? 1 : 0));
+      chart.applyOptions({ width: w, height: Math.max(120, heightRef.current - barH - p.vol - p.rsi - splitH) });
       volChartRef.current?.applyOptions({ width: w, height: p.vol });
       rsiChartRef.current?.applyOptions({ width: w, height: p.rsi });
       /*
@@ -1591,16 +1602,46 @@ export function CandleChart({
      * 십자선도 따라간다 — 봉 위에서 어느 날을 짚었는지 아래 칸에서도 보여야
      * 「그날 거래량이 얼마였나」를 눈으로 잇는다. 세로선만 쓰므로 가격은 아무 값이나 된다.
      */
-    chart.subscribeCrosshairMove((param) => {
-      if (!param.time) {
-        for (const ch of panes()) ch.clearCrosshairPosition();
-        return;
+    /*
+     * **어느 칸에 올려도 세 칸이 같이 움직인다** (2026-10-12 고침 — 벤티지: "거래량이나
+     * RSI 에서는 그게 안 먹네").
+     *
+     * 처음엔 봉 차트에서만 구독해 아래로 내려보냈다. 그런데 거래량 막대를 짚어 보는 일이
+     * 그만큼 잦고, 그때 **봉이 어디였는지**가 같이 보여야 뜻이 산다. 세 칸 다 구독해서
+     * 어느 쪽에서 움직이든 나머지 둘에 옮긴다.
+     *
+     * ⚠️ `setCrosshairPosition` 은 **구독을 다시 깨운다.** 그대로 두면 셋이 서로를 끝없이
+     * 깨운다 — 깃발을 들고 옮기는 동안의 호출은 무시한다.
+     */
+    let syncing = false;
+    const allCharts = (): { ch: IChartApi; ser: () => ISeriesApi<"Candlestick"> | ISeriesApi<"Line"> | ISeriesApi<"Histogram"> | null }[] => [
+      { ch: chart, ser: () => candleRef.current },
+      ...(volChartRef.current ? [{ ch: volChartRef.current, ser: () => volRef.current }] : []),
+      ...(rsiChartRef.current ? [{ ch: rsiChartRef.current, ser: () => rsiRef.current }] : []),
+    ];
+    const wireCrosshair = () => {
+      for (const { ch } of allCharts()) {
+        ch.subscribeCrosshairMove((param) => {
+          if (syncing) return;
+          syncing = true;
+          try {
+            for (const other of allCharts()) {
+              if (other.ch === ch) continue;
+              if (!param.time) {
+                other.ch.clearCrosshairPosition();
+                continue;
+              }
+              const ser = other.ser();
+              if (ser) other.ch.setCrosshairPosition(0, param.time, ser);
+            }
+          } finally {
+            syncing = false;
+          }
+        });
       }
-      for (const ch of panes()) {
-        const ser = ch === volChartRef.current ? volRef.current : rsiRef.current;
-        if (ser) ch.setCrosshairPosition(0, param.time, ser);
-      }
-    });
+    };
+
+    wireCrosshair();
 
     resizeRef.current = resize;
     lastWidthRef.current = el.clientWidth;

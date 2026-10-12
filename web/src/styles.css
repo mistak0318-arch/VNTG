@@ -1731,8 +1731,9 @@ body {
  * 같은 규칙이고, 같은 규칙이면 한 번만 배운다.
  */
 .chart-split {
-  height: 7px;
-  margin: -1px 0;
+  /* ⚠️ `CandleChart` 의 SPLIT_H 와 **같은 값**이어야 한다 — 어긋나면 그만큼 차트가 넘친다 */
+  height: 6px;
+  margin: 0;
   cursor: row-resize;
   position: relative;
   touch-action: none;
@@ -1740,7 +1741,7 @@ body {
 .chart-split::after {
   content: "";
   position: absolute;
-  left: 0; right: 0; top: 3px;
+  left: 0; right: 0; top: 2px;
   height: 1px;
   background: var(--border);
   transition: background 0.1s, height 0.1s;
