@@ -19770,13 +19770,22 @@ a.watch-btn { text-decoration: none; }
     font-size: 1.05rem;
   }
   /*
-   * **⋯ 가 왼쪽, ✕ 가 오른쪽** (2026-10-13 — 벤티지 지정).
-   * 닫기는 맨 끝 모서리가 제자리다 — 어느 화면에서나 거기 있고, 손이 그걸 먼저 배운다.
-   * 둘 다 `watch-btn` 이라 예전엔 order 가 ✕(1) → ⋯(2) 로 잡혀 뒤집혀 있었다.
+   * **⋯ 와 ✕ 는 맨 오른쪽 끝** (2026-10-13 — 벤티지: "태블릿에서는 미니 스파크가 맨
+   * 오른쪽으로 가버리네. 그 점점점이랑 X 표시가 맨 오른쪽이어야 되는데").
+   *
+   * 차례를 처음 잡을 때 작은 선(`.sd-spark-wrap`)을 맨 뒤(6)에 둬서, 폭이 넉넉한
+   * 태블릿에서는 세 칸이 한 줄에 다 들어가며 **단추가 가운데 끼고 선이 모서리를
+   * 차지**했다. 닫기는 어느 화면에서나 끝 모서리에 있어야 손이 그걸 먼저 배운다.
+   * 단추 둘을 맨 뒤로 보내고, 값·선을 그 앞에 세운다.
+   *
+   * ⚠️ `.sd-acts`(펼친 단추 줄)는 `flex: 1 1 100%` 라 **제 줄**을 쓰므로 반드시
+   * 맨 끝 차례(7)여야 한다. 단추를 그보다 뒤로 보내면 셋째 줄로 떨어진다.
+   * ⚠️ `.sd-more` 는 `watch-btn` 이기도 해서, 같은 굵기의 아래 규칙이 이기지 않도록
+   * 차례를 **뒤에** 적는다(앞에 적었더니 1 이 2 에 덮여 있었다).
    */
-  html[data-widestock="1"] .sheet-header .sd-more { order: 1; }
-  html[data-widestock="1"] .sheet-header .close-btn { order: 2; }
   html[data-widestock="1"] .sheet-header .watch-btn { order: 2; }
+  html[data-widestock="1"] .sheet-header .sd-more { order: 5; }
+  html[data-widestock="1"] .sheet-header .close-btn { order: 6; }
   /* (값의 자리는 이제 `.sd-prices` 가 정한다 — 낱개 규칙은 걷었다) */
   /*
    * **값과 등락폭은 한 몸, 다만 크지는 않게** (2026-10-13).
@@ -19913,7 +19922,18 @@ a.watch-btn { text-decoration: none; }
     position: sticky;
     bottom: 0;
     z-index: 3;
-    background: var(--panel);
+    /*
+     * **메뉴 줄에는 음영을 깐다** (2026-10-13 - 벤티지: "각 서브 메뉴들 있잖아 약간 색을
+     * 달리해서 음영을 좀 줄 수 있나? 지금 구분선이 없어가지고 좀 메뉴인지 본문인지 좀
+     * 구별이 좀 안 되는데").
+     *
+     * 두 줄 다 바탕이 `--panel` 이었다 - **시트 본문과 똑같은 색**이다. 1px 테두리 하나에
+     * 기대고 있었는데 밝은 테마에서는 그게 거의 안 보여서, 탭이 본문의 첫 줄처럼 읽혔다.
+     * 바탕을 글자색 쪽으로 한 뼘 당기고(테마가 무엇이든 따라온다) **본문 쪽으로만** 옅은
+     * 그림자를 깐다 - 선 하나 없이도 「여기까지가 손잡이」가 보인다.
+     */
+    background: color-mix(in srgb, var(--text) 7%, var(--panel));
+    box-shadow: 0 -6px 10px -8px rgba(0, 0, 0, 0.55);
     margin: 0 -12px;
     padding: 0 12px env(safe-area-inset-bottom, 0px);
     border-top: 1px solid var(--border);
@@ -19937,7 +19957,9 @@ a.watch-btn { text-decoration: none; }
     top: calc(var(--sd-head-h, 92px) - 8px);
     bottom: auto;
     z-index: 3;
-    background: var(--panel);
+    /* 아래 줄과 같은 음영 - 짝이니 같은 옷을 입어야 한 벌로 읽힌다 */
+    background: color-mix(in srgb, var(--text) 7%, var(--panel));
+    box-shadow: 0 6px 10px -8px rgba(0, 0, 0, 0.55);
     margin: 0 -12px;
     padding: 0 12px;
     border-top: 0;
@@ -19962,7 +19984,7 @@ a.watch-btn { text-decoration: none; }
  * 일이라, 폰 안에만 두면 PC 에서 켰을 때 접히지 않고 단추만 쏟아진다.
  */
 html[data-widestock="1"] .sd-acts {
-  order: 5;
+  order: 7;
   flex: 1 1 100%;
   display: flex;
   flex-wrap: wrap;
@@ -19995,7 +20017,7 @@ html[data-widestock="1"] .sd-prices .sheet-live { margin: 0; padding: 0; border:
 
 html[data-widestock="1"] .sd-spark-wrap {
   display: block;
-  order: 6;
+  order: 4;
   /*
    * ⚠️ **작게, 값 옆에** (2026-10-13 — 두 번 고쳤다).
    *
