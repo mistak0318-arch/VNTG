@@ -175,17 +175,28 @@ export function StockDetail({
     <div className="overlay" onClick={onClose}>
       <div className="sheet" ref={sheetRef} onClick={(e) => e.stopPropagation()}>
         <div className="sheet-header">
+          {/*
+            **감싸는 칸만 더한다** (2026-10-12 — 「넓게 보기」 2/4).
+            증권플러스는 배지를 이름 아래 한 줄로 모아 둔다. 그러려면 둘을 따로 잡을 수
+            있어야 하는데 여태 이름이 **맨 글자**라 CSS 로 집을 수가 없었다.
+            칸을 둘러 주기만 하고 차례·크기는 CSS 가 정한다 — 예전 모양에서는 이 칸들이
+            아무 일도 안 하므로 한 픽셀도 안 달라진다.
+          */}
           <h2>
-            {/* 코스피/코스닥 — 같은 +5% 라도 판이 다르다. 서버가 전종목 캐시에서 붙여 준다 */}
-            {info && String(info._market ?? "") && (
-              <span className={`mkt-badge ${String(info._market).includes("코스닥") ? "kq" : "ks"}`}>
-                {String(info._market).includes("코스닥") ? "코스닥" : "코스피"}
-              </span>
-            )}
-            <CreditChip credit={credit} />
-            {/* 상태 한 글자 — 배너까지 안 내려가도 이름 옆에서 「주의」가 보인다 (2026-09-10) */}
-            <StatusMark flags={flags} />
-            {name} ({code})
+            <span className="sd-badges">
+              {/* 코스피/코스닥 — 같은 +5% 라도 판이 다르다. 서버가 전종목 캐시에서 붙여 준다 */}
+              {info && String(info._market ?? "") && (
+                <span className={`mkt-badge ${String(info._market).includes("코스닥") ? "kq" : "ks"}`}>
+                  {String(info._market).includes("코스닥") ? "코스닥" : "코스피"}
+                </span>
+              )}
+              <CreditChip credit={credit} />
+              {/* 상태 한 글자 — 배너까지 안 내려가도 이름 옆에서 「주의」가 보인다 (2026-09-10) */}
+              <StatusMark flags={flags} />
+            </span>
+            <span className="sd-name">
+              {name} ({code})
+            </span>
           </h2>
           {/*
             헤더에 현재가 상시 — 값은 **새로 받는 게 아니다.** 위 `useLive`(1초)가 이미
