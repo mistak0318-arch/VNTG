@@ -411,7 +411,19 @@ function tradeKey(t: Time): number {
  * 기기마다 다르므로 **로컬에 둔다.** 글자 크기·테마와 같은 층이다 — 폰에서 넓게 둔 RSI 가
  * 모니터에서도 그래야 할 까닭이 없다. (칸 너비는 「무엇을 넓게 보나」라 서버였다.)
  */
-const PANE_KEY = "vntg.chartPanes";
+/*
+ * ⚠️ **px 가 아니라 비율로 저장한다** (2026-10-12 — 벤티지: "오늘 고친 거 때문에 지수
+ * 이런 게 표시가 이상해졌네").
+ *
+ * 처음엔 끈 높이를 px 로 적었다. 그런데 이 값은 **기기 하나에 한 벌**이고, 이 부품은
+ * 크기가 제각각인 자리에 쓰인다 — 전체화면에서 거래량을 190px 로 넓혀 두면 그 숫자가
+ * 지수 상세 시트의 작은 차트에도 그대로 가서, 작은 그릇에 큰 칸이 들어앉는다.
+ * 사람이 뜻한 것은 「190px」이 아니라 **「이만큼의 비중」**이었다.
+ *
+ * 열쇠 이름을 바꿔 옛 px 값은 그냥 버린다 — 고쳐 읽느니 기본값에서 다시 시작하는 쪽이
+ * 낫다. 한 번 더 끌면 그만이다.
+ */
+const PANE_KEY = "vntg.chartPaneRatio";
 function savedPanes(): { vol?: number; rsi?: number } {
   try {
     return JSON.parse(localStorage.getItem(PANE_KEY) ?? "{}") as { vol?: number; rsi?: number };
@@ -433,8 +445,9 @@ const SPLIT_H = 6;
 const paneHeights = (h: number, rsiOn: boolean) => {
   const saved = savedPanes();
   const clamp = (v: number, lo: number, hi: number) => Math.round(Math.min(hi, Math.max(lo, v)));
-  let vol = clamp(saved.vol ?? h * 0.2, 44, 220);
-  let rsi = rsiOn ? clamp(saved.rsi ?? h * 0.24, 52, 240) : 0;
+  /* 저장된 것은 **비중**이다 — 큰 화면에서 정한 비중이 작은 칸에서도 말이 되게 */
+  let vol = clamp(h * (saved.vol ?? 0.2), 44, 220);
+  let rsi = rsiOn ? clamp(h * (saved.rsi ?? 0.24), 52, 240) : 0;
   /*
    * ⚠️ **지표가 봉을 다 먹으면 안 된다** (2026-10-12 — 벤티지: "모바일 모드에서는 예전
    * 그대로인데 일부러 이렇게 해놓은 건가?").
@@ -648,7 +661,9 @@ export function CandleChart({
       const other = (which === "vol" ? rsiElRef.current : volElRef.current)?.clientHeight ?? 0;
       const room = heightRef.current - other - 120;
       const v = Math.min(Math.max(56, next), Math.max(56, room));
-      savePanes({ ...cur, [which]: v });
+      /* px 로 끌고 **비중으로 적는다** — 다른 크기의 차트도 같은 뜻으로 읽게 */
+      const total = heightRef.current || 1;
+      savePanes({ ...cur, [which]: Math.round((v / total) * 1000) / 1000 });
       resizeRef.current?.();
     };
     const up = () => {
