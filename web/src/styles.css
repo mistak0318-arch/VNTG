@@ -19784,6 +19784,12 @@ a.watch-btn { text-decoration: none; }
    * 차례를 **뒤에** 적는다(앞에 적었더니 1 이 2 에 덮여 있었다).
    */
   html[data-widestock="1"] .sheet-header .watch-btn { order: 2; }
+  /*
+   * ⚠️ **둘은 한 상자(`.sd-corner`) 안에 있다** (2026-10-13 고침). 차례만 맞췄더니
+   * 폰에서 둘 사이가 끊겨 ✕ 가 다음 줄로 떨어졌다 — 둘 다 `margin-left: auto` 라
+   * 각자 남은 자리를 다 가져갔기 때문이다. 상자 하나가 오른쪽 끝을 맡고,
+   * 아래 차례는 **그 상자 안에서** ⋯ 왼쪽 · ✕ 오른쪽을 정한다.
+   */
   html[data-widestock="1"] .sheet-header .sd-more { order: 5; }
   html[data-widestock="1"] .sheet-header .close-btn { order: 6; }
   /* (값의 자리는 이제 `.sd-prices` 가 정한다 — 낱개 규칙은 걷었다) */
@@ -19868,7 +19874,12 @@ a.watch-btn { text-decoration: none; }
     background: color-mix(in srgb, var(--text) 8%, transparent);
   }
   /* ⋯ 와 ✕ 는 늘 첫 줄 오른쪽 — 가격 줄로 흘러내리면 숫자와 뒤섞인다 */
-  html[data-widestock="1"] .sheet-header .sd-more { margin-left: auto; }
+  /*
+   * 오른쪽 끝을 맡는 것은 이제 **상자**다. 단추 하나하나에 `margin-left: auto` 를 달면
+   * 둘이 서로 남은 자리를 뺏어 줄이 갈라진다(폰에서 겪었다).
+   */
+  html[data-widestock="1"] .sheet-header .sd-more,
+  html[data-widestock="1"] .sheet-header .close-btn { margin-left: 0; }
 
   html[data-widestock="1"] .sd-more.on { background: color-mix(in srgb, var(--text) 10%, transparent); }
 
@@ -19975,6 +19986,23 @@ a.watch-btn { text-decoration: none; }
  * 필요 없어 걷었는데, 여기서는 꼭 필요하다 — 단추들이 머리줄의 직계로 서야 예전 배치가
  * 그대로다.) 넓게 보기에서만 진짜 상자가 되어 제 줄을 쓴다.
  */
+/*
+ * **⋯ 와 ✕ 를 묶은 모서리 칸** (2026-10-13).
+ *
+ * 평소 모양에서는 투명하다(`display: contents`) — 상자는 없고 단추만 머리줄의 직계로
+ * 서므로 예전 배치가 한 픽셀도 안 달라진다. 넓게 보기에서만 진짜 상자가 되어
+ * **오른쪽 끝을 통째로** 맡는다. 「둘은 늘 붙어 다닌다」는 차례(order)로는 못 적는다.
+ */
+.sd-corner { display: contents; }
+html[data-widestock="1"] .sd-corner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  order: 5;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
 .sd-acts { display: contents; }
 /*
  * 넓게 보기에서는 진짜 상자가 되어 **제 줄**을 쓴다. 이름 옆에 끼우면 다시 두 줄이 되고

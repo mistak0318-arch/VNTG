@@ -359,16 +359,6 @@ export function StockDetail({
             여섯을 늘 펼쳐 두느라 이름과 가격이 자리를 잃는 쪽이 훨씬 비싸다.
             뒤로가기가 이미 닫기 노릇을 하지만 ✕ 는 남긴다 — 폰이 아닌 데서는 그 길이 없다.
           */}
-          {wide && (
-            <button
-              className={`watch-btn sd-more${moreOpen ? " on" : ""}`}
-              onClick={() => setMoreOpen((v) => !v)}
-              title={moreOpen ? "접기" : "관심·주문·보드·새로고침·설정"}
-              aria-expanded={moreOpen}
-            >
-              ⋯
-            </button>
-          )}
           <div className={`sd-acts${wide && !moreOpen ? " folded" : ""}`}>
           <button
             className={`watch-btn${watched ? " on" : ""}`}
@@ -456,9 +446,31 @@ export function StockDetail({
               <IntradaySpark chart={minuteChart} basePrice={basePrice} />
             </span>
           )}
-          <button className="close-btn" onClick={onClose}>
-            ✕
-          </button>
+          {/*
+            **⋯ 와 ✕ 는 한 덩어리다** (2026-10-13 — 벤티지: "파일은 점점점이랑 x가 저기
+            세로로 되어 있는데 저거 맞아?").
+
+            차례(order)만 맞춰 놓았더니 폰에서 **둘 사이가 끊겼다.** 둘 다
+            `margin-left: auto` 를 달고 있어서 각자 남은 자리를 다 가져갔고, 그러면
+            뒤의 ✕ 는 설 자리가 없어 다음 줄로 떨어진다. 줄바꿈 flex 에서 「이 둘은
+            늘 붙어 다닌다」는 차례로는 못 적는다 — **한 상자에 넣어야** 적힌다.
+            상자 하나가 오른쪽 끝을 맡고, 그 안에서 ⋯ 왼쪽 ✕ 오른쪽이다.
+          */}
+          <span className="sd-corner">
+            {wide && (
+              <button
+                className={`watch-btn sd-more${moreOpen ? " on" : ""}`}
+                onClick={() => setMoreOpen((v) => !v)}
+                title={moreOpen ? "접기" : "관심·주문·보드·새로고침·설정"}
+                aria-expanded={moreOpen}
+              >
+                ⋯
+              </button>
+            )}
+            <button className="close-btn" onClick={onClose}>
+              ✕
+            </button>
+          </span>
           {/*
             ⚠️ 당일 흐름을 여기(가격 옆)에 올렸다가 **걷었다** (2026-10-12).
             `IntradayFlow` 는 제목·VWAP 줄까지 있는 한 장짜리 카드라, 머리줄에 맞추려고
