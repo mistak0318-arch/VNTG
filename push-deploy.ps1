@@ -47,8 +47,13 @@ $hash = (git rev-parse --short HEAD).Trim()
 if ($NoDeploy) { "deploy  skipped"; exit 0 }
 
 $t0 = Get-Date
-New-Item "$drop\deploy.flag" -ItemType File -Force | Out-Null
-"flag    " + $t0.ToString("HH:mm:ss")
+# 깃발에 **해시를 적는다** (2026-10-13). 10/10 에 대조 장치를 되살리면서 감시자와
+# deploy.cmd 만 고쳤는데, 깃발을 떨구는 이 줄은 `-ItemType File` 로 **빈 파일**을
+# 만들고 있었다. 그래서 deploy.want 가 늘 비었고 판정은 매번 `NOWANT` 였다 —
+# 「내 코드가 올라갔나」에 답하기로 한 장치가 세 번째 조각에서 또 끊겨 있었던 셈이다.
+# ASCII 로 쓴다: cmd 의 `set /p` 는 BOM 을 해시의 일부로 읽는다.
+Set-Content "$drop\deploy.flag" -Value $hash -Encoding ascii -Force
+"flag    " + $t0.ToString("HH:mm:ss") + "  " + $hash
 
 $deadline = $t0.AddSeconds($TimeoutSec)
 while ((Get-Date) -lt $deadline) {
