@@ -369,16 +369,12 @@ export function StockDetail({
             ✕
           </button>
           {/*
-            **당일 흐름을 가격 옆으로** (2026-10-12 — 벤티지: "상단에 그럼 당일 흐름 추세를
-            옆에 크기에 맞춰서 보여줘 볼까? 증권 플러스처럼").
-            아래에 있던 것을 올린 것이지 새로 그리는 것이 아니다 — 같은 부품이고, 아래에서는
-            빠진다. 두 벌로 그리면 조회도 두 번이고 언젠가 둘이 다른 말을 한다.
+            ⚠️ 당일 흐름을 여기(가격 옆)에 올렸다가 **걷었다** (2026-10-12).
+            `IntradayFlow` 는 제목·VWAP 줄까지 있는 한 장짜리 카드라, 머리줄에 맞추려고
+            72px 로 자르니 글자 줄만 남고 그림은 안 보였다 — 자리에 안 맞는 부품을 억지로
+            밀어 넣은 것이다. 머리줄에 쓸 작은 선은 **그 용도로 따로** 그려야 한다.
+            그때까지는 종합 탭의 제자리에 둔다.
           */}
-          {wide && basePrice > 0 && (
-            <div className="sd-head-flow">
-              <IntradayFlow code={code} basePrice={basePrice} />
-            </div>
-          )}
         </div>
 
         {error && <div className="error-banner">{error}</div>}
@@ -424,11 +420,21 @@ export function StockDetail({
           </div>
         )}
         <div className={`sheet-body${info ? " sd-ready" : " sd-wait"}`}>
-          <div className="sd-blk" style={{ order: cards.orderOf("price") }}>
-            {/* 상태 배너 + 예탁원 이벤트 — 개별종목분석·보드·종목발굴과 같은 컴포넌트 (2026-09-10) */}
-            <StockStatusBanner code={code} />
-            <PriceHeader info={info} code={code} onLastSession={setLastSession} />
-          </div>
+          {/*
+            **넓게 보기에서는 가격 덩이도 탭 안으로** (2026-10-12).
+
+            앞 커밋에서 기준선·요약만 옮기고 **제일 큰 덩이를 안 옮겼다.** 가격 카드는
+            종가·시가·고가·저가·정규장종가·애프터·회전율·거래대금·시총까지 든 한 화면짜리라,
+            그것이 탭 위에 남아 있으면 구조를 바꾼 뜻이 없다 — 여전히 탭까지 한참 내려야 한다.
+            머리줄에 이미 현재가가 크게 있으므로 위에 또 둘 까닭도 없다.
+          */}
+          {!wide && (
+            <div className="sd-blk" style={{ order: cards.orderOf("price") }}>
+              {/* 상태 배너 + 예탁원 이벤트 — 개별종목분석·보드·종목발굴과 같은 컴포넌트 (2026-09-10) */}
+              <StockStatusBanner code={code} />
+              <PriceHeader info={info} code={code} onLastSession={setLastSession} />
+            </div>
+          )}
           {/*
             값이 있어야 그린다 — 기준가가 0 이면 등락률 축이 안 선다.
             **넓게 보기에서는 머리줄로 올라간다**(가격 옆) — 아래에 또 그리면 두 벌이 된다.
@@ -480,6 +486,9 @@ export function StockDetail({
               summaryTop={
                 wide ? (
                   <>
+                    <StockStatusBanner code={code} />
+                    <PriceHeader info={info} code={code} onLastSession={setLastSession} />
+                    {basePrice > 0 && <IntradayFlow code={code} basePrice={basePrice} />}
                     <IntradayLevelsBar code={code} />
                     {late && <InvestorEstimate code={code} />}
                     <StockSummaryPanel code={code} onSelectStock={onSelectStock} />

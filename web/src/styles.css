@@ -19785,22 +19785,7 @@ a.watch-btn { text-decoration: none; }
   html[data-widestock="1"] .sheet-header h2 { flex: 1 1 150px; }
   html[data-widestock="1"] .sheet-header .watch-btn { width: 30px; height: 30px; font-size: 0.95rem; }
 
-  /*
-   * ── 당일 흐름을 가격 옆에 (벤티지 요청) ──
-   * 가격과 그림이 **한 줄**이라야 「얼마」와 「어떻게 와서 얼마」가 한 눈에 든다.
-   * 좁으면 그림이 아래로 내려간다 — 숫자를 밀어내면서까지 그릴 그림은 아니다.
-   */
-  html[data-widestock="1"] .sd-head-flow {
-    order: 4;
-    flex: 1 1 180px;
-    min-width: 0;
-    /* 머리줄에서는 **모양만** 본다 — 눈금·설명은 아래 탭에서 제대로 본다 */
-    max-height: 72px;
-    overflow: hidden;
-  }
-  html[data-widestock="1"] .sd-head-flow .empty,
-  html[data-widestock="1"] .sd-head-flow .table-note,
-  html[data-widestock="1"] .sd-head-flow h4 { display: none; }
+  /* (당일 흐름을 머리줄에 넣던 규칙은 걷었다 — 자리에 안 맞는 부품을 자르니 글자 줄만 남았다) */
 
   /*
    * ── 탭 줄을 머리줄 바로 아래 붙박이로 (4/4) ──
