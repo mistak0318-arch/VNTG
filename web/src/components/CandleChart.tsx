@@ -2025,7 +2025,19 @@ export function CandleChart({
   useEffect(() => {
     const el = containerRef.current;
     if (!chartRef.current || !el) return;
-    chartRef.current.applyOptions({ width: el.clientWidth, height });
+    /*
+     * ⚠️ **여기서 봉 차트에 전체 높이를 주면 안 된다** (2026-10-12 — 벤티지: "폰에서
+     * 크게 보기 할 때 이렇게 된다 밑에가 잘려").
+     *
+     * 예전엔 차트가 하나뿐이라 「전체 높이 = 봉 차트 높이」였고 이 줄이 맞았다. 칸이
+     * 생기면서 그 둘이 달라졌는데 이 길만 옛 셈으로 남아, 봉 차트가 전체 높이를 다
+     * 가져가고 아래 칸이 밖으로 밀렸다. **높이가 바뀔 때만 지나는 길**이라 전체화면을
+     * 켜고 끄는 자리에서만 드러났다 — 평소 화면에서는 안 보였다.
+     *
+     * 높이를 나누는 셈은 `resize` 한 곳에만 둔다. 같은 셈을 두 군데 적으면 오늘처럼
+     * 한쪽만 고쳐지는 날이 온다 — 이미 그 날이었다.
+     */
+    resizeRef.current?.();
 
     /*
      * 폭이 0 이면 아무것도 안 그려진다 — **까만 화면이 된다.**
@@ -2034,8 +2046,7 @@ export function CandleChart({
      * 타이머를 쓴다 — ResizeObserver 나 rAF 는 그리지 않는 탭에서 굶는다(겪었다).
      */
     const t = window.setTimeout(() => {
-      const w = containerRef.current?.clientWidth ?? 0;
-      if (w > 0) chartRef.current?.applyOptions({ width: w, height });
+      if ((containerRef.current?.clientWidth ?? 0) > 0) resizeRef.current?.();
     }, 80);
     return () => clearTimeout(t);
   }, [height, sizeTick]);
