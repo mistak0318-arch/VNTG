@@ -19860,7 +19860,12 @@ a.watch-btn { text-decoration: none; }
     display: flex;
     flex-direction: column;
   }
-  html[data-widestock="1"] .sheet .detail-tabs {
+  /*
+   * ⚠️ 붙박이를 거는 것은 `.detail-tabs` 가 아니라 **`.tabscroll`** 이다 (2026-10-13 고침).
+   * `TabScroller` 가 탭 줄을 한 겹 더 감싸므로, 안쪽에 `order` 를 주면 바깥 상자는
+   * 그대로 제자리에 남는다 — 그래서 아래로 내렸는데도 탭이 위에 있었다.
+   */
+  html[data-widestock="1"] .stock-tabs > .tabscroll {
     order: 2;
     position: sticky;
     bottom: 0;
@@ -19869,8 +19874,8 @@ a.watch-btn { text-decoration: none; }
     margin: 0 -12px -14px;
     padding: 4px 12px calc(4px + env(safe-area-inset-bottom, 0px));
     border-top: 1px solid var(--border);
-    border-bottom: 0;
   }
+  html[data-widestock="1"] .sheet .detail-tabs { border-bottom: 0; }
   /* 머리줄이 탭 줄 위에 와야 겹칠 때 안 가린다 */
   html[data-widestock="1"] .sheet-header { z-index: 4; }
 }
