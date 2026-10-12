@@ -77,18 +77,65 @@ function fmtHm(hhmm: string): string {
  * 당일 분봉을 라인+영역으로. 전일종가를 점선 기준선으로 깔아서
  * 그 위/아래 어디에 있었는지 한눈에 보이게 한다.
  */
-export function IntradayFlow({ code, basePrice }: { code: string; basePrice: number }) {
+/**
+ * **머리줄용 작은 선** (2026-10-12) — 같은 분봉으로 선만 그린다.
+ *
+ * 제목·VWAP·눈금은 없다. 머리줄에서는 「어떻게 와서 지금 얼마인가」의 **모양**만 보면 되고,
+ * 숫자는 바로 옆에 이미 크게 있다. 자리에 안 맞는 부품을 잘라 쓰려다 글자 줄만 남은 적이
+ * 있어(10/12) 그 용도로 새로 그린다.
+ *
+ * ⚠️ 데이터는 **받아서 쓴다.** 제가 또 불러오면 같은 분봉을 한 종목에 두 번 받는다 —
+ * 그림 하나 더 그리자고 조회를 늘리지 않는다.
+ */
+export function IntradaySpark({ chart, basePrice }: { chart: RawRecord | null; basePrice: number }) {
+  const points = todayPoints(chart);
+  if (points.length < 2) return null;
+  const prices = points.map((p) => p.price);
+  const base = basePrice > 0 ? basePrice : prices[0];
+  const last = prices[prices.length - 1];
+  const top = Math.max(...prices, base);
+  const bottom = Math.min(...prices, base);
+  const range = top - bottom || 1;
+  const W = 100;
+  const H = 30;
+  const line = points
+    .map((p, i) => `${((i / (points.length - 1)) * W).toFixed(2)},${(H - ((p.price - bottom) / range) * H).toFixed(2)}`)
+    .join(" ");
+  const up = last >= base;
+  return (
+    <svg className="sd-spark" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="당일 흐름">
+      {/* 기준선(전일 종가) — 이 선 위냐 아래냐가 당일 흐름의 전부다 */}
+      <line x1="0" x2={W} y1={H - ((base - bottom) / range) * H} y2={H - ((base - bottom) / range) * H} className="sd-spark-base" />
+      <polyline points={line} className={`sd-spark-line ${up ? "up" : "down"}`} />
+    </svg>
+  );
+}
+
+export function IntradayFlow({
+  code,
+  basePrice,
+  chart: given,
+}: {
+  code: string;
+  basePrice: number;
+  /** 바깥이 이미 들고 있으면 그것을 쓴다 — 같은 분봉을 두 번 받지 않으려고 (2026-10-12) */
+  chart?: RawRecord | null;
+}) {
   /*
    * 3분봉이라 장중에는 계속 새 봉이 붙는다. 30초마다 조용히 갱신한다 —
    * 5초로 잡아봐야 3분봉은 그대로라 호출만 늘어난다.
    * _AL(통합)로 요청해야 NXT 프리마켓(08:00~)·애프터마켓(~20:00)까지 들어온다.
    */
   const bare = code.replace(/_(AL|NX)$/, "");
-  const { data: chart, loading, error } = useLive<RawRecord>(
-    () => api.minuteChart(`${bare}_AL`, "3") as Promise<RawRecord>,
-    [bare],
+  /* 바깥이 주면 안 부른다 — 훅은 조건부로 못 부르므로 키를 비워 쉬게 한다 */
+  const live = useLive<RawRecord>(
+    () => (given !== undefined ? Promise.resolve(given as RawRecord) : (api.minuteChart(`${bare}_AL`, "3") as Promise<RawRecord>)),
+    [bare, given],
     30_000,
   );
+  const chart = given !== undefined ? given : live.data;
+  const loading = given !== undefined ? false : live.loading;
+  const error = given !== undefined ? null : live.error;
 
   if (loading && !chart) return <div className="empty">당일 흐름 불러오는 중...</div>;
   if (error && !chart) return <div className="error-banner">{error}</div>;

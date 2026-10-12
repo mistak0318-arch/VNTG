@@ -5,7 +5,7 @@ import { StatusMark, StockStatusBanner, useStockStatus } from "./StockStatusBann
 import { InvestorEstimate } from "./InvestorEstimate";
 import { WatchAddSheet, type WatchAddTarget } from "./WatchAddSheet";
 import { IntradayLevelsBar } from "./IntradayLevelsBar";
-import { IntradayFlow } from "./IntradayPanels";
+import { IntradayFlow, IntradaySpark } from "./IntradayPanels";
 import { PriceHeader } from "./PriceHeader";
 import type { LastSession } from "./PeriodReturns";
 import { krPhase } from "../marketSession";
@@ -114,6 +114,22 @@ export function StockDetail({
   const [watchBusy, setWatchBusy] = useState(false);
   /** 머리줄 단추 펼침 — 넓게 보기에서만 쓴다 (2026-10-12) */
   const [moreOpen, setMoreOpen] = useState(false);
+  /*
+   * 넓게 보기에서 탭을 **여기서** 들고 있는다 (2026-10-12).
+   * 아래 고정 줄과 위 탭 줄이 같은 탭을 가리키므로 하나만 들어야 한다.
+   */
+  const [tab, setTab] = useState("chart");
+  /*
+   * 당일 분봉을 **여기서 한 번** 받는다 (2026-10-12) — 머리줄의 작은 선과 종합 탭의 큰
+   * 그림이 같은 값을 쓴다. 따로 받으면 한 종목에 같은 분봉을 두 번 받고, 둘이 30초씩
+   * 어긋나며 다른 모양을 그린다. 넓게 보기가 아닐 때는 안 받는다.
+   */
+  const bareCode = code.replace(/_(AL|NX)$/, "");
+  const { data: minuteChart } = useLive<RawRecord>(
+    () => (wide ? (api.minuteChart(`${bareCode}_AL`, "3") as Promise<RawRecord>) : Promise.resolve(null as unknown as RawRecord)),
+    [bareCode, wide],
+    30_000,
+  );
   /** 마지막 거래일 일봉 한 줄 — 새벽(키움이 날짜를 넘긴 뒤) 머리가 어제 값을 쓰려고 (2026-09-15) */
   const [lastSession, setLastSession] = useState<LastSession | null>(null);
   const [addTarget, setAddTarget] = useState<WatchAddTarget | null>(null);
@@ -388,6 +404,11 @@ export function StockDetail({
           >
             ⚙
           </button>
+          {wide && basePrice > 0 && minuteChart && (
+            <span className="sd-spark-wrap">
+              <IntradaySpark chart={minuteChart} basePrice={basePrice} />
+            </span>
+          )}
           {wide && onOpenAnalysis && (
             <button
               className="watch-btn"
@@ -410,6 +431,37 @@ export function StockDetail({
           */}
         </div>
 
+        {/*
+          **아래 빠른 줄** (2026-10-12 — 증권플러스의 바닥 줄에서).
+
+          증권플러스의 바닥 줄이 값진 까닭은 메뉴가 하나 더 있어서가 아니라 **엄지에 닿는
+          자리**에 있어서다. 폰에서 위쪽 탭 줄은 한 손으로 못 누른다 — 화면이 길어질수록
+          더 그렇다. 그래서 같은 탭을 가리키는 지름길을 아래에 둔다. 새 메뉴가 아니다,
+          **같은 탭의 다른 손잡이**다. 그래서 위 탭 줄과 늘 같은 것을 가리킨다.
+
+          다섯만 둔다. 우리 탭은 열이 넘지만 아래 줄까지 열이 되면 그것도 못 누른다 —
+          자주 쓰는 것만. 나머지는 위 탭 줄에 그대로 있다.
+        */}
+        {wide && (
+          <div className="sd-quick">
+            {[
+              { k: "chart", label: "종합" },
+              { k: "orderbook", label: "호가" },
+              { k: "broker", label: "거래원" },
+              { k: "investor", label: "수급" },
+              { k: "notes", label: "메모" },
+            ].map((q) => (
+              <button
+                key={q.k}
+                type="button"
+                className={tab === q.k ? "on" : ""}
+                onClick={() => setTab(q.k)}
+              >
+                {q.label}
+              </button>
+            ))}
+          </div>
+        )}
         {error && <div className="error-banner">{error}</div>}
 
         {/* 톱니바퀴를 누르면 여기서 바로 차례를 고친다 — 설정 화면까지 갈 일이 아니다 */}
@@ -522,12 +574,14 @@ export function StockDetail({
               name={name}
               info={info}
               onSelectStock={onSelectStock}
+              tab={wide ? tab : undefined}
+              onTabChange={wide ? setTab : undefined}
               summaryTop={
                 wide ? (
                   <>
                     <StockStatusBanner code={code} />
                     <PriceHeader info={info} code={code} onLastSession={setLastSession} />
-                    {basePrice > 0 && <IntradayFlow code={code} basePrice={basePrice} />}
+                    {basePrice > 0 && <IntradayFlow code={code} basePrice={basePrice} chart={minuteChart ?? null} />}
                     <IntradayLevelsBar code={code} />
                     {late && <InvestorEstimate code={code} />}
                     <StockSummaryPanel code={code} onSelectStock={onSelectStock} />

@@ -133,6 +133,8 @@ export function StockTabsSection({
   onSelectStock,
   reloadKey = 0,
   summaryTop,
+  tab: tabFromParent,
+  onTabChange,
 }: {
   code: string;
   name: string;
@@ -148,10 +150,24 @@ export function StockTabsSection({
    * 안 주면 아무 일도 안 일어난다. 예전 모양은 그대로다.
    */
   summaryTop?: React.ReactNode;
+  /**
+   * 바깥에서 탭을 들고 있을 때 (2026-10-12 — 아래 빠른 줄).
+   *
+   * 평소에는 이 부품이 제 탭을 들고 있다. 넓게 보기에서는 **아래 고정 줄**이 같은 탭을
+   * 가리키므로, 둘이 따로 들고 있으면 한쪽을 눌러도 다른 쪽이 모른다 — 하나만 들어야 한다.
+   * 안 넘기면 예전 그대로다.
+   */
+  tab?: string;
+  onTabChange?: (k: string) => void;
   /** 새로고침 버튼을 누르면 올린다 — 패널들이 통째로 다시 마운트된다 */
   reloadKey?: number;
 }) {
-  const [tab, setTab] = useState<StockTab>("chart");
+  const [ownTab, setOwnTab] = useState<StockTab>("chart");
+  const tab = (tabFromParent as StockTab | undefined) ?? ownTab;
+  const setTab = (k: StockTab) => {
+    if (onTabChange) onTabChange(k);
+    else setOwnTab(k);
+  };
   const [editTabs, setEditTabs] = useState(false);
   const [investorChart, setInvestorChart] = useState<RawRecord | null>(null);
   const [daily, setDaily] = useState<RawRecord | null>(null);
