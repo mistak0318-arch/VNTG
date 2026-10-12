@@ -3,7 +3,7 @@ import { analyzeEtfs } from "../etfAnalysis.js";
 import { analyzeHoldings } from "../etfHoldingsScore.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { buildEtfHolders, etfHoldersOf } from "../etfHolders.js";
-import { etfFlow, etfSentiment } from "../etfFlow.js";
+import { etfFlow, etfFlowAll, etfSentiment } from "../etfFlow.js";
 
 /**
  * ETF 메뉴 (2026-08-27 — "퇴직연금에서 ETF도 투자하거든").
@@ -260,6 +260,19 @@ export function createEtfRouter(client: KiwoomClient): Router {
   router.get("/flow", async (req, res, next) => {
     try {
       res.json(await etfFlow(client, { fresh: req.query.fresh === "1" }));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /*
+   * 전체 보기 (2026-10-12) — 거래대금 상위 200. 아는 일봉으로 바로 그리고 나머지는
+   * 뒤에서 채운다. `pending` 이 아직 채우는 수.
+   */
+  router.get("/flow-all", async (req, res, next) => {
+    try {
+      const n = Number(req.query.limit);
+      res.json(await etfFlowAll(client, Number.isFinite(n) && n > 0 && n <= 400 ? n : undefined));
     } catch (err) {
       next(err);
     }

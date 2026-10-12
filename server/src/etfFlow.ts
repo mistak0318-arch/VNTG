@@ -87,6 +87,38 @@ const PICKS: Pick[] = [
 const NOT_PLAIN = /레버리지|인버스|2X|곱|커버드콜|혼합|채권혼합|월배당/;
 
 /**
+ * **이름에서 테마 뼈대를 뽑는다** (2026-10-12 — 벤티지: "대표 200개로 하면 안 되나.
+ * 아니면 개수 제한을 꼭 둬야 하는 건가?").
+ *
+ * 개수 제한은 비용 때문이 아니었다. 위 `PICKS` 가 **손으로 적은 서른 줄**이라, 거기 없는
+ * 테마는 ETF 가 있어도 영영 화면에 안 나왔다 — 초전도체·우주항공 같은 것들이 그렇다.
+ * 「30여 개」는 기술적 한계가 아니라 **내가 적다 만 목록의 길이**였다.
+ *
+ * 그래서 목록은 그대로 두고 **자동 발견을 얹는다.** 손으로 적은 것을 지우지 않는 까닭은,
+ * 거기 담긴 것이 이름 규칙이 아니라 **분류**(지수인가 자산인가)와 **부르는 이름**이기
+ * 때문이다. 자동으로는 「KODEX 200」이 지수인지 테마인지 알 길이 없다.
+ *
+ * 뽑는 법: 첫 낱말(운용사)을 떼고, 흔한 꼬리말을 걷어낸 나머지를 테마로 본다.
+ *   `TIGER 반도체TOP10` → `반도체` · `KODEX 2차전지산업` → `2차전지`
+ * 완벽하지 않다 — 「바이오헬스케어」와 「바이오」는 안 묶인다. 그래도 **없는 것보다 낫고**,
+ * 틀리면 한 줄이 둘로 보일 뿐이라 값을 왜곡하지는 않는다.
+ */
+const TAIL = /(TOP\s?\d+|플러스|액티브|산업|테마|코어|그룹|지수|밸류체인|소부장|포커스|셀렉트|프리미어|Plus|Active)+$/i;
+function coreName(name: string): string {
+  const afterBrand = name.replace(/^\S+\s+/, "");
+  return afterBrand
+    .replace(/\(.*?\)/g, "")
+    .replace(/\s+/g, "")
+    .replace(TAIL, "")
+    .trim();
+}
+
+/** 자동으로 얹을 줄 수 — 거래대금 큰 것부터. 표가 읽히는 길이를 넘기면 줄만 늘고 신호는 안 는다 */
+const AUTO_MAX = 24;
+/** 이만큼도 안 도는 ETF 는 「돈이 몰린다」를 말할 거리가 못 된다 (억원) */
+const AUTO_MIN_VALUE = 20;
+
+/**
  * 대표 고르기 — 거래대금 제일 큰 것. **장 전엔 오늘 거래대금이 전부 0** 이라 동률이 나서 엉뚱한 게 뽑혔다
  * (9/17 07시: 반도체 → IBK K-AI반도체코어테크). 그래서 오늘·어제 중 큰 쪽으로 잰다 — 어제는 일봉 캐시(c×v).
  */
@@ -180,6 +212,44 @@ function valueStats(bars: DayBar[]): { volRatio: number | null; value5: number |
   return { volRatio: prev20 > 0 ? Math.round((last5 / prev20) * 100) / 100 : null, value5: Math.round(last5 / 1e8) };
 }
 
+/**
+ * 한 줄 만들기 — 손으로 적은 대표와 자동으로 찾은 것이 **같은 셈**을 쓰게 한다.
+ * 두 벌로 적으면 언젠가 한쪽만 고쳐져서 같은 표 안에서 다른 말을 하게 된다.
+ */
+async function makeRow(
+  client: KiwoomClient,
+  r: EtfListRow,
+  label: string,
+  group: EtfFlowGroup,
+  asOf: "오늘" | "어제",
+): Promise<EtfFlowRow> {
+  let bars: DayBar[] = [];
+  try {
+    bars = await barsOf(client, r.code);
+  } catch {
+    /* 못 받으면 오늘 값만 — null 은 「모른다」 */
+  }
+  const cs = bars.map((b) => b.c);
+  if (marketOpened() && bars.length > 0 && bars[bars.length - 1].d !== kstDay() && r.price > 0) cs.push(r.price);
+  const last = cs.length > 0 ? cs[cs.length - 1] : r.price;
+  const { volRatio, value5 } = valueStats(bars);
+  const sb = settled(bars);
+  const yday = sb.length >= 2 ? ratePct(sb[sb.length - 1].c, sb[sb.length - 2].c) : null;
+  return {
+    code: r.code,
+    name: r.name,
+    label,
+    group,
+    price: r.price,
+    d1: asOf === "오늘" ? r.changeRate : yday,
+    d5: cs.length >= 6 ? ratePct(last, cs[cs.length - 6]) : null,
+    d20: cs.length >= 21 ? ratePct(last, cs[cs.length - 21]) : null,
+    volRatio,
+    value5,
+    todayValue: r.tradeValue,
+  };
+}
+
 /* ── ① 자금흐름 ── */
 let flowCache: { at: number; rows: EtfFlowRow[] } | null = null;
 let flowJob: Promise<{ at: number; rows: EtfFlowRow[] }> | null = null;
@@ -209,31 +279,32 @@ export async function etfFlow(client: KiwoomClient, opts: { fresh?: boolean } = 
       if (!r) continue;
       used.add(r.code);
       picked[p.label] = r.code;
-      let bars: DayBar[] = [];
-      try {
-        bars = await barsOf(client, r.code);
-      } catch {
-        /* 못 받으면 오늘 값만 — null 은 「모른다」 */
-      }
-      const cs = bars.map((b) => b.c);
-      if (marketOpened() && bars.length > 0 && bars[bars.length - 1].d !== kstDay() && r.price > 0) cs.push(r.price);
-      const last = cs.length > 0 ? cs[cs.length - 1] : r.price;
-      const { volRatio, value5 } = valueStats(bars);
-      const settledBars = settled(bars);
-      const yday = settledBars.length >= 2 ? ratePct(settledBars[settledBars.length - 1].c, settledBars[settledBars.length - 2].c) : null;
-      rows.push({
-        code: r.code,
-        name: r.name,
-        label: p.label,
-        group: p.group,
-        price: r.price,
-        d1: asOf === "오늘" ? r.changeRate : yday,
-        d5: cs.length >= 6 ? ratePct(last, cs[cs.length - 6]) : null,
-        d20: cs.length >= 21 ? ratePct(last, cs[cs.length - 21]) : null,
-        volRatio,
-        value5,
-        todayValue: r.tradeValue,
-      });
+      rows.push(await makeRow(client, r, p.label, p.group, asOf));
+    }
+
+    /*
+     * **손으로 안 적은 테마를 얹는다** (2026-10-12). 위 `PICKS` 가 안 집은 ETF 중에서
+     * 이름의 뼈대(`coreName`)로 묶고, 묶음마다 거래대금 제일 큰 것 하나씩.
+     * 이미 나온 뼈대는 건너뛴다 — 「반도체」가 두 줄이 되면 안 된다.
+     */
+    const seenCore = new Set(rows.map((r) => coreName(r.name)));
+    const restByCore = new Map<string, EtfListRow>();
+    for (const r of all) {
+      if (used.has(r.code) || NOT_PLAIN.test(r.name)) continue;
+      const core = coreName(r.name);
+      if (!core || core.length < 2 || seenCore.has(core)) continue;
+      const size = Math.max(r.tradeValue, lastValue(r.code));
+      if (size < AUTO_MIN_VALUE) continue;
+      const had = restByCore.get(core);
+      if (!had || Math.max(had.tradeValue, lastValue(had.code)) < size) restByCore.set(core, r);
+    }
+    const autos = [...restByCore.entries()]
+      .sort((a, b) => Math.max(b[1].tradeValue, lastValue(b[1].code)) - Math.max(a[1].tradeValue, lastValue(a[1].code)))
+      .slice(0, AUTO_MAX);
+    for (const [core, r] of autos) {
+      used.add(r.code);
+      /* 분류는 자동으로 못 가린다 — 지수·자산은 손으로 적은 쪽이 맡고, 나머지는 테마로 본다 */
+      rows.push(await makeRow(client, r, core, "테마·업종", asOf));
     }
     /* 장중 거래대금으로 고른 것만 남긴다 — 장 전의 동률 추첨을 저장하면 그게 다음 날 「어제」가 된다 */
     if (asOf === "오늘" && rows.some((r) => r.todayValue > 0)) await savePicks(picked);
@@ -243,6 +314,106 @@ export async function etfFlow(client: KiwoomClient, opts: { fresh?: boolean } = 
     flowJob = null;
   });
   return { ...(await flowJob), note: NOTE, asOf };
+}
+
+/* ── ①-2 전체 보기 ── */
+
+/**
+ * **거래대금 상위 전부** (2026-10-12 — 벤티지: "대표 200개로 하면 안 되나").
+ *
+ * 대표 보기는 테마마다 한 줄이라 **같은 테마의 다른 ETF 가 더 세게 움직여도 안 보인다.**
+ * 그걸 보려면 그냥 늘어놓고 정렬해 보는 길이 있어야 한다.
+ *
+ * ## 요청 안에서 200번을 받지 않는다
+ *
+ * 배수를 내려면 ETF 하나에 일봉 25일이 필요한데, 일봉 원장은 **보통주만** 담겨 있어
+ * ETF 는 대개 조회로 받아야 한다. 200개를 요청 안에서 받으면 52초를 붙잡는다 —
+ * 10/09 에 체결강도로 똑같은 실수를 했고 화면 전체가 같이 멈췄다.
+ *
+ * 그래서 **아는 것부터 그려 주고 모르는 것은 뒤에서 채운다.** 받아 둔 것은 그날 안에
+ * 다시 안 받으므로, 한 번 열어 두면 그 뒤로는 바로 뜬다. 화면에는 「몇 개 채우는 중」을
+ * 같이 준다 — 비어 있는 칸을 설명 없이 두면 고장으로 읽힌다.
+ *
+ * 레버리지·인버스·커버드콜은 **전체 보기에서도 뺀다.** 거래대금으로 줄 세우면 그것들이
+ * 앞자리를 다 차지하는데, 이 화면이 묻는 것은 「돈이 어느 테마로」이지 「어느 방향으로」가
+ * 아니다. 방향 베팅은 레버리지·인버스 심리 쪽이 따로 답한다.
+ */
+export const ETF_ALL_LIMIT = 200;
+
+/** 이미 들고 있는 일봉만 — 없으면 null 을 내고 **받으러 가지 않는다** */
+function knownBars(code: string, ledger: Record<string, DayBar[]>): DayBar[] | null {
+  const c = ledger[code];
+  if (c && c.length >= 30) return c;
+  const hit = fetched.get(code);
+  return hit && hit.day === kstDay() ? hit.bars : null;
+}
+
+let fillJob: Promise<void> | null = null;
+async function fillBars(client: KiwoomClient, codes: string[]): Promise<void> {
+  if (fillJob) return;
+  fillJob = (async () => {
+    for (const code of codes) {
+      await barsOf(client, code).catch(() => []);
+    }
+  })().finally(() => {
+    fillJob = null;
+  });
+}
+
+export async function etfFlowAll(
+  client: KiwoomClient,
+  limit = ETF_ALL_LIMIT,
+): Promise<{ rows: EtfFlowRow[]; pending: number; note: string; asOf: "오늘" | "어제" }> {
+  const asOf: "오늘" | "어제" = marketOpened() ? "오늘" : "어제";
+  const all = await etfAll(client);
+  const ledger = (await loadCloses()).bars ?? {};
+  const lastValue = (code: string): number => {
+    const b = ledger[code];
+    const x = b && b.length > 0 ? b[b.length - 1] : null;
+    return x ? Math.round((x.c * x.v) / 1e8) : 0;
+  };
+  const size = (r: EtfListRow) => Math.max(r.tradeValue, lastValue(r.code));
+  const top = all
+    .filter((r) => !NOT_PLAIN.test(r.name))
+    .sort((a, b) => size(b) - size(a))
+    .slice(0, limit);
+
+  const rows: EtfFlowRow[] = [];
+  const missing: string[] = [];
+  for (const r of top) {
+    const bars = knownBars(r.code, ledger);
+    if (!bars) missing.push(r.code);
+    const b = bars ?? [];
+    const cs = b.map((x) => x.c);
+    /* 장중이면 오늘 값을 끝에 얹는다 — 일봉은 어제까지라 5·20일이 하루 묵는다 */
+    if (marketOpened() && b.length > 0 && b[b.length - 1].d !== kstDay() && r.price > 0) cs.push(r.price);
+    const last = cs.length > 0 ? cs[cs.length - 1] : r.price;
+    const { volRatio, value5 } = valueStats(b);
+    const sb = settled(b);
+    const yday = sb.length >= 2 ? ratePct(sb[sb.length - 1].c, sb[sb.length - 2].c) : null;
+    rows.push({
+      code: r.code,
+      name: r.name,
+      label: coreName(r.name) || r.name,
+      group: "테마·업종",
+      price: r.price,
+      d1: asOf === "오늘" ? r.changeRate : yday,
+      d5: cs.length >= 6 ? ratePct(last, cs[cs.length - 6]) : null,
+      d20: cs.length >= 21 ? ratePct(last, cs[cs.length - 21]) : null,
+      volRatio,
+      value5,
+      todayValue: r.tradeValue,
+    });
+  }
+  if (missing.length > 0) void fillBars(client, missing);
+  return {
+    rows,
+    pending: missing.length,
+    asOf,
+    note:
+      `거래대금 상위 ${limit}개(레버리지·인버스·커버드콜 제외). 배수는 어제까지의 일봉으로, ` +
+      "아직 안 받은 ETF 는 배수 칸이 빕니다 — 뒤에서 채우는 중이라 잠시 뒤 다시 보면 들어옵니다.",
+  };
 }
 
 /* ── ② 레버리지·인버스 심리 ── */

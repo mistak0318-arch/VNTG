@@ -56,6 +56,7 @@ import { etfRowOf, etfTaxInfo } from "./etf.js";
 import { futuresFlow } from "../naverFuturesFlow.js";
 import { intradayFlow, type FlowMarket } from "../naverIntradayFlow.js";
 import { strengthDay } from "../strengthDay.js";
+import { themeFlow } from "../themeFlow.js";
 
 const MRKCOND_RESOURCE = "/api/dostk/mrkcond";
 const CHART_RESOURCE = "/api/dostk/chart";
@@ -1158,6 +1159,18 @@ export function createMarketRouter(client: KiwoomClient): Router {
         ? (want as (typeof TREND_DAYS)[number])
         : 5;
       res.json(await themeTrend(market, days));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /*
+   * 테마 자금흐름 (2026-10-12) — ETF 자금흐름의 테마 판. 같은 잣대로 나란히 본다.
+   * 전부 파일에서 읽어 조회 0회. 미국은 일봉 원장에 없어 안 받는다.
+   */
+  router.get("/theme-flow/:market", async (req, res, next) => {
+    try {
+      res.json(await themeFlow(req.params.market === "etf" ? "etf" : "kr"));
     } catch (err) {
       next(err);
     }

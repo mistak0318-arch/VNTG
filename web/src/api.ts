@@ -853,6 +853,14 @@ export const api = {
   /* ETF 분석 묶음 (2026-09-17, etfFlow.ts) — 일봉 캐시라 조회는 거의 0. fresh 는 카드 ↻(30초 지난 캐시만 버림) */
   /** 국내 ETF 자금흐름 — 대표 ETF 30여 개의 1·5·20일 등락과 거래대금 배수 */
   etfFlow: (fresh = false) => getJson<{ at: number; rows: EtfFlowRow[]; note: string; asOf: "오늘" | "어제" }>(`/api/etf/flow${fresh ? "?fresh=1" : ""}`),
+  /* 전체 보기 — 거래대금 상위 N. pending 은 아직 일봉을 못 받아 배수가 빈 수 */
+  etfFlowAll: (limit?: number) =>
+    getJson<{ rows: EtfFlowRow[]; pending: number; note: string; asOf: "오늘" | "어제" }>(
+      `/api/etf/flow-all${limit ? `?limit=${limit}` : ""}`,
+    ),
+  /* 테마 자금흐름 — ETF 와 같은 잣대의 네이버 테마 판. 조회 0회 */
+  themeFlow: (market: "kr" | "etf" = "kr") =>
+    getJson<{ at: string; rows: ThemeFlowRow[]; note: string }>(`/api/market/theme-flow/${market}`),
   /** 레버리지·인버스 심리 — 인버스(+곱버스) ÷ 레버리지 거래대금, 20일 */
   etfSentiment: (fresh = false) => getJson<{ at: number; sides: EtfSentimentSide[]; note: string }>(`/api/etf/sentiment${fresh ? "?fresh=1" : ""}`),
   /** 이 종목을 담은 ETF — 서버 역인덱스(파일)를 읽는다. 조회 0회 */
@@ -2772,6 +2780,23 @@ export interface EtfFlowRow {
   /** 오늘 거래대금(억) */
   todayValue: number;
 }
+/* ── 테마 자금흐름 (2026-10-12) — server/src/themeFlow.ts 의 모양 그대로 ── */
+export interface ThemeFlowRow {
+  key: string;
+  name: string;
+  members: number;
+  measured: number;
+  leadCode: string | null;
+  leadName: string | null;
+  d1: number | null;
+  d5: number | null;
+  d20: number | null;
+  /** 최근 5일 평균 거래대금 ÷ 그 앞 20일 — 1.5 면 돈이 몰리는 중 */
+  volRatio: number | null;
+  value5: number | null;
+  todayValue: number;
+}
+
 export interface EtfSentimentDay {
   d: string;
   lev: number;
