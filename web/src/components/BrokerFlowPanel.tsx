@@ -380,6 +380,8 @@ export function BrokerFlowPanel({ code }: { code: string }) {
             <i>아직 오늘 장이 시작되지 않았습니다</i>
           </div>
         )}
+        {/* 지난 장을 보여 주는 중이면 0 줄은 안 그린다 — 같은 자리에 둘이 서면 어느 쪽이 참인지 모른다 */}
+        {!data.prev && (
         <button
           type="button"
           className={`bf-fx-sum${picked === "__fx" ? " on" : ""}`}
@@ -395,7 +397,8 @@ export function BrokerFlowPanel({ code }: { code: string }) {
           </b>
           <i className="bf-fx-unit">주</i>
         </button>
-        {program !== null && (
+        )}
+        {!data.prev && program !== null && (
           <button
             type="button"
             className={`bf-fx-sum${picked === "__prog" ? " on" : ""}`}

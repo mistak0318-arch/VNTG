@@ -345,14 +345,26 @@ export function ProgramFlowBars({ code }: { code: string }) {
 
   const values = rows.map((r) => num(r.prm_netprps_amt));
   const maxAbs = Math.max(...values.map(Math.abs), 1);
-  const today = values[values.length - 1];
+  /*
+   * **오늘이 0 이면 지난 장을 적는다** (2026-10-13 — 벤티지: "아직도 0인데 얘네는").
+   *
+   * 새벽·장 전에는 키움이 이미 새 날이라 오늘 줄이 0 으로 온다. 그걸 「오늘 0」이라 적으면
+   * 「프로그램이 오늘 아무것도 안 샀다」는 **사실처럼 보이는 거짓말**이 된다 —
+   * 실제로는 아직 오늘이 시작되지 않았다. 값이 들어오면 저절로 오늘로 돌아간다.
+   */
+  const lastIdx = values.length - 1;
+  const stale = values[lastIdx] === 0 && values.length >= 2;
+  const shownIdx = stale ? lastIdx - 1 : lastIdx;
+  const today = values[shownIdx];
+  const shownDt = String(rows[shownIdx]?.dt ?? "");
+  const whenLabel = stale ? `${shownDt.slice(4, 6)}/${shownDt.slice(6, 8)}` : "오늘";
 
   return (
     <div className="progflow">
       <div className="intraday-head">
         <span className="intraday-title">프로그램 순매수 (최근 {rows.length}일)</span>
         <span className={`intraday-rate ${signOf(today)}`}>
-          오늘 {today > 0 ? "+" : ""}
+          {whenLabel} {today > 0 ? "+" : ""}
           {fmtNum(today)}
         </span>
       </div>

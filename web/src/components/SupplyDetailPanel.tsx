@@ -215,8 +215,15 @@ export function VolumeFlowChart({ code }: { code: string }) {
     if (avg20[i] !== null) avgLine.push({ time, value: avg20[i] as number });
     price.push({ time, value: Math.abs(num(asc[i].cur_prc)) });
   }
-  const todayV = vol[last - 1] ?? 0;
-  const a20 = avg20[last - 1];
+  /*
+   * **오늘이 0 이면 지난 장으로 잰다** (2026-10-13 — 벤티지: "아직도 0인데 얘네는").
+   * 장 전에는 오늘 거래량이 0 이라 「20일 평균의 0.0배」가 된다 — 거래가 말라붙었다는
+   * 뜻으로 읽히지만 실제로는 아직 시작을 안 한 것이다. 값이 들어오면 저절로 오늘로 돌아간다.
+   */
+  const staleVol = (vol[last - 1] ?? 0) === 0 && last >= 2;
+  const atIdx = staleVol ? last - 2 : last - 1;
+  const todayV = vol[atIdx] ?? 0;
+  const a20 = avg20[atIdx];
   const ratio = a20 ? todayV / a20 : null;
   return (
     <>
@@ -224,7 +231,8 @@ export function VolumeFlowChart({ code }: { code: string }) {
         거래량 흐름
         {ratio !== null && (
           <span className={`pt-n ${ratio >= 1.5 ? "positive" : ratio < 0.7 ? "negative" : ""}`} style={{ marginLeft: 8, fontWeight: 400, fontSize: "0.8rem" }}>
-            {unit === "week" ? "이번 주 = 20주" : "오늘 = 20일"} 평균의 <b>{ratio.toFixed(1)}배</b>
+            {unit === "week" ? "이번 주 = 20주" : staleVol ? "지난 장 = 20일" : "오늘 = 20일"} 평균의{" "}
+            <b>{ratio.toFixed(1)}배</b>
           </span>
         )}
         <span className="filter-row" style={{ display: "inline-flex", marginLeft: 10, gap: 4, flexWrap: "wrap" }}>

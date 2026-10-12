@@ -20009,6 +20009,26 @@ html[data-widestock="1"] .sd-spark-wrap {
 /* (아래 빠른 줄은 걷었다 — 탭 줄 자체를 아래로 내려 손잡이를 하나로 했다. 2026-10-13) */
 
 /*
+ * 장 전의 「지난 장」 줄 (2026-10-13) — 한 줄에 흘려 놓으니 글자가 서로 붙고 시각과 겹쳤다.
+ * 칸을 나눠 세운다. 기울임도 걷는다 — 기울임은 「인용」의 표시지 「옛 값」의 표시가 아니다.
+ */
+.bf-prev {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 4px 0 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  font-size: 0.84rem;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+.bf-prev em { font-style: normal; font-weight: 700; color: var(--muted); }
+.bf-prev i { font-style: normal; color: var(--muted); font-size: 0.78rem; flex: 1 1 100%; }
+
+/*
  * 평소 모양에서는 이 칸들이 아무 일도 안 한다 — `<span>` 은 본디 인라인이라 글자가
  * 흐르던 그대로다. (`display: contents` 를 썼다가 걷었다. 할 일이 없는데 수를 쓰면
  * 나중에 그 수가 무슨 뜻이었는지 아무도 모른다.)
