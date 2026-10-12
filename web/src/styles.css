@@ -19725,8 +19725,13 @@ a.watch-btn { text-decoration: none; }
    * 탭을 반으로 가를 때 스스로 했으면서 여백에는 안 적용했다.
    * 누를 자리는 세로(위아래 8px)가 지키고, 가로는 글자만큼만 둔다. 줄 사이 여백도 좁힌다.
    */
+  /*
+   * 두 줄이 차지하는 **세로**도 줄인다 — 위아래가 얇을수록 가운데(본문)가 길어진다.
+   * 누를 자리는 6px+글자높이면 손가락에 넉넉하다(44px 권고는 아이콘 단추 이야기고,
+   * 글자 탭은 글자 자체가 과녁이다).
+   */
   html[data-widestock="1"] .sheet .detail-tab {
-    padding: 8px 8px;
+    padding: 6px 8px;
     font-size: 0.88rem;
   }
   html[data-widestock="1"] .sheet .detail-tabs {
@@ -19897,7 +19902,7 @@ a.watch-btn { text-decoration: none; }
     z-index: 3;
     background: var(--panel);
     margin: 0 -12px;
-    padding: 4px 12px calc(4px + env(safe-area-inset-bottom, 0px));
+    padding: 0 12px env(safe-area-inset-bottom, 0px);
     border-top: 1px solid var(--border);
   }
   html[data-widestock="1"] .sheet .detail-tabs { border-bottom: 0; }
@@ -19909,13 +19914,19 @@ a.watch-btn { text-decoration: none; }
   html[data-widestock="1"] .stock-tabs > .tabscroll:has(.dt-top) {
     order: 0;
     position: sticky;
-    /* 머리줄 **아래**에 — 높이는 재서 알려 준다(종목마다 배지 줄 수가 달라 못 박을 수 없다) */
-    top: var(--sd-head-h, 92px);
+    /*
+     * 머리줄 **아래**에 — 높이는 재서 알려 준다(종목마다 배지 줄 수가 달라 못 박을 수 없다).
+     *
+     * ⚠️ 머리줄은 `top: -8px` 로 **8px 끌어올려** 붙어 있다(시트 여백만큼). 잰 높이를
+     * 그대로 쓰면 탭 줄이 8px 낮게 서고, 그 틈으로 본문이 비친다 — 벤티지가 빨간 동그라미로
+     * 짚은 그 자리다. 끌어올린 만큼 빼 준다.
+     */
+    top: calc(var(--sd-head-h, 92px) - 8px);
     bottom: auto;
     z-index: 3;
     background: var(--panel);
     margin: 0 -12px;
-    padding: 2px 12px;
+    padding: 0 12px;
     border-top: 0;
     border-bottom: 1px solid var(--border);
   }
