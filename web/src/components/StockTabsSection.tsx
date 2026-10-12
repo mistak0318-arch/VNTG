@@ -135,6 +135,7 @@ export function StockTabsSection({
   summaryTop,
   tab: tabFromParent,
   onTabChange,
+  splitTabs = false,
 }: {
   code: string;
   name: string;
@@ -159,6 +160,8 @@ export function StockTabsSection({
    */
   tab?: string;
   onTabChange?: (k: string) => void;
+  /** 탭 줄을 위·아래 두 줄로 나눠 그릴까 — 「넓게 보기」에서만 (2026-10-13) */
+  splitTabs?: boolean;
   /** 새로고침 버튼을 누르면 올린다 — 패널들이 통째로 다시 마운트된다 */
   reloadKey?: number;
 }) {
@@ -265,47 +268,70 @@ export function StockTabsSection({
   const basePrice = Math.abs(Number(info?.base_pric)) || 0;
   const curPrice = Math.abs(Number(info?.cur_prc)) || undefined;
 
+  /*
+   * **탭 단추 한 개를 만드는 법** — 한 군데로 모은다 (2026-10-13).
+   * 넓게 보기에서 탭 줄을 위·아래로 나눠 그리는데, 단추 markup 을 두 벌 적으면
+   * 끌어 옮기기·순서 고치기가 한쪽만 고쳐지는 날이 온다.
+   */
+  const tabBtn = (t: { key: StockTab; label: string }) => (
+        <button
+          key={t.key}
+          className={`detail-tab${tab === t.key ? " active" : ""}${tabOrder.drag.cls(t.key)}`}
+          style={{ order: tabOrder.orderOf(t.key) }}
+          onClick={() => setTab(t.key)}
+          {...tabOrder.drag.props(t.key)}
+        >
+          {t.label}
+          {editTabs && (
+            <>
+              <span
+                className="dt-move"
+                role="button"
+                title="앞으로"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  tabOrder.move(t.key, -1);
+                }}
+              >
+                ◀
+              </span>
+              <span
+                className="dt-move"
+                role="button"
+                title="뒤로"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  tabOrder.move(t.key, 1);
+                }}
+              >
+                ▶
+              </span>
+            </>
+          )}
+        </button>
+  );
+
+
   return (
     /* Fragment 였다 — 스와이프 핸들러를 얹으려면 실제 요소가 필요하다 */
     <div {...swipe} className={`stock-tabs ${swipe.className ?? ""}`}>
+      {/*
+        **탭 줄을 위·아래로 나눈다** (2026-10-13 — 벤티지: "메뉴 위치도 반반 나눠서
+        위아래로 한다는 거 아니었어? 지금은 아래만 있잖아").
+
+        증권플러스도 위 탭 줄과 아래 바가 둘 다 있다. 열넷을 한 줄에 밀어 넣으면 뒤쪽
+        절반은 밀어야 나오는데, 밀어야 나오는 것은 **없는 것과 비슷하다.**
+        앞 절반은 위에, 뒤 절반은 아래에 둔다. 아래 것은 엄지에 닿고 위 것은 눈에 먼저
+        든다 — 어느 쪽도 밀지 않아도 보인다.
+        나누지 않을 때(예전 모양)는 위 줄에 전부 담아 그대로다.
+      */}
+      {splitTabs && (
+        <TabScroller className="detail-tabs dt-top" activeKey={tab}>
+          {visibleTabs.slice(0, Math.ceil(visibleTabs.length / 2)).map(tabBtn)}
+        </TabScroller>
+      )}
       <TabScroller className="detail-tabs" activeKey={tab}>
-        {visibleTabs.map((t) => (
-          <button
-            key={t.key}
-            className={`detail-tab${tab === t.key ? " active" : ""}${tabOrder.drag.cls(t.key)}`}
-            style={{ order: tabOrder.orderOf(t.key) }}
-            onClick={() => setTab(t.key)}
-            {...tabOrder.drag.props(t.key)}
-          >
-            {t.label}
-            {editTabs && (
-              <>
-                <span
-                  className="dt-move"
-                  role="button"
-                  title="앞으로"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    tabOrder.move(t.key, -1);
-                  }}
-                >
-                  ◀
-                </span>
-                <span
-                  className="dt-move"
-                  role="button"
-                  title="뒤로"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    tabOrder.move(t.key, 1);
-                  }}
-                >
-                  ▶
-                </span>
-              </>
-            )}
-          </button>
-        ))}
+        {(splitTabs ? visibleTabs.slice(Math.ceil(visibleTabs.length / 2)) : visibleTabs).map(tabBtn)}
         {/*
           ETF 정보 — ETF 일 때만. order 를 종합과 같게 주면 flex 동점 규칙(DOM 순서)으로
           종합 바로 옆에 선다. 저장되는 순서 배열에는 안 끼운다 — 종목 따라 있다 없다 하는

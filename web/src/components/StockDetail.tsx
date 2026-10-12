@@ -229,6 +229,16 @@ export function StockDetail({
             헤더에 현재가 상시 — 값은 **새로 받는 게 아니다.** 위 `useLive`(1초)가 이미
             들고 있는 `info` 를 sticky 헤더에도 그릴 뿐이다.
           */}
+          {/*
+            **값 둘을 한 칸으로 묶는다** (2026-10-13 — 벤티지: "오히려 더 이상해졌어
+            정규장 글씨가 너무 크잖아 스파크 영역도 그대로고").
+
+            머리줄이 줄바꿈 flex 라 정규장·장외·선이 저마다 자리를 찾아 흘렀다. 그래서
+            선을 넓혀도 남는 자리가 들쭉날쭉했고, 값과 선이 같은 줄에 설지도 종목마다
+            달랐다. 값 둘을 한 칸에 묶으면 **왼쪽은 값, 오른쪽은 선** 두 칸으로 못 박힌다.
+            평소 모양에서는 이 칸이 투명해 예전 그대로다.
+          */}
+          <div className="sd-prices">
           {info && Math.abs(Number(info.cur_prc)) > 0 && (() => {
             /*
              * **정규장과 장외를 나눠 적는다** (2026-09-14 — 벤티지: "종목상세에 정규장 종가 애프터장 종가를 구분해서
@@ -319,6 +329,7 @@ export function StockDetail({
               </>
             );
           })()}
+          </div>
           {/*
             **단추는 ⋯ 뒤로** (2026-10-12 — 벤티지: "뒤로가기는 이미 먹히니깐 펼치기
             이런 메뉴 같은 거 만들어서 접었다 폈다? 이러면 칸 두 칸 정도밖에 안 먹지 않을까
@@ -563,6 +574,7 @@ export function StockDetail({
               onSelectStock={onSelectStock}
               tab={wide ? tab : undefined}
               onTabChange={wide ? setTab : undefined}
+              splitTabs={wide}
               summaryTop={
                 wide ? (
                   <>
