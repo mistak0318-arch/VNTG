@@ -430,6 +430,33 @@ export default function App() {
    * 위장이라 동그란 메뉴 버튼까지 감추지만, 읽기 모드는 그냥 읽기 좋은 테마다.
    */
   const reading = appearance.theme === "reading";
+  /*
+   * **종목상세 넓게 보기** (2026-10-12 — 벤티지: "모바일은 여전히 답답한데 모바일에서는
+   * 증권플러스 화면이랑 비슷하게 구성해서 보여주는 옵션 주면 안 되나").
+   *
+   * 폰에서 시트는 이미 화면 폭을 다 쓴다 — 그러니 폭을 넓힌 1단계가 폰에는 아무 도움이
+   * 안 됐다. 폰의 답답함은 **구조**다. 바닥에서 올라온 상자가 화면 아래 92%만 덮고,
+   * 위쪽은 가려진 본 화면이 비치고, 모서리는 둥글고, 그 안에 칸을 전부 세로로 쌓는다.
+   * 증권플러스는 **전체 화면 한 장**이고 탭으로 하나씩 보여 준다.
+   *
+   * 끄고 켤 수 있게 둔다 — 모양 취향은 사람마다 다르고, 무엇보다 **되돌릴 길이 있어야**
+   * 새 모양을 마음 놓고 써 본다. 기기마다 다른 값이라 로컬이다(글자 크기와 같은 층).
+   */
+  const [wideStock, setWideStock] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("vntg.wideStock") === "1";
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    document.documentElement.setAttribute("data-widestock", wideStock ? "1" : "0");
+    try {
+      localStorage.setItem("vntg.wideStock", wideStock ? "1" : "0");
+    } catch {
+      /* 사생활 보호 창 — 이번 세션에만 적용되고 만다 */
+    }
+  }, [wideStock]);
   const disguised = excel || note;
   /* 창들을 한 프로그램처럼 묶는다 — 꺼져 있으면 아무 일도 안 한다 */
   const focus = useStockFocus();
@@ -1298,6 +1325,19 @@ export default function App() {
             >
               <span className="nav-icon">📡</span>
               <span className="nav-label">{focus.on ? "종목 연동 켜짐" : "종목 연동"}</span>
+            </button>
+            {/*
+              종목상세 넓게 보기 (2026-10-12) — 폰에서 종목 화면을 전체 화면 한 장으로.
+              여기 두는 까닭은 읽기·엑셀과 같다: 보다가 답답해서 바꾸는 것이라
+              설정 화면까지 들어갔다 오면 그 순간에 안 쓰게 된다.
+            */}
+            <button
+              className="nav-item foot-btn"
+              onClick={() => setWideStock((v) => !v)}
+              title={wideStock ? "종목상세를 예전 모양(바닥 시트)으로" : "종목상세를 전체 화면 한 장으로 — 폰에서 넓게 봅니다"}
+            >
+              <span className="nav-icon">🔳</span>
+              <span className="nav-label">{wideStock ? "종목상세 넓게 끄기" : "종목상세 넓게"}</span>
             </button>
             {/*
               읽기 모드도 **여기서 바로** (2026-10-07). 벤티지: "설정에서 읽기모드도 여기에
