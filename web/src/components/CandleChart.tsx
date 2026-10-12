@@ -582,6 +582,8 @@ export function CandleChart({
   /** 두 번째 점 미리보기용 커서 좌표 */
   const previewRef = useRef<{ x: number; y: number } | null>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
+  /** RSI 지금 값 — 범례에 적는다. 축에 적으면 남의 눈금 위에 앉는다 (2026-10-12) */
+  const [rsiNow, setRsiNow] = useState<number | null>(null);
   /** 그린 수평선 핸들 — 차트가 다시 만들어지면 버려진다 */
   const drawHRef = useRef<IPriceLine[]>([]);
   /**
@@ -1057,7 +1059,15 @@ export function CandleChart({
         color: prefs.rsiColor,
         lineWidth: 1,
         priceLineVisible: false,
-        lastValueVisible: true,
+        /*
+         * ⚠️ **값표도 끈다** (2026-10-12 — 벤티지: "RSI 오른쪽에 점수 표시가 이상한데?").
+         *
+         * 바로 아래 70·30 선은 「숨겨진 축이라 가격 축에 엉뚱하게 찍힌다」며 라벨을 껐는데
+         * 현재값만 켜 둬서 **똑같은 일이 한 줄 건너 일어났다** — RSI 23.65 가 수급 눈금
+         * (…·0·-40,000·-80,000) 옆에 붙어, 그 축의 값인 것처럼 보였다.
+         * 숨긴 축의 라벨은 어디에 찍히든 거짓말이 된다. 값은 아래 범례로 옮긴다.
+         */
+        lastValueVisible: false,
         autoscaleInfoProvider: () => ({ priceRange: { minValue: 0, maxValue: 100 } }),
       });
       rsiSeries.priceScale().applyOptions({ scaleMargins: band.rsi, visible: false });
@@ -1784,6 +1794,8 @@ export function CandleChart({
     if (prefs.rsiOn && rsiRef.current) {
       const r = rsi(candles, prefs.rsiPeriod);
       rsiRef.current.setData(r);
+      /* 범례에 적을 지금 값 — 축에서 뺀 것을 여기서 되돌려 준다 */
+      setRsiNow(r.length > 0 ? r[r.length - 1].value : null);
       /*
        * 시그널선은 **RSI 를 다시 평균 낸 것**이다 — 종가가 아니라 RSI 값을 평균 낸다.
        * 여기서 종가를 평균 내면 그냥 이평선이 하나 더 생길 뿐이다.
@@ -1999,6 +2011,18 @@ export function CandleChart({
             MA{m.period}
           </span>
         ))}
+        {prefs.rsiOn && rsiNow !== null && (
+          <span
+            className="legend-item"
+            title={`RSI(${prefs.rsiPeriod}) — ${prefs.rsiHigh} 위는 과매수, ${prefs.rsiLow} 아래는 과매도`}
+          >
+            <i style={{ background: prefs.rsiColor }} />
+            RSI{" "}
+            <b className={rsiNow >= prefs.rsiHigh ? "positive" : rsiNow <= prefs.rsiLow ? "negative" : ""}>
+              {rsiNow.toFixed(1)}
+            </b>
+          </span>
+        )}
         {/* 자물쇠 — 잠그면 휠·드래그에 차트가 안 움직인다. 십자선·클릭 정보는 그대로 */}
         <button
           className={`chart-lock${locked ? " on" : ""}`}
