@@ -390,11 +390,50 @@ function tradeKey(t: Time): number {
 }
 
 /**
- * 아래 칸 높이(px). 띠로 나누던 때의 비율(거래량 26%·RSI 20%)을 320px 기준으로 옮긴 값이라
- * 눈에 익은 크기가 그대로다. 칸은 차트 **밖**이라 봉 차트 높이에서 이만큼 뺀다 (2026-10-12).
+ * 아래 칸 높이 — **차트 높이에 비례**하되 바닥과 천장을 둔다 (2026-10-12).
+ *
+ * 처음엔 84·64px 로 못 박았다. 벤티지: "줄이 안 맞네 RSI" — RSI 는 0~100 을 늘 통째로
+ * 보여 주는 지표라 64px 에 넣으면 **눈금 넷(100·70·41·30)이 서로 겹친다.** 거래량은
+ * 자동 범위라 좁아도 읽히지만 RSI 는 그렇지 않다. 같은 높이를 줄 값이 아니었다.
+ *
+ * 비례로 두는 까닭은 이 부품이 **보드의 작은 카드부터 전체화면까지** 쓰이기 때문이다.
+ * 고정값은 한쪽에 맞추면 다른 쪽이 깨진다 — 작은 카드에서는 봉이 사라지고 큰 화면에서는
+ * 지표가 실처럼 눌린다. 바닥(72·88)은 눈금이 안 겹치는 선이고, 천장은 지표가 봉보다
+ * 커지지 않게 막는 선이다.
  */
-const VOL_H = 84;
-const RSI_H = 64;
+/**
+ * **사이 줄을 끌어 칸 크기를 바꾼다** (2026-10-12 — 벤티지: "각 사이사이 있잖아.
+ * 그 선을 마우스로 드래그해서 크기 좀 조정할 수 있게 해줄 수 있어?").
+ *
+ * 비례 기본값은 내가 짐작한 값이다. 어느 지표를 크게 볼지는 **그날 무엇을 보느냐**에 달렸고
+ * 코드가 정해 줄 수 있는 값이 아니다 — 칸 너비를 사람이 정하게 한 것과 같은 까닭이다.
+ *
+ * 기기마다 다르므로 **로컬에 둔다.** 글자 크기·테마와 같은 층이다 — 폰에서 넓게 둔 RSI 가
+ * 모니터에서도 그래야 할 까닭이 없다. (칸 너비는 「무엇을 넓게 보나」라 서버였다.)
+ */
+const PANE_KEY = "vntg.chartPanes";
+function savedPanes(): { vol?: number; rsi?: number } {
+  try {
+    return JSON.parse(localStorage.getItem(PANE_KEY) ?? "{}") as { vol?: number; rsi?: number };
+  } catch {
+    return {};
+  }
+}
+function savePanes(v: { vol?: number; rsi?: number }): void {
+  try {
+    localStorage.setItem(PANE_KEY, JSON.stringify(v));
+  } catch {
+    /* 사생활 보호 창에서는 못 쓴다 — 이번 화면에만 적용되고 만다 */
+  }
+}
+
+const paneHeights = (h: number, rsiOn: boolean) => {
+  const saved = savedPanes();
+  /* 끌어 둔 값이 있으면 그것 — 없으면 비례. 바닥·천장은 둘 다에 건다 */
+  const vol = Math.round(Math.min(220, Math.max(56, saved.vol ?? Math.min(120, Math.max(72, h * 0.2)))));
+  const rsi = rsiOn ? Math.round(Math.min(240, Math.max(64, saved.rsi ?? Math.min(140, Math.max(88, h * 0.24))))) : 0;
+  return { vol, rsi };
+};
 
 export function CandleChart({
   candles,
@@ -551,6 +590,44 @@ export function CandleChart({
    * ⚠️ 시간 눈금은 **봉 차트에만** 둔다. 키움도 그렇다(날짜가 봉 밑, 거래량 위).
    * 세 칸에 다 넣으면 같은 날짜를 세 번 읽게 되고 세로를 그만큼 잃는다.
    */
+  /*
+   * 사이 줄 끌기 — 끈 만큼 그 칸을 키우고, 남는 몫은 봉 차트가 가져간다.
+   * 전체 높이는 안 변한다. 손을 떼면 저장한다 — 1px 마다 저장하면 한 번 끌 때 수백 번이다.
+   */
+  const dragPane = (e: React.PointerEvent, which: "vol" | "rsi") => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const cur = savedPanes();
+    const el0 = which === "vol" ? volElRef.current : rsiElRef.current;
+    const base = el0?.clientHeight ?? 0;
+    const move = (ev: PointerEvent) => {
+      /* 아래로 끌면 칸이 **커진다** — 줄이 그 칸의 위쪽 모서리라 그 방향이 손과 맞는다 */
+      const next = Math.round(base + (ev.clientY - startY));
+      /* 봉 차트가 120px 밑으로 내려가지 않게 — 지표를 키우려다 봉을 잃으면 안 된다 */
+      const other = (which === "vol" ? rsiElRef.current : volElRef.current)?.clientHeight ?? 0;
+      const room = heightRef.current - other - 120;
+      const v = Math.min(Math.max(56, next), Math.max(56, room));
+      savePanes({ ...cur, [which]: v });
+      resizeRef.current?.();
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      document.body.classList.remove("col-resizing");
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+    document.body.classList.add("col-resizing");
+  };
+  /** 두 번 누르면 기본값 — 끌다 망가뜨렸을 때 돌아올 자리가 있어야 한다 */
+  const resetPane = (which: "vol" | "rsi") => {
+    const cur = savedPanes();
+    delete cur[which];
+    savePanes(cur);
+    resizeRef.current?.();
+  };
   const volElRef = useRef<HTMLDivElement>(null);
   const rsiElRef = useRef<HTMLDivElement>(null);
   const volChartRef = useRef<IChartApi | null>(null);
@@ -1100,7 +1177,8 @@ export function CandleChart({
       return ch;
     };
 
-    const volChart = paneChart(volElRef.current!, VOL_H);
+    const ph = paneHeights(heightRef.current, prefs.rsiOn);
+    const volChart = paneChart(volElRef.current!, ph.vol);
     volChartRef.current = volChart;
     const volumeSeries = volChart.addHistogramSeries({
       priceFormat: { type: "volume" },
@@ -1118,7 +1196,7 @@ export function CandleChart({
      * 지표인데 30·70 의 자리가 날마다 달라지면 볼 수가 없다.
      */
     if (prefs.rsiOn) {
-      const rsiChart = paneChart(rsiElRef.current!, RSI_H);
+      const rsiChart = paneChart(rsiElRef.current!, ph.rsi);
       rsiChartRef.current = rsiChart;
       const rsiSeries = rsiChart.addLineSeries({
         color: prefs.rsiColor,
@@ -1136,7 +1214,8 @@ export function CandleChart({
         lastValueVisible: true,
         autoscaleInfoProvider: () => ({ priceRange: { minValue: 0, maxValue: 100 } }),
       });
-      rsiSeries.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.1 } });
+      /* 0 과 100 이 축 끝에 붙으면 눈금 글자가 잘린다. 너무 밀면 선이 가늘어져 흐름이 안 보인다 */
+      rsiSeries.priceScale().applyOptions({ scaleMargins: { top: 0.14, bottom: 0.14 } });
       /*
        * 과매수·과매도 선 — 이 지표를 보는 이유 자체다.
        *
@@ -1472,10 +1551,10 @@ export function CandleChart({
       }
       const barH = narrow && bar ? bar.offsetHeight : 0;
       /* 아래 칸 몫을 빼고 남는 것이 봉 차트 — 전체 높이는 예전 그대로다 */
-      const paneH = VOL_H + (prefs.rsiOn ? RSI_H : 0);
-      chart.applyOptions({ width: w, height: Math.max(120, heightRef.current - barH - paneH) });
-      volChartRef.current?.applyOptions({ width: w, height: VOL_H });
-      rsiChartRef.current?.applyOptions({ width: w, height: RSI_H });
+      const p = paneHeights(heightRef.current, prefs.rsiOn);
+      chart.applyOptions({ width: w, height: Math.max(120, heightRef.current - barH - p.vol - p.rsi) });
+      volChartRef.current?.applyOptions({ width: w, height: p.vol });
+      rsiChartRef.current?.applyOptions({ width: w, height: p.rsi });
       /*
        * **폭이 크게 달라지면 봉을 다시 채운다** (2026-08-27).
        *
@@ -2147,8 +2226,14 @@ export function CandleChart({
       <div className="candle-host">
         <div ref={containerRef} style={{ width: "100%" }} />
         {/* 지표 칸 — 차트 밖의 형제라야 제 축을 갖는다 (2026-10-12) */}
+        <div className="chart-split" onPointerDown={(e) => dragPane(e, "vol")} title="끌어서 거래량 칸 높이 조절 · 두 번 누르면 기본값" onDoubleClick={() => resetPane("vol")} />
         <div ref={volElRef} style={{ width: "100%" }} />
-        <div ref={rsiElRef} style={{ width: "100%" }} />
+        {prefs.rsiOn && (
+          <>
+            <div className="chart-split" onPointerDown={(e) => dragPane(e, "rsi")} title="끌어서 RSI 칸 높이 조절 · 두 번 누르면 기본값" onDoubleClick={() => resetPane("rsi")} />
+            <div ref={rsiElRef} style={{ width: "100%" }} />
+          </>
+        )}
         {/* 추세선 캔버스 — 차트 위에 얹되 마우스는 통과시킨다(십자선·클릭은 차트 몫) */}
         <canvas ref={overlayRef} className="chart-draw-overlay" />
         {/*

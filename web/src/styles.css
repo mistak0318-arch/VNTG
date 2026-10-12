@@ -1723,6 +1723,32 @@ body {
 /* 어느 칸으로 정렬 중인지 — 화살표가 글자에 붙으면 숫자 칸이 흔들린다 */
 .sortable-th i { font-style: normal; margin-left: 2px; font-size: 0.8em; }
 
+/*
+ * 차트 칸 사이 줄 — 끌어서 높이를 바꾼다 (2026-10-12).
+ *
+ * 평소엔 **거의 안 보인다.** 늘 또렷하면 차트가 선으로 쪼개져 보이고, 이 줄은 그릴 것이
+ * 있어서 있는 게 아니라 **잡을 데가 있어야 해서** 있다. 올리면 나타난다 — 칸 너비 손잡이와
+ * 같은 규칙이고, 같은 규칙이면 한 번만 배운다.
+ */
+.chart-split {
+  height: 7px;
+  margin: -1px 0;
+  cursor: row-resize;
+  position: relative;
+  touch-action: none;
+}
+.chart-split::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; top: 3px;
+  height: 1px;
+  background: var(--border);
+  transition: background 0.1s, height 0.1s;
+}
+.chart-split:hover::after { height: 3px; top: 2px; background: var(--blue); }
+/* 끄는 동안 글자가 선택되면 화면이 파랗게 물든다 — 칸 너비 끌기와 같은 자물쇠 */
+body.col-resizing { cursor: row-resize; }
+
 .sort-arrow {
   font-size: 0.6rem;
 }
