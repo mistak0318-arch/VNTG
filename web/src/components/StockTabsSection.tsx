@@ -275,8 +275,33 @@ export function StockTabsSection({
    * 폰 — 본문 좌우 스와이프로 이웃 탭 (2026-08-28). 열여덟 탭이라 여기가 제일 절실하다:
    * 탭 줄을 밀어 찾는 대신 본문을 밀면 다음 탭이다.
    */
+  /*
+   * **스와이프는 지금 서 있는 줄 안에서만 움직인다** (2026-10-13 — 벤티지: "상단에
+   * 메뉴가 있을 때는 좌우로 스크롤하면 상단 메뉴에서 움직여야 되고, 하단에 포커스가
+   * 되어 있을 때는 하단에서 움직여야 돼. 근데 지금은 상단 오른쪽 끝에서 하단으로
+   * 움직이고 막 그런 경우가 있거든").
+   *
+   * 탭 줄을 위·아래로 갈라 놓고도 스와이프는 **열여덟 개를 한 줄로 이어 붙인 목록**을
+   * 그대로 쓰고 있었다. 그래서 위 줄의 마지막 탭에서 한 번 더 밀면 아래 줄의 첫 탭으로
+   * 건너뛰었다 — 눈에는 두 줄인데 손에는 한 줄이었던 셈이고, 그러면 **어느 줄에 서
+   * 있는지 감각이 끊긴다.** 밀어서 간 곳이 밑줄을 달고 있는데 조금 전까지 보던 줄이
+   * 아니면, 다음에 어디로 밀어야 할지 알 수가 없다.
+   *
+   * 지금 탭이 든 **쪽의 목록만** 준다. 그 줄의 끝에서는 벽이다(`useSwipeTabs` 가 감지
+   * 않는다). 반대쪽으로 가려면 그 줄을 눈으로 보고 누르면 된다 — 두 줄로 나눈 까닭이
+   * 애초에 「밀지 않아도 보이게」였다.
+   *
+   * ⚠️ 쪽 나누기는 `visibleTabs` 차례(DOM)로 하고, 그 안의 **움직이는 차례는 눈에 보이는
+   * 차례**(`orderOf`)다. 둘을 섞으면 벤티지가 순서를 고친 뒤 엉뚱한 탭으로 넘어간다.
+   */
+  const orderedKeys = visualOrder(visibleTabs.map((t) => t.key), tabOrder.orderOf);
+  const topKeys = new Set(
+    visibleTabs.slice(0, Math.ceil(visibleTabs.length / 2)).map((t) => t.key as string),
+  );
   const swipe = useSwipeTabs({
-    order: visualOrder(visibleTabs.map((t) => t.key), tabOrder.orderOf),
+    order: splitTabs
+      ? orderedKeys.filter((k) => topKeys.has(k) === topKeys.has(tab))
+      : orderedKeys,
     current: tab,
     onChange: (k) => setTab(k as StockTab),
   });
