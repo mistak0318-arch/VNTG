@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type React from "react";
+import React from "react";
 import { api, type ThemeFlowRow } from "../api";
 import { MultCell, TodayCell, cls, eok, pct } from "../components/FlowBits";
 
@@ -26,6 +26,25 @@ export function ThemeFlowPage({ onSelectStock }: { onSelectStock?: (code: string
   const [sortKey, setSortKey] = useState<SortKey>("volRatio");
   const [desc, setDesc] = useState(true);
   const [help, setHelp] = useState(false);
+  /*
+   * **테마명을 누르면 구성종목이 펼쳐진다** (2026-10-13 — 벤티지: "네이버 테마 부분
+   * 테마명 누르면 종목 구성 보이게 해줘야지").
+   *
+   * 시트로 띄우지 않고 **줄을 펼친다.** 이 화면은 이미 시트 안에서 열릴 수 있는데
+   * 시트 위에 시트를 올리면 뒤로가기가 엉킨다(10/08 에 ETF 상세에서 겪었다).
+   * 펼치면 표를 떠나지 않아 「어느 테마의 종목인지」도 눈에 남는다.
+   */
+  const [open, setOpen] = useState<string | null>(null);
+  const [stocks, setStocks] = useState<Record<string, { code: string; name: string; changeRate: number | null; desc: string }[]>>({});
+  const toggle = (key: string) => {
+    setOpen((v) => (v === key ? null : key));
+    if (!stocks[key]) {
+      void api
+        .themeStocks2("kr", key)
+        .then((r) => setStocks((m) => ({ ...m, [key]: r.stocks })))
+        .catch(() => setStocks((m) => ({ ...m, [key]: [] })));
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -111,9 +130,13 @@ export function ThemeFlowPage({ onSelectStock }: { onSelectStock?: (code: string
           </thead>
           <tbody>
             {sorted.map((r) => (
-              <tr key={r.key}>
+              <React.Fragment key={r.key}>
+              <tr className={open === r.key ? "tf-open" : undefined}>
                 <td className="sticky-col">
-                  <b>{r.name}</b>
+                  <button type="button" className="tf-name" onClick={() => toggle(r.key)} title="눌러서 구성종목 보기">
+                    <b>{r.name}</b>
+                    <i>{open === r.key ? "▾" : "▸"}</i>
+                  </button>
                 </td>
                 <td className="num pt-n">
                   {r.measured}/{r.members}
@@ -138,6 +161,33 @@ export function ThemeFlowPage({ onSelectStock }: { onSelectStock?: (code: string
                   <TodayCell today={r.todayValue} avg5={r.value5} />
                 </td>
               </tr>
+              {open === r.key && (
+                <tr className="tf-stocks">
+                  <td colSpan={9}>
+                    {!stocks[r.key] ? (
+                      <span className="pt-n">불러오는 중…</span>
+                    ) : stocks[r.key].length === 0 ? (
+                      <span className="pt-n">구성종목을 못 받았습니다.</span>
+                    ) : (
+                      <div className="tf-chips">
+                        {stocks[r.key].map((x) => (
+                          <button
+                            key={x.code}
+                            type="button"
+                            className={`tf-chip ${cls(x.changeRate)}`}
+                            onClick={() => onSelectStock?.(x.code, x.name)}
+                            title={x.desc || undefined}
+                          >
+                            {x.name}
+                            {x.changeRate !== null && <em>{pct(x.changeRate)}</em>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              )}
+              </React.Fragment>
             ))}
           </tbody>
         </table>

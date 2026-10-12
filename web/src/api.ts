@@ -859,6 +859,11 @@ export const api = {
       `/api/etf/flow-all${limit ? `?limit=${limit}` : ""}`,
     ),
   /* 테마 자금흐름 — ETF 와 같은 잣대의 네이버 테마 판. 조회 0회 */
+  /* 테마 구성종목 — 자금흐름 표에서 테마명을 눌렀을 때. 조회 0회(파일에서) */
+  themeStocks2: (market: "kr" | "etf", key: string) =>
+    getJson<{ key: string; name: string; stocks: { code: string; name: string; changeRate: number | null; desc: string }[] }>(
+      `/api/market/theme-stocks/${market}/${encodeURIComponent(key)}`,
+    ),
   themeFlow: (market: "kr" | "etf" = "kr") =>
     getJson<{ at: string; rows: ThemeFlowRow[]; note: string }>(`/api/market/theme-flow/${market}`),
   /** 레버리지·인버스 심리 — 인버스(+곱버스) ÷ 레버리지 거래대금, 20일 */
