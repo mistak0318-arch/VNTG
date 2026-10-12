@@ -8859,7 +8859,26 @@ th.est-col { color: var(--blue); }
 .chart-full .ci-wrap { flex: none; }
 
 /* 차트는 남는 만큼만 — `min-height: 0` 이 없으면 flex 자식이 안 줄어든다 */
-.chart-full .chart-wrap { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+/*
+ * **넘치면 자르지 말고 밀게 한다** (2026-10-12 — 벤티지: "아직도 좀 잘린다. 차라리
+ * 위아래 스크롤 할 수 있게 하면 어때").
+ *
+ * 맞는 말이다. 여태 `overflow: hidden` 으로 두고 안쪽 높이를 정확히 맞추려 했는데,
+ * 빼야 할 것이 띠·사이 줄·범례·여백 넷이고 그중 하나만 틀려도 **그만큼 말없이 잘린다.**
+ * 네 번 고치는 동안 네 번 다 「조금 남았다」였다 — 셈으로 맞추는 싸움은 틀린 쪽이 아무
+ * 흔적을 안 남겨서, 틀렸다는 것조차 사람이 눈으로 찾아야 한다.
+ *
+ * 밀 수 있으면 셈이 조금 어긋나도 **볼 수는 있다.** 그게 자르는 것보다 늘 낫다.
+ * 셈은 그대로 둔다 — 평소에는 딱 맞아 스크롤이 안 생기고, 어긋난 날에만 몇 px 밀린다.
+ */
+.chart-full .chart-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
 
 .chart-full-head {
   display: flex;
