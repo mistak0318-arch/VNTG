@@ -19783,7 +19783,44 @@ a.watch-btn { text-decoration: none; }
    * 자리를 못 얻으면 줄을 하나 더 만든다.
    */
   html[data-widestock="1"] .sheet-header h2 { flex: 1 1 150px; }
-  html[data-widestock="1"] .sheet-header .watch-btn { width: 30px; height: 30px; font-size: 0.95rem; }
+  /*
+   * **단추를 납작하게** (2026-10-12 — 벤티지: "위에 버튼들을 좀 어떻게 해야 될 거 같은데").
+   *
+   * 동그란 테두리 여섯 개가 한 줄을 다 먹고도 모자라 둘로 쪼개졌다. 원은 글자보다 훨씬
+   * 넓은 자리를 쓴다 — 지름만큼의 정사각형에 여백까지 붙는다. 증권플러스의 머리 아이콘이
+   * 테두리 없이 납작한 것도 그 까닭이다: **아이콘은 제 모양으로 이미 단추처럼 보인다.**
+   *
+   * 테두리·배경을 걷고 26px 로 줄이면 여섯이 170px 남짓이라, 360px 폰에서도 이름과
+   * 나란히 한 줄에 선다. 누를 자리는 32px 로 넉넉히 둔다 — 보이는 크기와 닿는 크기는
+   * 다른 값이고, 작아 보이게 하려다 못 누르게 만들면 안 된다.
+   */
+  html[data-widestock="1"] .sheet-header .watch-btn,
+  html[data-widestock="1"] .sheet-header .close-btn {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    padding: 0;
+    font-size: 1.02rem;
+    background: none;
+    border: 0;
+    border-radius: 8px;
+  }
+  html[data-widestock="1"] .sheet-header .watch-btn:hover,
+  html[data-widestock="1"] .sheet-header .close-btn:hover {
+    background: color-mix(in srgb, var(--text) 8%, transparent);
+  }
+  /* ⋯ 와 ✕ 는 늘 첫 줄 오른쪽 — 가격 줄로 흘러내리면 숫자와 뒤섞인다 */
+  html[data-widestock="1"] .sheet-header .sd-more { margin-left: auto; }
+
+  html[data-widestock="1"] .sd-more.on { background: color-mix(in srgb, var(--text) 10%, transparent); }
+
+  /*
+   * **장외는 작게** (벤티지: "위에 장외는 좀 작게 표현해줘도 될 듯").
+   * 맞다 — 둘이 같은 크기면 눈이 어느 쪽이 본값인지 못 고른다. 오늘의 본값은 정규장이고
+   * 장외는 그 뒤에 일어난 일이다. 크기로 그 차례를 적는다.
+   */
+  html[data-widestock="1"] .sheet-live:not(.sheet-reg) b { font-size: 1.05rem; }
+  html[data-widestock="1"] .sheet-live:not(.sheet-reg) i { font-size: 0.78rem; }
 
   /* (당일 흐름을 머리줄에 넣던 규칙은 걷었다 — 자리에 안 맞는 부품을 자르니 글자 줄만 남았다) */
 
@@ -19809,6 +19846,30 @@ a.watch-btn { text-decoration: none; }
   /* 머리줄이 탭 줄 위에 와야 겹칠 때 안 가린다 */
   html[data-widestock="1"] .sheet-header { z-index: 4; }
 }
+
+/*
+ * 단추를 감싼 칸 — 평소 모양에서는 **투명**해야 한다. `display: contents` 가 바로 그
+ * 뜻이다: 상자는 없고 아이들만 부모의 흐름에 그대로 선다. (앞서 이름·배지에는 이것이
+ * 필요 없어 걷었는데, 여기서는 꼭 필요하다 — 단추들이 머리줄의 직계로 서야 예전 배치가
+ * 그대로다.) 넓게 보기에서만 진짜 상자가 되어 제 줄을 쓴다.
+ */
+.sd-acts { display: contents; }
+/*
+ * 넓게 보기에서는 진짜 상자가 되어 **제 줄**을 쓴다. 이름 옆에 끼우면 다시 두 줄이 되고
+ * 그러면 접은 뜻이 없다. 접혀 있으면 자리를 한 톨도 안 쓴다.
+ *
+ * ⚠️ 이 규칙은 **화면 폭 밖**에 둔다. 접고 펴는 것은 폰만의 일이 아니라 이 모양 전체의
+ * 일이라, 폰 안에만 두면 PC 에서 켰을 때 접히지 않고 단추만 쏟아진다.
+ */
+html[data-widestock="1"] .sd-acts {
+  order: 5;
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+html[data-widestock="1"] .sd-acts.folded { display: none; }
 
 /*
  * 평소 모양에서는 이 칸들이 아무 일도 안 한다 — `<span>` 은 본디 인라인이라 글자가

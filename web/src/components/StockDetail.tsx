@@ -112,6 +112,8 @@ export function StockDetail({
   /* 넘어온 이름이 비었거나 코드면 서버가 준 `stk_nm` 으로 (2026-09-03) — `stockNameOf` 주석 참고 */
   const name = stockNameOf(info, code, givenName);
   const [watchBusy, setWatchBusy] = useState(false);
+  /** 머리줄 단추 펼침 — 넓게 보기에서만 쓴다 (2026-10-12) */
+  const [moreOpen, setMoreOpen] = useState(false);
   /** 마지막 거래일 일봉 한 줄 — 새벽(키움이 날짜를 넘긴 뒤) 머리가 어제 값을 쓰려고 (2026-09-15) */
   const [lastSession, setLastSession] = useState<LastSession | null>(null);
   const [addTarget, setAddTarget] = useState<WatchAddTarget | null>(null);
@@ -301,6 +303,27 @@ export function StockDetail({
               </>
             );
           })()}
+          {/*
+            **단추는 ⋯ 뒤로** (2026-10-12 — 벤티지: "뒤로가기는 이미 먹히니깐 펼치기
+            이런 메뉴 같은 거 만들어서 접었다 폈다? 이러면 칸 두 칸 정도밖에 안 먹지 않을까
+            x버튼은 보이긴 해야 되니깐").
+
+            맞는 셈이다. 머리줄에 늘 있어야 하는 것은 **닫기 하나**다 — 나머지(관심·주문·
+            보드·새로고침·설정·넓게)는 생각하고 누르는 것이라 한 번 더 눌러도 손해가 없다.
+            여섯을 늘 펼쳐 두느라 이름과 가격이 자리를 잃는 쪽이 훨씬 비싸다.
+            뒤로가기가 이미 닫기 노릇을 하지만 ✕ 는 남긴다 — 폰이 아닌 데서는 그 길이 없다.
+          */}
+          {wide && (
+            <button
+              className={`watch-btn sd-more${moreOpen ? " on" : ""}`}
+              onClick={() => setMoreOpen((v) => !v)}
+              title={moreOpen ? "접기" : "관심·주문·보드·새로고침·설정"}
+              aria-expanded={moreOpen}
+            >
+              ⋯
+            </button>
+          )}
+          <div className={`sd-acts${wide && !moreOpen ? " folded" : ""}`}>
           <button
             className={`watch-btn${watched ? " on" : ""}`}
             onClick={toggleWatch}
@@ -365,6 +388,16 @@ export function StockDetail({
           >
             ⚙
           </button>
+          {wide && onOpenAnalysis && (
+            <button
+              className="watch-btn"
+              onClick={() => onOpenAnalysis(code, name)}
+              title="검색·최근 목록까지 있는 넓은 화면(개별종목분석)으로 갑니다"
+            >
+              ↗
+            </button>
+          )}
+          </div>
           <button className="close-btn" onClick={onClose}>
             ✕
           </button>
@@ -467,7 +500,13 @@ export function StockDetail({
             </>
           )}
 
-          {onOpenAnalysis && (
+          {/*
+            **넓게 보기에서는 머리줄 단추로** (2026-10-12).
+            이 단추는 머리줄과 탭 줄 사이, 화면에서 제일 비싼 자리를 줄 하나로 통째로
+            먹고 있었다. 하루에 몇 번 누르는 길이 늘 보이는 자리를 차지할 까닭이 없다 —
+            단추 줄에 아이콘 하나로 옮긴다.
+          */}
+          {onOpenAnalysis && !wide && (
             <div className="sd-blk" style={{ order: cards.orderOf("analysis") }}>
               {/* 폰에서 긴 문구가 두 줄이 되며 앞 줄이 잘려 「종목분석) →」만 보였다 (2026-09-17 캡처) — 한 줄로 */}
               <button className="analysis-link" onClick={() => onOpenAnalysis(code, name)} title="검색·최근 목록까지 있는 넓은 화면(개별종목분석)으로 갑니다">
