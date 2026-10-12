@@ -161,6 +161,8 @@ export function StockDetail({
   }, [wide, code]);
   useEffect(() => {
     sheetRef.current?.scrollTo({ top: 0 });
+    /* 넓게 보기에서는 시트가 아니라 **본문 칸**이 구른다 — 거기도 맨 위로 (2026-10-13) */
+    sheetRef.current?.querySelector(".st-panel")?.scrollTo({ top: 0 });
   }, [code]);
 
   /*

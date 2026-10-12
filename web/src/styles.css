@@ -19919,10 +19919,69 @@ a.watch-btn { text-decoration: none; }
    * 더 멀어진다. 아래로 내리면 열넷이 전부 엄지에 닿고 본문은 머리줄 바로 아래에서
    * 시작한다. 증권플러스의 바닥 줄이 값진 까닭도 메뉴가 더 있어서가 아니라 그 자리였다.
    */
-  html[data-widestock="1"] .stock-tabs {
+  /*
+   * ── 위아래 줄을 **진짜로** 박는다 (2026-10-13) ──
+   *
+   * 벤티지: "상하단 메뉴바를 고정시켜 놔야 되지 않을까? 차트 들어가니까 차트의 그
+   * 크기대로 하단바가 올라와 버리니까 보기가 안 좋네."
+   *
+   * 여태 구르는 것은 **시트 전체**였고 탭 줄 둘은 `position: sticky` 로 버티는 시늉만
+   * 했다. sticky 는 구를 거리가 있을 때만 버틴다 — 본문이 짧은 탭(차트만)에서는 버틸
+   * 일이 없어 아래 줄이 본문 끝을 그대로 따라 올라왔고, 그 밑은 허허벌판이었다.
+   *
+   * 구르는 자리를 **본문 칸 하나로 옮긴다.** 시트는 세로 flex 상자가 되어 구르지 않고,
+   * 위 줄 · 본문 · 아래 줄 셋이 제 자리를 나눠 갖는다. 그러면 흉내가 아니라 못 박힌
+   * 것이고, 본문이 짧든 길든 아래 줄은 늘 화면 바닥이다.
+   *
+   * 덤으로 본문 칸이 **높이를 갖게 된다** — 차트처럼 「남는 높이만큼」 그리고 싶은 것이
+   * 기댈 자리가 생긴다(여태는 부모 높이가 auto 라 기댈 데가 없었다).
+   */
+  html[data-widestock="1"] .sheet {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  html[data-widestock="1"] .sheet-header { flex: 0 0 auto; }
+  /*
+   * ⚠️ 탭 묶음은 시트의 **직계가 아니다** — 사이에 `.sheet-body` 가 한 겹 있다.
+   * 이 겹을 빼먹고 아래만 고쳤더니 높이가 그대로 흘러내려 아무것도 안 달라졌다.
+   * (10/13 탭 줄을 아래로 내릴 때 `TabScroller` 겹을 빼먹은 것과 **같은 종류**다.)
+   */
+  html[data-widestock="1"] .sheet-body {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  /*
+   * 그리고 그 안에 `.sd-blk` 가 또 한 겹 있다. 넓게 보기에서는 이 겹이 **하나뿐**이다 —
+   * 가격·기준선·요약 덩이는 종합 탭 안으로 들어갔고 여기 남는 것은 탭 묶음뿐이다.
+   * (`>` 로 좁혀 둔다. 개별종목분석 화면의 `.sd-blk` 는 `.sheet-body` 밑에 없다.)
+   */
+  html[data-widestock="1"] .sheet-body > .sd-blk {
+    flex: 1 1 auto;
+    min-height: 0;
     display: flex;
     flex-direction: column;
   }
+  html[data-widestock="1"] .stock-tabs {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    /* 0 이 없으면 flex 자식이 내용 높이 아래로 못 줄어 본문이 밖으로 넘친다 */
+    min-height: 0;
+  }
+  html[data-widestock="1"] .st-panel {
+    order: 1;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    /* 시트 좌우 여백을 이 칸이 대신 진다 — 구르는 것이 이 칸이므로 */
+    margin: 0 -12px;
+    padding: 0 12px;
+  }
+  /* 탭 줄은 줄어들지 않는다 — 줄어들면 글자가 잘린다 */
+  html[data-widestock="1"] .stock-tabs > .tabscroll { flex: 0 0 auto; }
   /*
    * ⚠️ 붙박이를 거는 것은 `.detail-tabs` 가 아니라 **`.tabscroll`** 이다 (2026-10-13 고침).
    * `TabScroller` 가 탭 줄을 한 겹 더 감싸므로, 안쪽에 `order` 를 주면 바깥 상자는

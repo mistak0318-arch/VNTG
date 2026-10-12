@@ -172,6 +172,27 @@ export function StockTabsSection({
     else setOwnTab(k);
   };
   const [editTabs, setEditTabs] = useState(false);
+  /*
+   * **차트만 — 화면 높이를 따라간다** (2026-10-13 — 벤티지: "차트만 메뉴 들어가니까
+   * 위에가 폭이 너무 없어서 좀 답답해 보인다").
+   *
+   * 520px 로 못 박혀 있었다. 폰에서 고른 값이라 태블릿·PC 에서는 머리줄·탭 줄·차트
+   * 손잡이를 빼고도 한참 남는데 차트는 그대로였다 — **차트만 보려고 들어온 탭에서
+   * 차트가 화면의 절반**이었던 셈이다.
+   *
+   * 위쪽 붙박이(머리줄 2줄 + 탭 줄 + 기간 단추 + 이동평균·매물대 머리)가 380px 쯤이라
+   * 그만큼 빼고 남는 높이를 쓴다. 420 아래로는 안 줄인다(봉이 뭉개진다). 900 위로는
+   * 안 늘린다 — 세로로만 길어진 차트는 오히려 읽기 나쁘고, 매물대 칸이 화면 밖으로
+   * 밀려난다.
+   */
+  const [chartOnlyH, setChartOnlyH] = useState(() =>
+    typeof window === "undefined" ? 520 : Math.max(420, Math.min(900, window.innerHeight - 380)),
+  );
+  useEffect(() => {
+    const calc = () => setChartOnlyH(Math.max(420, Math.min(900, window.innerHeight - 380)));
+    window.addEventListener("resize", calc);
+    return () => window.removeEventListener("resize", calc);
+  }, []);
   const [investorChart, setInvestorChart] = useState<RawRecord | null>(null);
   const [daily, setDaily] = useState<RawRecord | null>(null);
   const [isEtf, setIsEtf] = useState(false);
@@ -368,7 +389,17 @@ export function StockTabsSection({
         </div>
       )}
 
-      <div key={`${code}-${tab}-${reloadKey}`}>
+      {/*
+        **이 칸이 넓게 보기에서 홀로 구른다** (2026-10-13 — 벤티지: "상하단 메뉴바를
+        고정시켜 놔야 되지 않을까? 차트 들어가니까 차트의 그 크기대로 하단바가 올라와
+        버리니까 보기가 안 좋네").
+
+        여태 구르는 것은 시트 전체였고 탭 줄 둘은 `position: sticky` 로 **버티는 시늉**만
+        했다. 그래서 본문이 짧은 탭(차트만)에서는 버틸 일이 없어 아래 줄이 본문 끝에
+        따라 올라왔다. 이름표를 달아 CSS 가 이 칸만 구르게 할 수 있도록 한다 —
+        그러면 위아래 줄은 흉내가 아니라 **진짜로** 제자리에 박힌다.
+      */}
+      <div className="st-panel" key={`${code}-${tab}-${reloadKey}`}>
         {/* 종합 — 「오늘 이 종목이 어땠나」를 위에서 아래로 훑는다 */}
         {tab === "chart" && (
           <>
@@ -392,7 +423,7 @@ export function StockTabsSection({
             <SupplyMiniCharts code={code} />
           </>
         )}
-        {tab === "chartOnly" && <ChartPanel code={code} name={name} viewId="detail.chartOnly" height={520} />}
+        {tab === "chartOnly" && <ChartPanel code={code} name={name} viewId="detail.chartOnly" height={chartOnlyH} />}
         {tab === "orderbook" && <OrderBookPanel code={code} />}
         {tab === "broker" && <BrokerFlowPanel code={code} />}
         {tab === "program" && <ProgramFlowPanel code={code} />}
