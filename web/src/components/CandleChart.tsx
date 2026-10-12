@@ -604,8 +604,12 @@ export function CandleChart({
     const el0 = which === "vol" ? volElRef.current : rsiElRef.current;
     const base = el0?.clientHeight ?? 0;
     const move = (ev: PointerEvent) => {
-      /* 아래로 끌면 칸이 **커진다** — 줄이 그 칸의 위쪽 모서리라 그 방향이 손과 맞는다 */
-      const next = Math.round(base + (ev.clientY - startY));
+      /*
+       * ⚠️ 부호를 거꾸로 썼었다 (2026-10-12 — 벤티지: "위로 올리면 아래로 내려가고 반대다").
+       * 줄은 그 칸의 **위쪽 모서리**다. 위로 끌면 모서리가 올라가니 칸은 **커진다** —
+       * 손이 가는 쪽으로 칸이 자라야 맞다.
+       */
+      const next = Math.round(base - (ev.clientY - startY));
       /* 봉 차트가 120px 밑으로 내려가지 않게 — 지표를 키우려다 봉을 잃으면 안 된다 */
       const other = (which === "vol" ? rsiElRef.current : volElRef.current)?.clientHeight ?? 0;
       const room = heightRef.current - other - 120;
@@ -1409,7 +1413,16 @@ export function CandleChart({
       const nowNarrow = window.innerWidth <= 720 || el.clientWidth < 520;
       if (nowNarrow !== narrowRef.current) resizeRef.current?.();
       const rows = dataRef.current;
-      if (!param.time || !param.point || rows.length === 0) {
+      /*
+       * **좌표가 없어도 정보는 띄운다** (2026-10-12 — 벤티지: "거래량이나 rsi 에서는
+       * 안 나오네 선만 띄우고").
+       *
+       * 아래 칸에서 십자선이 오면 우리가 `setCrosshairPosition` 으로 옮긴 것이라
+       * `param.point`(마우스 좌표)가 없다. 여기서 좌표가 없다고 통째로 돌아가 버리니
+       * 선만 그어지고 값은 안 떴다. **좌표는 말풍선을 어디에 놓을지에만 필요하다** —
+       * 무엇을 적을지는 `time` 하나로 정해진다. 좌표가 없으면 왼쪽 구석에 둔다.
+       */
+      if (!param.time || rows.length === 0) {
         tip.style.display = "none";
         /* 십자선이 없으면 띠는 **마지막 봉**으로 — 자리만 먹는 빈 띠를 만들지 않는다 */
         if (narrowRef.current) fillBar(rows.length - 1, intraday);
@@ -1524,7 +1537,8 @@ export function CandleChart({
       tip.style.right = "auto";
       tip.style.bottom = "auto";
       const w = tip.offsetWidth;
-      const left = param.point.x < el.clientWidth / 2 ? el.clientWidth - w - 8 : 8;
+      const px = param.point?.x;
+      const left = px === undefined ? 8 : px < el.clientWidth / 2 ? el.clientWidth - w - 8 : 8;
       tip.style.left = `${Math.max(4, left)}px`;
       tip.style.top = "8px";
     };
@@ -2016,7 +2030,19 @@ export function CandleChart({
     }
     if (prefs.rsiOn && rsiRef.current) {
       const r = rsi(candles, prefs.rsiPeriod);
-      rsiRef.current.setData(r);
+      /*
+       * **앞머리를 빈 자리로 채운다** (2026-10-12 — 벤티지: "RSI 는 여전히 세로선이 안 맞고").
+       *
+       * RSI 는 앞의 기간(기본 14봉)만큼 값이 없어서 배열이 그만큼 짧다. 그런데 칸끼리
+       * 구간을 맞출 때 쓰는 것은 **논리 인덱스**(몇 번째 점인가)다. 배열이 짧으면 같은
+       * 인덱스가 다른 날을 가리켜, RSI 칸만 통째로 열네 칸 밀린 채 그려졌다.
+       * 값 없는 날을 `{ time }` 만 있는 **빈 점**으로 채우면 두 칸의 인덱스가 같아진다 —
+       * 빈 점은 그려지지 않으므로 그림은 그대로다.
+       */
+      const pad = candles
+        .slice(0, Math.max(0, candles.length - r.length))
+        .map((b) => ({ time: b.time }));
+      rsiRef.current.setData([...pad, ...r]);
       /* 범례에 적을 지금 값 — 축에서 뺀 것을 여기서 되돌려 준다 */
       setRsiNow(r.length > 0 ? r[r.length - 1].value : null);
       /*
@@ -2024,7 +2050,11 @@ export function CandleChart({
        * 여기서 종가를 평균 내면 그냥 이평선이 하나 더 생길 뿐이다.
        */
       const sig = r.length > prefs.rsiSignal ? smaOf(r, prefs.rsiSignal) : [];
-      if (rsiSigRef.current) rsiSigRef.current.setData(sig);
+      if (rsiSigRef.current)
+        rsiSigRef.current.setData([
+          ...candles.slice(0, Math.max(0, candles.length - sig.length)).map((b) => ({ time: b.time })),
+          ...sig,
+        ]);
       /*
        * **엇갈림 화살표** — 키움 차트의 그 화살표다. RSI 가 시그널선을 **뚫은 봉**에 찍는다.
        * 둘 다 있는 구간에서만 센다(시그널은 RSI 보다 늦게 시작한다).

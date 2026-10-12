@@ -1506,7 +1506,31 @@ body {
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
 }
+/*
+ * **밀 수 있다는 것이 보여야 민다** (2026-10-12 — 벤티지: "위쪽에 RSI 다음에 복기 있고
+ * 이런 버튼들 … 안 보여 이동도 안 되고 가로로").
+ *
+ * 이 줄은 처음부터 `overflow-x: auto` 였다. 그러니까 **밀리기는 했다.** 다만 스크롤 막대를
+ * 숨겨 둬서, 넘친 단추가 있다는 것도 밀 수 있다는 것도 알 길이 없었다. 손가락은 그냥 쓸면
+ * 되지만 마우스는 가로로 쓸 방법이 없다 — 막대가 유일한 손잡이인데 그걸 지운 것이다.
+ *
+ * 폰에서는 그대로 숨긴다(쓸면 되고, 막대가 단추를 가린다). 가리키개가 있는 기기에서만
+ * 가는 막대를 보인다 — `hover` 로 가르면 터치 기기는 예전 그대로다.
+ */
 .period-toggle::-webkit-scrollbar { display: none; }
+@media (hover: hover) and (pointer: fine) {
+  .period-toggle {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+    padding-bottom: 4px;
+  }
+  .period-toggle::-webkit-scrollbar { display: block; height: 6px; }
+  .period-toggle::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .period-toggle::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+  .period-toggle::-webkit-scrollbar-track { background: transparent; }
+}
+/* 전체화면은 바깥이 overflow:hidden 이라 이 줄이 스스로 넘침을 감당해야 한다 */
+.chart-full .period-toggle { max-width: 100%; flex: none; }
 .period-toggle > * { flex: none; }
 .period-btn { white-space: nowrap; }
 
