@@ -522,6 +522,14 @@ export function CandleChart({
    * 리사이저도 이걸 불러야 해서(띠를 막 켰을 때) 클로저 밖으로 꺼낸다.
    */
   const fillBarRef = useRef<((i: number, whole?: boolean) => void) | null>(null);
+  /*
+   * 말풍선 그리는 함수 자체를 들고 있는다 (2026-10-12).
+   *
+   * 아래 칸에서 십자선이 올 때 `setCrosshairPosition` 으로 봉 차트에 옮기면 **구독이 안
+   * 깨어난다** — 그걸 믿고 「옮기면 알아서 뜨겠지」로 짰다가 선만 긋고 값은 안 떴다.
+   * 이벤트에 기대지 말고 **같은 함수를 직접 부른다.** 무엇을 적을지는 시각 하나면 된다.
+   */
+  const tipMoveRef = useRef<((p: { time?: Time; point?: { x: number; y: number } }) => void) | null>(null);
   /* 자릿수·전일 종가는 렌더마다 갱신되는 ref 로 — 차트 effect 를 다시 만들지 않고 띠가 최신 값을 본다 */
   const digitsRef = useRef(digits);
   digitsRef.current = digits;
@@ -1542,6 +1550,7 @@ export function CandleChart({
       tip.style.left = `${Math.max(4, left)}px`;
       tip.style.top = "8px";
     };
+    tipMoveRef.current = onMove;
     chart.subscribeCrosshairMove(onMove);
 
     /*
@@ -1641,13 +1650,18 @@ export function CandleChart({
           try {
             for (const other of allCharts()) {
               if (other.ch === ch) continue;
-              if (!param.time) {
-                other.ch.clearCrosshairPosition();
-                continue;
+              if (!param.time) other.ch.clearCrosshairPosition();
+              else {
+                const ser = other.ser();
+                if (ser) other.ch.setCrosshairPosition(0, param.time, ser);
               }
-              const ser = other.ser();
-              if (ser) other.ch.setCrosshairPosition(0, param.time, ser);
             }
+            /*
+             * 말풍선·띠는 **손으로 부른다.** 봉 차트에 십자선을 옮겨 놓으면 그쪽 구독이
+             * 알아서 깨어날 줄 알았는데 안 깨어난다 — 그래서 선만 긋고 값은 안 떴다.
+             * 봉 차트에서 온 움직임은 제 구독이 이미 처리하므로 그때는 건드리지 않는다.
+             */
+            if (ch !== chart) tipMoveRef.current?.({ time: param.time });
           } finally {
             syncing = false;
           }
