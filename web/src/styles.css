@@ -19801,6 +19801,28 @@ a.watch-btn { text-decoration: none; }
   html[data-widestock="1"] .sd-head-flow .empty,
   html[data-widestock="1"] .sd-head-flow .table-note,
   html[data-widestock="1"] .sd-head-flow h4 { display: none; }
+
+  /*
+   * ── 탭 줄을 머리줄 바로 아래 붙박이로 (4/4) ──
+   *
+   * 구조의 핵심은 여기다. 증권플러스가 넓어 보이는 것은 글자가 커서가 아니라
+   * **머리줄 다음이 곧 탭 줄이고 그 아래는 고른 하나뿐**이기 때문이다.
+   * 우리는 탭 위에 네 덩이를 쌓아 두어 탭까지 가는 데만 한참 스크롤해야 했다.
+   * 그 넷은 종합 탭 안으로 들어갔고(JSX), 여기서는 탭 줄을 머리줄에 붙여 둔다 —
+   * 아무리 내려도 탭이 손 닿는 자리에 있어야 「한 번에 하나」가 쓸모를 갖는다.
+   */
+  html[data-widestock="1"] .sheet .detail-tabs {
+    position: sticky;
+    /* 머리줄 높이만큼 내려온다. 머리줄이 두 줄이 되는 종목도 있어 넉넉히 */
+    top: 0;
+    z-index: 3;
+    background: var(--panel);
+    margin: 0 -12px;
+    padding: 2px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  /* 머리줄이 탭 줄 위에 와야 겹칠 때 안 가린다 */
+  html[data-widestock="1"] .sheet-header { z-index: 4; }
 }
 
 /*

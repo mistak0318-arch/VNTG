@@ -438,14 +438,28 @@ export function StockDetail({
               <IntradayFlow code={code} basePrice={basePrice} />
             </div>
           )}
-          <div className="sd-blk" style={{ order: cards.orderOf("levels") }}>
-            <IntradayLevelsBar code={code} />
-          </div>
-          {/* 한 장 요약 — 탭을 고르기 전에 「지금 어떤가」가 먼저 보여야 한다 */}
-          <div className="sd-blk" style={{ order: cards.orderOf("summary") }}>
-            {late && <InvestorEstimate code={code} />}
-            <StockSummaryPanel code={code} onSelectStock={onSelectStock} />
-          </div>
+          {/*
+            **넓게 보기에서는 이 둘이 종합 탭 안으로 들어간다** (2026-10-12).
+
+            벤티지: "내가 원하는 건 증권플러스와 같은 구조인데 우리의 데이터를 잘 보여주는 거야"
+            맞다. 여태 나는 쌓는 구조를 그대로 두고 CSS 로 밀어만 놨다. 증권플러스가 넓어
+            보이는 까닭은 모양이 아니라 **한 번에 하나만 보여 주기** 때문이다 — 머리줄 바로
+            아래가 탭 줄이고, 그 아래는 고른 탭 하나뿐이다.
+            우리는 탭 **위에** 네 덩이를 쌓아 둬서 탭까지 가는 데만 한참 걸렸다. 그 넷을
+            종합 탭 안으로 옮긴다. 버리는 것은 없다 — 자리만 바뀐다.
+          */}
+          {!wide && (
+            <>
+              <div className="sd-blk" style={{ order: cards.orderOf("levels") }}>
+                <IntradayLevelsBar code={code} />
+              </div>
+              {/* 한 장 요약 — 탭을 고르기 전에 「지금 어떤가」가 먼저 보여야 한다 */}
+              <div className="sd-blk" style={{ order: cards.orderOf("summary") }}>
+                {late && <InvestorEstimate code={code} />}
+                <StockSummaryPanel code={code} onSelectStock={onSelectStock} />
+              </div>
+            </>
+          )}
 
           {onOpenAnalysis && (
             <div className="sd-blk" style={{ order: cards.orderOf("analysis") }}>
@@ -458,7 +472,21 @@ export function StockDetail({
 
           {/* 탭 안쪽은 개별종목분석과 같은 모듈이다 */}
           <div className="sd-blk" style={{ order: cards.orderOf("tabs") }}>
-            <StockTabsSection code={code} name={name} info={info} onSelectStock={onSelectStock} />
+            <StockTabsSection
+              code={code}
+              name={name}
+              info={info}
+              onSelectStock={onSelectStock}
+              summaryTop={
+                wide ? (
+                  <>
+                    <IntradayLevelsBar code={code} />
+                    {late && <InvestorEstimate code={code} />}
+                    <StockSummaryPanel code={code} onSelectStock={onSelectStock} />
+                  </>
+                ) : undefined
+              }
+            />
           </div>
         </div>
       </div>

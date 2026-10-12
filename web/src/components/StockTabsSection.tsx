@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type React from "react";
 import { api, pickList, type RawRecord } from "../api";
 import { ChartPanel } from "./ChartPanel";
 import { EtfPanel } from "./EtfPanel";
@@ -131,12 +132,22 @@ export function StockTabsSection({
   info,
   onSelectStock,
   reloadKey = 0,
+  summaryTop,
 }: {
   code: string;
   name: string;
   /** 현재가 폴링 결과 — 폴링 주기는 화면마다 달라서 **바깥에서** 받는다 */
   info: RawRecord | null;
   onSelectStock?: (code: string, name: string) => void;
+  /**
+   * 「종합」 탭 **맨 위**에 끼워 넣을 것 (2026-10-12 — 종목상세 「넓게 보기」).
+   *
+   * 넓게 보기에서는 가격·당일흐름·기준선·한 장 요약이 탭 **위**에 쌓이지 않고 종합 탭
+   * 안으로 들어온다. 그래야 「머리줄 → 탭 줄 → 고른 하나」가 되어, 탭을 보려고 한참
+   * 스크롤하지 않아도 된다 — 증권플러스가 넓어 보이는 까닭이 그 구조다.
+   * 안 주면 아무 일도 안 일어난다. 예전 모양은 그대로다.
+   */
+  summaryTop?: React.ReactNode;
   /** 새로고침 버튼을 누르면 올린다 — 패널들이 통째로 다시 마운트된다 */
   reloadKey?: number;
 }) {
@@ -319,6 +330,7 @@ export function StockTabsSection({
         {/* 종합 — 「오늘 이 종목이 어땠나」를 위에서 아래로 훑는다 */}
         {tab === "chart" && (
           <>
+            {summaryTop}
             <SignalPanel code={code} onSelectStock={onSelectStock} collapsible />
             <QuoteSummary code={code} />
             {/*
