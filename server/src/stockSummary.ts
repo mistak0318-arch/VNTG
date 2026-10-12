@@ -209,7 +209,27 @@ export async function stockSummary(client: KiwoomClient, code: string): Promise<
   const invRows = Array.isArray(investor?.data?.stk_invsr_orgn)
     ? (investor.data.stk_invsr_orgn as Record<string, unknown>[])
     : [];
-  const row = invRows.find((r) => String(r.dt ?? "") === today) ?? invRows[0] ?? null;
+  /*
+   * **장 전에는 전 거래일로 물러난다** (2026-10-13 — 벤티지: "지금 6시 25분인데 전일
+   * 데이터를 표시해 줘야 하는 시간인데 왜 0으로 표시된 애들이 있는 거야").
+   *
+   * 키움은 장이 열리기 전에도 **오늘 날짜 줄을 0 으로 채워** 보낸다. 그걸 그대로 쓰면
+   * 「개인 0억 · 외국인 0억 · 기관 0억」이 되는데, 이건 **거짓말이다** — 아무도 안 샀다는
+   * 뜻이 아니라 아직 안 샀다는 뜻이고, 아침에 그 줄을 보는 사람이 알고 싶은 것은
+   * 어제 누가 샀느냐다.
+   *
+   * ⚠️ **시각으로 가르지 않는다.** 「08시 전이면 어제」 같은 규칙은 휴장일·반장일마다
+   * 틀린다. 값이 비었는지로 가른다 — 값이 들어오면 저절로 오늘로 돌아온다.
+   * (10/12 에 가격 카드·거래원·수급 상세를 같은 방식으로 고쳤다.)
+   */
+  const FLOW_KEYS = ["ind_invsr", "frgnr_invsr", "orgn", "etc_corp", ...Object.keys(INST_KEYS)];
+  const allZero = (r: Record<string, unknown>): boolean => FLOW_KEYS.every((k) => signed(r[k]) === 0);
+  const todayIdx = invRows.findIndex((r) => String(r.dt ?? "") === today);
+  let row = (todayIdx >= 0 ? invRows[todayIdx] : invRows[0]) ?? null;
+  if (row && allZero(row)) {
+    const back = invRows.slice(Math.max(0, todayIdx) + 1).find((r) => !allZero(r));
+    if (back) row = back;
+  }
   if (!row) missing.push("투자자 수급");
 
   const main: SummaryFlowRow[] = row
@@ -258,7 +278,8 @@ export async function stockSummary(client: KiwoomClient, code: string): Promise<
    *
    * 못 써도 요약 자체는 낸다 — 곁들이는 값이 본체를 막으면 안 된다.
    */
-  const todayRow = row && String(row.dt ?? "") === today ? row : null;
+  /* 장중 곡선에 찍는 것은 **언제나 오늘 줄**이다 — 위에서 어제로 물러났더라도 */
+  const todayRow = todayIdx >= 0 ? invRows[todayIdx] : null;
   await recordStockFlow(bare, todayRow).catch(() => undefined);
   const flowSeries: StockSummary["flowSeries"] = (() => {
     const days = invRows
@@ -296,7 +317,16 @@ export async function stockSummary(client: KiwoomClient, code: string): Promise<
     ? (program.data.stk_daly_prm_trde_trnsn as Record<string, unknown>[])
     : [];
   if (progRows.length > 0) {
-    const p = progRows.find((r) => String(r.dt ?? "") === today) ?? progRows[0];
+    /*
+     * **투자자 줄과 같은 날이어야 한다** (2026-10-13). 장 전에 위에서 어제로 물러났는데
+     * 프로그램만 오늘 0 을 집으면, 한 칸에 **이틀이 섞여** 「어제 외국인 +300억, 프로그램
+     * 0억」이 된다 — 프로그램은 그 셋과 겹치는 값이라 더 나쁘다.
+     */
+    const want = String(row?.dt ?? today);
+    const p =
+      progRows.find((r) => String(r.dt ?? "") === want) ??
+      progRows.find((r) => signed(r.prm_netprps_amt) !== 0) ??
+      progRows[0];
     prog = signed(p.prm_netprps_amt);
   }
   if (prog === null) missing.push("프로그램");

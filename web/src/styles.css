@@ -1792,9 +1792,9 @@ body {
 .fl-chip.hot { border-color: var(--red); color: var(--red); }
 
 /*
- * 테마 구성종목 — 줄을 **펼친다** (2026-10-13).
- * 시트 위에 시트를 올리면 뒤로가기가 엉킨다(10/08 ETF 상세에서 겪었다). 펼치면 표를
- * 떠나지 않아 「어느 테마의 종목인지」도 눈에 남는다.
+ * 테마명 — 누르면 구성종목 시트가 뜬다 (2026-10-13).
+ * 처음엔 줄을 펼쳐 칩으로 늘어놓았지만 등락률 하나밖에 못 실어서 걷어냈다.
+ * 지금은 테마맵·내 테마와 같은 `ConstituentSheet` 를 띄운다.
  */
 .tf-name {
   background: none; border: 0; padding: 0; margin: 0;
@@ -1803,16 +1803,6 @@ body {
 }
 .tf-name i { font-style: normal; color: var(--muted); font-size: 0.8em; }
 .tf-name:hover b { text-decoration: underline; text-underline-offset: 3px; }
-tr.tf-open > td { background: color-mix(in srgb, var(--accent) 7%, transparent); }
-.tf-stocks > td { padding: 8px 10px 10px; background: color-mix(in srgb, var(--text) 4%, transparent); }
-.tf-chips { display: flex; flex-wrap: wrap; gap: 5px; }
-.tf-chip {
-  background: var(--panel); border: 1px solid var(--border); border-radius: 999px;
-  padding: 3px 9px; font: inherit; font-size: 0.78rem; cursor: pointer;
-  display: inline-flex; align-items: baseline; gap: 4px;
-}
-.tf-chip:hover { border-color: var(--blue); }
-.tf-chip em { font-style: normal; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 /*
  * 차트 칸 사이 줄 — 끌어서 높이를 바꾼다 (2026-10-12).

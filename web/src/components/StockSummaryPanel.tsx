@@ -360,6 +360,17 @@ export function StockSummaryPanel({
   const maxMain = Math.max(1, ...d.main.map((r) => Math.abs(r.amount)));
   const maxInst = Math.max(1, ...d.institution.map((r) => Math.abs(r.amount)));
 
+  /*
+   * **「오늘」이 늘 오늘은 아니다** (2026-10-13 — 벤티지: "아직도 0인데 얘네는").
+   *
+   * 장이 열리기 전에는 서버가 **전 거래일 줄**을 준다(키움이 오늘 줄을 0 으로 채워 보내기
+   * 때문이다 — `stockSummary.ts`). 그래도 머리줄이 「오늘」이면 어제 값에 오늘 이름표를
+   * 다는 셈이다. 날짜를 그대로 적고, 돌아온 날이면 저절로 「오늘」로 돌아간다.
+   */
+  const todayYmd = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10).replace(/-/g, "");
+  const rolled = /^\d{8}$/.test(d.date) && d.date !== todayYmd;
+  const dayLabel = rolled ? `${Number(d.date.slice(4, 6))}/${Number(d.date.slice(6, 8))} 장` : "오늘";
+
   return (
     <div className="ss">
       <div className="ss-flows">
@@ -417,8 +428,8 @@ export function StockSummaryPanel({
             />
           )}
           <div className="ss-sub ss-sub2">
-            오늘
-            <i>순매수 · 금액</i>
+            {dayLabel}
+            <i>순매수 · 금액{rolled ? " · 아직 오늘 장 전" : ""}</i>
           </div>
           {d.main.length === 0 ? (
             <div className="ss-none">아직 집계 전입니다.</div>
@@ -464,8 +475,8 @@ export function StockSummaryPanel({
             />
           )}
           <div className="ss-sub ss-sub2">
-            오늘
-            <i>순매수 · 금액</i>
+            {dayLabel}
+            <i>순매수 · 금액{rolled ? " · 아직 오늘 장 전" : ""}</i>
           </div>
           {d.institution.length === 0 ? (
             <div className="ss-none">기관 세부가 아직 없습니다.</div>

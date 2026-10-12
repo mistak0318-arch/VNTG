@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import React from "react";
 import { api, type ThemeFlowRow } from "../api";
+import { ConstituentSheet, type ConstituentTarget } from "../components/overview/ConstituentSheet";
 import { MultCell, TodayCell, cls, eok, pct } from "../components/FlowBits";
 
 /**
@@ -27,24 +27,18 @@ export function ThemeFlowPage({ onSelectStock }: { onSelectStock?: (code: string
   const [desc, setDesc] = useState(true);
   const [help, setHelp] = useState(false);
   /*
-   * **테마명을 누르면 구성종목이 펼쳐진다** (2026-10-13 — 벤티지: "네이버 테마 부분
-   * 테마명 누르면 종목 구성 보이게 해줘야지").
+   * **테마명을 누르면 구성종목 시트가 뜬다** (2026-10-13).
    *
-   * 시트로 띄우지 않고 **줄을 펼친다.** 이 화면은 이미 시트 안에서 열릴 수 있는데
-   * 시트 위에 시트를 올리면 뒤로가기가 엉킨다(10/08 에 ETF 상세에서 겪었다).
-   * 펼치면 표를 떠나지 않아 「어느 테마의 종목인지」도 눈에 남는다.
+   * 처음엔 줄을 펼쳐 칩으로 늘어놓았는데 벤티지가 폰에서 보고 말했다 — "내 테마나 테마맵에서
+   * 누를 때 나오는 것처럼 해 주면 안 돼? 이거 보기 불편한데." 맞는 말이다. 칩은 **등락률
+   * 하나밖에 못 싣는다** — 현재가도 시총도 정렬도 없고, 폭이 좁으면 옆으로 잘린다.
+   *
+   * 테마맵·내 테마가 쓰는 `ConstituentSheet` 는 같은 물음에 이미 답하고 있다. 시세·시총·
+   * 정렬·실시간(●)·＋내 태그·미국 짝까지 전부 붙어 있고, 무엇보다 **한 곳만 고치면 모든
+   * 화면이 같이 좋아진다.** 테마 키(`kr:449`)를 그대로 넘기면 시트가 서버의 테마 강도에서
+   * 꺼내 쓰므로 조회도 0회다.
    */
-  const [open, setOpen] = useState<string | null>(null);
-  const [stocks, setStocks] = useState<Record<string, { code: string; name: string; changeRate: number | null; desc: string }[]>>({});
-  const toggle = (key: string) => {
-    setOpen((v) => (v === key ? null : key));
-    if (!stocks[key]) {
-      void api
-        .themeStocks2("kr", key)
-        .then((r) => setStocks((m) => ({ ...m, [key]: r.stocks })))
-        .catch(() => setStocks((m) => ({ ...m, [key]: [] })));
-    }
-  };
+  const [pick, setPick] = useState<ConstituentTarget | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -130,12 +124,16 @@ export function ThemeFlowPage({ onSelectStock }: { onSelectStock?: (code: string
           </thead>
           <tbody>
             {sorted.map((r) => (
-              <React.Fragment key={r.key}>
-              <tr className={open === r.key ? "tf-open" : undefined}>
+              <tr key={r.key}>
                 <td className="sticky-col">
-                  <button type="button" className="tf-name" onClick={() => toggle(r.key)} title="눌러서 구성종목 보기">
+                  <button
+                    type="button"
+                    className="tf-name"
+                    onClick={() => setPick({ kind: "theme", code: r.key, name: r.name })}
+                    title="눌러서 구성종목 보기"
+                  >
                     <b>{r.name}</b>
-                    <i>{open === r.key ? "▾" : "▸"}</i>
+                    <i>▸</i>
                   </button>
                 </td>
                 <td className="num pt-n">
@@ -161,38 +159,21 @@ export function ThemeFlowPage({ onSelectStock }: { onSelectStock?: (code: string
                   <TodayCell today={r.todayValue} avg5={r.value5} />
                 </td>
               </tr>
-              {open === r.key && (
-                <tr className="tf-stocks">
-                  <td colSpan={9}>
-                    {!stocks[r.key] ? (
-                      <span className="pt-n">불러오는 중…</span>
-                    ) : stocks[r.key].length === 0 ? (
-                      <span className="pt-n">구성종목을 못 받았습니다.</span>
-                    ) : (
-                      <div className="tf-chips">
-                        {stocks[r.key].map((x) => (
-                          <button
-                            key={x.code}
-                            type="button"
-                            className={`tf-chip ${cls(x.changeRate)}`}
-                            onClick={() => onSelectStock?.(x.code, x.name)}
-                            title={x.desc || undefined}
-                          >
-                            {x.name}
-                            {x.changeRate !== null && <em>{pct(x.changeRate)}</em>}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              )}
-              </React.Fragment>
             ))}
           </tbody>
         </table>
       </div>
       <div className="table-note">{note}</div>
+      {pick && (
+        <ConstituentSheet
+          target={pick}
+          onClose={() => setPick(null)}
+          onSelectStock={(code, name) => {
+            setPick(null);
+            onSelectStock?.(code, name);
+          }}
+        />
+      )}
     </div>
   );
 }

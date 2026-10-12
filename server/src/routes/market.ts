@@ -1169,27 +1169,9 @@ export function createMarketRouter(client: KiwoomClient): Router {
    * 전부 파일에서 읽어 조회 0회. 미국은 일봉 원장에 없어 안 받는다.
    */
   /*
-   * 테마 구성종목 (2026-10-13) — 자금흐름 표에서 테마명을 눌렀을 때.
-   * `themeStrength` 가 이미 들고 있는 것을 꺼내 줄 뿐이라 조회 0회다.
+   * 테마 구성종목 전용 길은 **걷어냈다** (2026-10-13). 자금흐름 표도 테마맵과 같은
+   * `ConstituentSheet` 를 띄우고, 그 시트는 `/theme-strength` 로 받아 간다.
    */
-  router.get("/theme-stocks/:market/:key", async (req, res, next) => {
-    try {
-      const { themes } = await themeStrength(req.params.market === "etf" ? "etf" : "kr");
-      const t = themes.find((x) => x.key === req.params.key);
-      res.json({
-        key: req.params.key,
-        name: t?.name ?? "",
-        stocks: (t?.stocks ?? []).map((x) => ({
-          code: x.code,
-          name: x.name,
-          changeRate: x.changeRate,
-          desc: x.desc,
-        })),
-      });
-    } catch (err) {
-      next(err);
-    }
-  });
 
   router.get("/theme-flow/:market", async (req, res, next) => {
     try {
