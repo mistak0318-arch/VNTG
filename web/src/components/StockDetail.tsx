@@ -404,11 +404,6 @@ export function StockDetail({
           >
             ⚙
           </button>
-          {wide && basePrice > 0 && minuteChart && (
-            <span className="sd-spark-wrap">
-              <IntradaySpark chart={minuteChart} basePrice={basePrice} />
-            </span>
-          )}
           {wide && onOpenAnalysis && (
             <button
               className="watch-btn"
@@ -419,6 +414,18 @@ export function StockDetail({
             </button>
           )}
           </div>
+          {/*
+            ⚠️ 작은 선은 **`.sd-acts` 밖**이다 (2026-10-12 고침 — 벤티지: "미니 스파크
+            라인은 항상 보여야 하고 위치가 이상하다").
+            처음엔 단추들을 감싼 칸 안에 넣어서, ⋯ 를 접으면 선까지 같이 숨었다. 이 선은
+            접고 펴는 것이 아니라 **늘 있어야 하는 것**이다 — 가격 옆에서 모양을 말하는
+            것이 일인데, 눌러야 보이면 그 일을 못 한다.
+          */}
+          {wide && basePrice > 0 && minuteChart && (
+            <span className="sd-spark-wrap">
+              <IntradaySpark chart={minuteChart} basePrice={basePrice} />
+            </span>
+          )}
           <button className="close-btn" onClick={onClose}>
             ✕
           </button>
@@ -432,36 +439,16 @@ export function StockDetail({
         </div>
 
         {/*
-          **아래 빠른 줄** (2026-10-12 — 증권플러스의 바닥 줄에서).
+          ⚠️ **아래 빠른 줄은 걷었다** (2026-10-13 — 벤티지: "메뉴가 상단 고정이랑 밑에가
+          겹쳐버렸네 좋은 아이디어 없음?").
 
-          증권플러스의 바닥 줄이 값진 까닭은 메뉴가 하나 더 있어서가 아니라 **엄지에 닿는
-          자리**에 있어서다. 폰에서 위쪽 탭 줄은 한 손으로 못 누른다 — 화면이 길어질수록
-          더 그렇다. 그래서 같은 탭을 가리키는 지름길을 아래에 둔다. 새 메뉴가 아니다,
-          **같은 탭의 다른 손잡이**다. 그래서 위 탭 줄과 늘 같은 것을 가리킨다.
+          맞다. 같은 것을 두 번 그렸다. 「같은 탭의 다른 손잡이」라고 했지만 손잡이가 둘이면
+          화면만 먹고, 어느 쪽이 참인지 눈이 매번 고른다. 다섯만 고른 것도 자의적이었다 —
+          왜 메모는 있고 체결강도는 없는지 설명할 길이 없다.
 
-          다섯만 둔다. 우리 탭은 열이 넘지만 아래 줄까지 열이 되면 그것도 못 누른다 —
-          자주 쓰는 것만. 나머지는 위 탭 줄에 그대로 있다.
+          더 나은 길은 **탭 줄 하나를 아래로 내리는 것**이다. 중복이 없어지고, 열넷이
+          전부 엄지에 닿고, 본문이 머리줄 바로 아래에서 시작한다. 손잡이는 하나여야 한다.
         */}
-        {wide && (
-          <div className="sd-quick">
-            {[
-              { k: "chart", label: "종합" },
-              { k: "orderbook", label: "호가" },
-              { k: "broker", label: "거래원" },
-              { k: "investor", label: "수급" },
-              { k: "notes", label: "메모" },
-            ].map((q) => (
-              <button
-                key={q.k}
-                type="button"
-                className={tab === q.k ? "on" : ""}
-                onClick={() => setTab(q.k)}
-              >
-                {q.label}
-              </button>
-            ))}
-          </div>
-        )}
         {error && <div className="error-banner">{error}</div>}
 
         {/* 톱니바퀴를 누르면 여기서 바로 차례를 고친다 — 설정 화면까지 갈 일이 아니다 */}

@@ -267,7 +267,7 @@ export function StockTabsSection({
 
   return (
     /* Fragment 였다 — 스와이프 핸들러를 얹으려면 실제 요소가 필요하다 */
-    <div {...swipe}>
+    <div {...swipe} className={`stock-tabs ${swipe.className ?? ""}`}>
       <TabScroller className="detail-tabs" activeKey={tab}>
         {visibleTabs.map((t) => (
           <button
