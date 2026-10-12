@@ -432,9 +432,27 @@ const SPLIT_H = 6;
 
 const paneHeights = (h: number, rsiOn: boolean) => {
   const saved = savedPanes();
-  /* 끌어 둔 값이 있으면 그것 — 없으면 비례. 바닥·천장은 둘 다에 건다 */
-  const vol = Math.round(Math.min(220, Math.max(56, saved.vol ?? Math.min(120, Math.max(72, h * 0.2)))));
-  const rsi = rsiOn ? Math.round(Math.min(240, Math.max(64, saved.rsi ?? Math.min(140, Math.max(88, h * 0.24))))) : 0;
+  const clamp = (v: number, lo: number, hi: number) => Math.round(Math.min(hi, Math.max(lo, v)));
+  let vol = clamp(saved.vol ?? h * 0.2, 44, 220);
+  let rsi = rsiOn ? clamp(saved.rsi ?? h * 0.24, 52, 240) : 0;
+  /*
+   * ⚠️ **지표가 봉을 다 먹으면 안 된다** (2026-10-12 — 벤티지: "모바일 모드에서는 예전
+   * 그대로인데 일부러 이렇게 해놓은 건가?").
+   *
+   * 바닥을 72·88px 로 못 박았더니 **낮은 차트에서 말이 안 됐다.** 폰의 240px 짜리 차트는
+   * 거래량 72 + RSI 88 + 사이 줄 12 = 172 를 먼저 떼이고 봉에 68 만 남아, 봉이 최소
+   * 120 으로 되밀리면서 전체가 292 로 넘쳤다. 보드의 작은 카드도 같은 꼴이다.
+   *
+   * 바닥은 눈금이 안 겹치는 선이라 필요하지만, **그 선이 그릇보다 크면 그릇을 따라야 한다.**
+   * 아래 칸이 쓸 수 있는 몫을 전체의 절반으로 묶고, 넘치면 둘을 같은 비율로 줄인다 —
+   * 하나만 줄이면 그 지표만 못 보게 된다.
+   */
+  const budget = h * 0.5;
+  if (vol + rsi > budget && vol + rsi > 0) {
+    const k = budget / (vol + rsi);
+    vol = Math.round(vol * k);
+    rsi = Math.round(rsi * k);
+  }
   return { vol, rsi };
 };
 
