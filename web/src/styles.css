@@ -1720,6 +1720,9 @@ body {
   color: var(--blue);
 }
 
+/* 어느 칸으로 정렬 중인지 — 화살표가 글자에 붙으면 숫자 칸이 흔들린다 */
+.sortable-th i { font-style: normal; margin-left: 2px; font-size: 0.8em; }
+
 .sort-arrow {
   font-size: 0.6rem;
 }

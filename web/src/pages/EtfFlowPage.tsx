@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
+import type React from "react";
 import { api, type EtfFlowGroup, type EtfFlowRow } from "../api";
+
+/** 정렬할 수 있는 칸 — 숫자 칸 전부 */
+type SortKey = "price" | "d1" | "d5" | "d20" | "volRatio" | "value5" | "todayValue";
 
 /**
  * **국내 ETF 자금흐름** (2026-09-17 — ETF 분석 묶음). 해외판(ETF 자금흐름(해외))과 같은 모양의 국내판.
@@ -21,7 +25,16 @@ export function EtfFlowPage({ onSelectStock }: { onSelectStock: (code: string, n
   const [note, setNote] = useState("");
   const [asOf, setAsOf] = useState<"오늘" | "어제">("오늘");
   const [error, setError] = useState<string | null>(null);
-  const [sortKey, setSortKey] = useState<"d1" | "d5" | "d20" | "volRatio">("d1");
+  /*
+   * **정렬은 머리 칸이 한다** (2026-10-12 — 벤티지: "표에서 누르면 정렬되게 하면 되지
+   * 저렇게 놓을 필요가 있나?").
+   *
+   * 맞는 말이었다. 위에 있던 네모 넷은 **정렬 키일 뿐**인데 자리를 차지하면서 가격·5일
+   * 평균·오늘로는 정렬도 못 했다. 표의 머리 칸은 이미 그 자리에 있고, 누르면 정렬되는
+   * 것이 표의 관례다 — 없는 것을 새로 배우게 하지 않는다.
+   */
+  const [sortKey, setSortKey] = useState<SortKey>("volRatio");
+  const [desc, setDesc] = useState(true);
   /** 마지막으로 받은 시각 (2026-09-18 전수검증 D11) — 서버 5분 캐시라 값은 그보다 옛것일 수 있다 */
   const [pulledAt, setPulledAt] = useState<number | null>(null);
 
@@ -49,8 +62,31 @@ export function EtfFlowPage({ onSelectStock }: { onSelectStock: (code: string, n
   if (error) return <div className="page-note">ETF 자금흐름을 못 받았습니다 — {error}</div>;
   if (!rows) return <div className="page-note">불러오는 중… (처음엔 없는 일봉을 몇 개 받느라 10초쯤)</div>;
 
-  const groups: EtfFlowGroup[] = ["지수", "테마·업종", "미국(국내상장)", "자산·채권"];
-  const sorted = (g: EtfFlowGroup) => rows.filter((r) => r.group === g).sort((a, b) => (b[sortKey] ?? -999) - (a[sortKey] ?? -999));
+  const groups: EtfFlowGroup[] = ["지수", "테마·업종", "미국(국내상장)", "자산·채권", "그 밖에"];
+  const sorted = (g: EtfFlowGroup) =>
+    rows
+      .filter((r) => r.group === g)
+      .sort((a, b) => {
+        /* 못 잰 값은 **늘 뒤로** — 오름차순으로 뒤집었다고 「모르는 것」이 1등이 되면 안 된다 */
+        const av = a[sortKey];
+        const bv = b[sortKey];
+        if (av === null) return 1;
+        if (bv === null) return -1;
+        return desc ? bv - av : av - bv;
+      });
+  const hit = (k: SortKey) => () => {
+    if (k === sortKey) setDesc((v) => !v);
+    else {
+      setSortKey(k);
+      setDesc(true);
+    }
+  };
+  const Th = ({ k, children, title }: { k: SortKey; children: React.ReactNode; title?: string }) => (
+    <th className={`sortable-th${sortKey === k ? " active" : ""}`} onClick={hit(k)} title={title}>
+      {children}
+      <i>{sortKey === k ? (desc ? "▾" : "▴") : ""}</i>
+    </th>
+  );
   /* 한 줄 요약 — 배수가 제일 큰 테마와 20일 최고 */
   const hot = [...rows].filter((r) => r.volRatio !== null && r.group === "테마·업종").sort((a, b) => (b.volRatio ?? 0) - (a.volRatio ?? 0))[0];
   const best20 = [...rows].filter((r) => r.d20 !== null && r.group === "테마·업종").sort((a, b) => (b.d20 ?? 0) - (a.d20 ?? 0))[0];
@@ -66,13 +102,6 @@ export function EtfFlowPage({ onSelectStock }: { onSelectStock: (code: string, n
           </>
         )}
       </p>
-      <div className="ov-seg" style={{ padding: 0, marginBottom: 8, maxWidth: 360 }}>
-        {(["d1", "d5", "d20", "volRatio"] as const).map((k) => (
-          <button key={k} type="button" className={sortKey === k ? "on" : ""} onClick={() => setSortKey(k)}>
-            {k === "d1" ? (asOf === "오늘" ? "1일" : "어제") : k === "d5" ? "5일" : k === "d20" ? "20일" : "거래대금 배수"}
-          </button>
-        ))}
-      </div>
       {groups.map((g) => (
         <section className="card" key={g}>
           <h3>{g}</h3>
@@ -82,13 +111,15 @@ export function EtfFlowPage({ onSelectStock }: { onSelectStock: (code: string, n
                 <tr>
                   <th className="sticky-col">대표</th>
                   <th>ETF</th>
-                  <th>가격</th>
-                  <th>{asOf === "오늘" ? "1일" : "어제"}</th>
-                  <th>5일</th>
-                  <th>20일</th>
-                  <th title="최근 5일 평균 거래대금 ÷ 그 앞 20일 평균 (어제까지)">배수</th>
-                  <th>5일 평균</th>
-                  <th>오늘</th>
+                  <Th k="price">가격</Th>
+                  <Th k="d1">{asOf === "오늘" ? "1일" : "어제"}</Th>
+                  <Th k="d5">5일</Th>
+                  <Th k="d20">20일</Th>
+                  <Th k="volRatio" title="최근 5일 평균 거래대금 ÷ 그 앞 20일 평균 (어제까지)">
+                    배수
+                  </Th>
+                  <Th k="value5">5일 평균</Th>
+                  <Th k="todayValue">오늘</Th>
                 </tr>
               </thead>
               <tbody>

@@ -20,7 +20,13 @@ import { dropPhantomToday } from "./candleGuard.js";
 
 const CHART = "/api/dostk/chart";
 
-export type EtfFlowGroup = "지수" | "테마·업종" | "미국(국내상장)" | "자산·채권";
+/**
+ * ⚠️ **「테마·업종」은 검증한 묶음이 아니라 통 이름이다.** 은행·증권·철강은 업종이고
+ * 2차전지·로봇은 테마인데 한 칸에 담겨 있다. ETF **이름만으로는 둘을 못 가른다** —
+ * 가르는 척하는 것보다 한 칸에 두고 그렇다고 적어 두는 쪽이 낫다.
+ * 「그 밖에」는 자동으로 찾았으나 분류를 모르는 것들이다 (2026-10-12).
+ */
+export type EtfFlowGroup = "지수" | "테마·업종" | "미국(국내상장)" | "자산·채권" | "그 밖에";
 
 export interface EtfFlowRow {
   code: string;
@@ -111,6 +117,25 @@ function coreName(name: string): string {
     .replace(/\s+/g, "")
     .replace(TAIL, "")
     .trim();
+}
+
+/**
+ * **자동으로 찾은 것의 분류** (2026-10-12, 같은 날 바로 고침).
+ *
+ * 벤티지: "테마랑 업종을 왜 붙인 거야? 이게 상관성 검증하고 붙인 거지?"
+ *
+ * 처음엔 자동으로 찾은 것을 전부 「테마·업종」에 넣었다. 주석에 「분류는 자동으로 못
+ * 가린다」고 적어 두고 그대로 밀어 넣은 것이라, 머니마켓·CD금리·미국배당다우존스가
+ * 테마 자리에 앉았다 — 저건 대기자금과 미국 상품이지 테마가 아니다.
+ * **모르면 모른다고 두어야지, 아는 칸에 집어넣으면 틀린 것을 아는 척하는 것이 된다.**
+ *
+ * 이름에 또렷한 낱말이 있으면 그걸로 가른다. 금리·채권·현물은 자산이고, 미국 지수 이름은
+ * 미국 상품이다. 그 어느 쪽도 아니면 **「그 밖에」**로 둔다 — 테마라고 우기지 않는다.
+ */
+function autoGroup(name: string): EtfFlowGroup | "그 밖에" {
+  if (/금리|채권|국고채|미국채|CD|머니마켓|MMF|KOFR|현물|골드|달러|원유|구리|리츠|단기자금/.test(name)) return "자산·채권";
+  if (/미국|나스닥|S&P|SP500|다우|필라델피아|러셀/.test(name)) return "미국(국내상장)";
+  return "그 밖에";
 }
 
 /** 자동으로 얹을 줄 수 — 거래대금 큰 것부터. 표가 읽히는 길이를 넘기면 줄만 늘고 신호는 안 는다 */
@@ -303,8 +328,7 @@ export async function etfFlow(client: KiwoomClient, opts: { fresh?: boolean } = 
       .slice(0, AUTO_MAX);
     for (const [core, r] of autos) {
       used.add(r.code);
-      /* 분류는 자동으로 못 가린다 — 지수·자산은 손으로 적은 쪽이 맡고, 나머지는 테마로 본다 */
-      rows.push(await makeRow(client, r, core, "테마·업종", asOf));
+      rows.push(await makeRow(client, r, core, autoGroup(r.name), asOf));
     }
     /* 장중 거래대금으로 고른 것만 남긴다 — 장 전의 동률 추첨을 저장하면 그게 다음 날 「어제」가 된다 */
     if (asOf === "오늘" && rows.some((r) => r.todayValue > 0)) await savePicks(picked);

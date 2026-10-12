@@ -2762,7 +2762,11 @@ export interface EtfListRow {
 }
 
 /* ── ETF 분석 묶음 (2026-09-17) — server/src/etfFlow.ts 의 모양 그대로 ── */
-export type EtfFlowGroup = "지수" | "테마·업종" | "미국(국내상장)" | "자산·채권";
+/**
+ * ⚠️ 「테마·업종」은 검증한 묶음이 아니라 **통 이름**이다 — ETF 이름만으로는 업종과 테마를
+ * 못 가른다. 「그 밖에」는 자동으로 찾았으나 분류를 모르는 것들 (2026-10-12).
+ */
+export type EtfFlowGroup = "지수" | "테마·업종" | "미국(국내상장)" | "자산·채권" | "그 밖에";
 export interface EtfFlowRow {
   code: string;
   name: string;
