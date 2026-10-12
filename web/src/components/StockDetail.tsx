@@ -78,6 +78,7 @@ export function StockDetail({
   onClose,
   onOpenAnalysis,
   onSelectStock,
+  wide = false,
 }: {
   code: string;
   name: string;
@@ -86,6 +87,14 @@ export function StockDetail({
   onOpenAnalysis?: (code: string, name: string) => void;
   /** 업종·테마 구성종목에서 다른 종목으로 갈아타기 */
   onSelectStock?: (code: string, name: string) => void;
+  /**
+   * 「종목상세 넓게」가 켜져 있나 (2026-10-12).
+   *
+   * 화면이 아니라 **차림이 달라진다** — 당일 흐름을 머리줄의 가격 옆으로 올린다.
+   * 속성(`data-widestock`)을 직접 읽지 않고 prop 으로 받는 까닭은, 그 속성이 렌더 **뒤에**
+   * 붙어서 켠 그 순간의 렌더가 한 박자 늦기 때문이다. 값은 App 이 들고 있으니 그냥 내려받는다.
+   */
+  wide?: boolean;
 }) {
   /* 뒤로가기로 닫힌다 — 폰에서 시트를 열고 뒤로 누르면 페이지가 넘어갔다 (2026-08-28) */
   useSheetBack(true, onClose);
@@ -359,6 +368,17 @@ export function StockDetail({
           <button className="close-btn" onClick={onClose}>
             ✕
           </button>
+          {/*
+            **당일 흐름을 가격 옆으로** (2026-10-12 — 벤티지: "상단에 그럼 당일 흐름 추세를
+            옆에 크기에 맞춰서 보여줘 볼까? 증권 플러스처럼").
+            아래에 있던 것을 올린 것이지 새로 그리는 것이 아니다 — 같은 부품이고, 아래에서는
+            빠진다. 두 벌로 그리면 조회도 두 번이고 언젠가 둘이 다른 말을 한다.
+          */}
+          {wide && basePrice > 0 && (
+            <div className="sd-head-flow">
+              <IntradayFlow code={code} basePrice={basePrice} />
+            </div>
+          )}
         </div>
 
         {error && <div className="error-banner">{error}</div>}
@@ -409,8 +429,11 @@ export function StockDetail({
             <StockStatusBanner code={code} />
             <PriceHeader info={info} code={code} onLastSession={setLastSession} />
           </div>
-          {/* 값이 있어야 그린다 — 기준가가 0 이면 등락률 축이 안 선다 */}
-          {basePrice > 0 && (
+          {/*
+            값이 있어야 그린다 — 기준가가 0 이면 등락률 축이 안 선다.
+            **넓게 보기에서는 머리줄로 올라간다**(가격 옆) — 아래에 또 그리면 두 벌이 된다.
+          */}
+          {basePrice > 0 && !wide && (
             <div className="sd-blk" style={{ order: cards.orderOf("intraday") }}>
               <IntradayFlow code={code} basePrice={basePrice} />
             </div>

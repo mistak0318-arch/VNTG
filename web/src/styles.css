@@ -19776,6 +19776,31 @@ a.watch-btn { text-decoration: none; }
     font-size: 0.72rem;
     font-weight: 400;
   }
+
+  /*
+   * 이름 칸이 폭을 **다 가져가면** 단추 여섯이 통째로 아랫줄로 밀린다(벤티지 캡처).
+   * 이름은 줄어들 수 있게 두고 단추가 설 자리를 남긴다 — 단추는 안 줄어드는 물건이라
+   * 자리를 못 얻으면 줄을 하나 더 만든다.
+   */
+  html[data-widestock="1"] .sheet-header h2 { flex: 1 1 150px; }
+  html[data-widestock="1"] .sheet-header .watch-btn { width: 30px; height: 30px; font-size: 0.95rem; }
+
+  /*
+   * ── 당일 흐름을 가격 옆에 (벤티지 요청) ──
+   * 가격과 그림이 **한 줄**이라야 「얼마」와 「어떻게 와서 얼마」가 한 눈에 든다.
+   * 좁으면 그림이 아래로 내려간다 — 숫자를 밀어내면서까지 그릴 그림은 아니다.
+   */
+  html[data-widestock="1"] .sd-head-flow {
+    order: 4;
+    flex: 1 1 180px;
+    min-width: 0;
+    /* 머리줄에서는 **모양만** 본다 — 눈금·설명은 아래 탭에서 제대로 본다 */
+    max-height: 72px;
+    overflow: hidden;
+  }
+  html[data-widestock="1"] .sd-head-flow .empty,
+  html[data-widestock="1"] .sd-head-flow .table-note,
+  html[data-widestock="1"] .sd-head-flow h4 { display: none; }
 }
 
 /*

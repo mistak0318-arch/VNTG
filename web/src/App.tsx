@@ -1540,6 +1540,7 @@ export default function App() {
           onClose={() => navigate({ stock: null })}
           onOpenAnalysis={openAnalysis}
           onSelectStock={onSelectStock}
+          wide={wideStock}
         />
         </ErrorBoundary>
       )}
