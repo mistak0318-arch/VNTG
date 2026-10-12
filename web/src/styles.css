@@ -1748,6 +1748,37 @@ body {
 .sortable-th i { font-style: normal; margin-left: 2px; font-size: 0.8em; }
 
 /*
+ * 자금흐름 표 — 배수를 **읽지 않아도 보이게** (2026-10-12).
+ *
+ * 숫자만 적어 두면 1.48 과 0.62 가 같은 무게로 보인다. 이 표를 보는 까닭이 「어디에 돈이
+ * 몰렸나」이므로 그 답이 길이로도 와야 한다. 1.0 이 제자리고 1.5 를 넘으면 「몰리는 중」이다.
+ */
+.fl-mult {
+  position: relative; display: inline-flex; align-items: center; justify-content: flex-end;
+  min-width: 68px; padding: 2px 4px; border-radius: 4px; overflow: hidden;
+}
+.fl-mult b { position: relative; font-variant-numeric: tabular-nums; }
+.fl-mult-bar { position: absolute; left: 0; top: 0; bottom: 0; background: var(--muted); opacity: 0.22; border-radius: 4px; }
+/* 1.0 자리 눈금 — 기준선이 없으면 길이가 무슨 뜻인지 알 수 없다 (0~3배를 폭으로 폈다) */
+.fl-mult-tick { position: absolute; left: 33.3%; top: 0; bottom: 0; width: 1px; background: color-mix(in srgb, var(--text) 30%, transparent); }
+.fl-mult.warm { color: var(--accent); }
+.fl-mult.warm .fl-mult-bar { background: var(--accent); opacity: 0.3; }
+.fl-mult.hot { color: var(--red); font-weight: 700; }
+.fl-mult.hot .fl-mult-bar { background: var(--red); opacity: 0.32; }
+.fl-mult.cold { color: var(--muted); }
+.fl-mult-na { color: var(--muted); }
+.fl-cold { color: var(--muted); }
+/* 맨 위 한 줄 — 표를 다 읽기 전에 답이 보여야 한다 */
+.fl-chip {
+  display: inline-flex; align-items: baseline; gap: 4px;
+  padding: 3px 9px; border-radius: 999px; border: 1px solid var(--border);
+  font-size: 0.8rem;
+}
+.fl-chip b { font-weight: 700; }
+.fl-chip em { font-style: normal; font-weight: 700; font-variant-numeric: tabular-nums; }
+.fl-chip.hot { border-color: var(--red); color: var(--red); }
+
+/*
  * 차트 칸 사이 줄 — 끌어서 높이를 바꾼다 (2026-10-12).
  *
  * 평소엔 **거의 안 보인다.** 늘 또렷하면 차트가 선으로 쪼개져 보이고, 이 줄은 그릴 것이
