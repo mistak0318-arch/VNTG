@@ -389,6 +389,13 @@ function tradeKey(t: Time): number {
   return typeof t === "number" ? t : typeof t === "string" ? Date.parse(t) / 1000 : Date.UTC(t.year, t.month - 1, t.day) / 1000;
 }
 
+/**
+ * 아래 칸 높이(px). 띠로 나누던 때의 비율(거래량 26%·RSI 20%)을 320px 기준으로 옮긴 값이라
+ * 눈에 익은 크기가 그대로다. 칸은 차트 **밖**이라 봉 차트 높이에서 이만큼 뺀다 (2026-10-12).
+ */
+const VOL_H = 84;
+const RSI_H = 64;
+
 export function CandleChart({
   candles,
   intraday = false,
@@ -529,6 +536,25 @@ export function CandleChart({
   const prefsRef = useRef(prefs);
   prefsRef.current = prefs;
   const volRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+  /*
+   * **지표는 제 칸에 제 눈금으로** (2026-10-12 — 벤티지: "키움차트처럼 나와야지
+   * 지금도 숫자 이상하게 표시돼 우리거는").
+   *
+   * v4 에는 창(pane)이 없어서 여태 **한 차트 안에 여백으로 띠를 나눠** 그렸다. 그러면
+   * 축이 가격 축 하나뿐이라 거래량·RSI 의 눈금을 적을 자리가 없고, 적으면 남의 눈금 위에
+   * 앉는다 — RSI 23.65 가 수급 눈금 옆에 붙던 것이 그것이다.
+   *
+   * 키움은 지표마다 칸이고 칸마다 오른쪽에 제 축이 있다. 같은 모양을 내려면 **차트를
+   * 나누는 수밖에 없다** — 차트가 셋이면 축도 셋이다. 대신 시간축을 서로 묶어 하나처럼
+   * 움직이게 한다.
+   *
+   * ⚠️ 시간 눈금은 **봉 차트에만** 둔다. 키움도 그렇다(날짜가 봉 밑, 거래량 위).
+   * 세 칸에 다 넣으면 같은 날짜를 세 번 읽게 되고 세로를 그만큼 잃는다.
+   */
+  const volElRef = useRef<HTMLDivElement>(null);
+  const rsiElRef = useRef<HTMLDivElement>(null);
+  const volChartRef = useRef<IChartApi | null>(null);
+  const rsiChartRef = useRef<IChartApi | null>(null);
   /** 최신 캔들 — 크로스헤어 핸들러가 항상 최신 배열을 보게 한다 */
   const dataRef = useRef<Candle[]>(candles);
   /** 봉별 내 매매 — 말풍선용 (복기) */
@@ -1008,9 +1034,17 @@ export function CandleChart({
      * 셋이 같은 자리에 겹쳐 그려진다. 숫자는 한 벌로 묶어 둔다 — 세 군데에 흩어 두면
      * 하나만 고쳤을 때 띠가 어긋난다.
      */
-    const band = prefs.rsiOn
-      ? { candle: 0.46, vol: { top: 0.58, bottom: 0.26 }, rsi: { top: 0.8, bottom: 0.04 } }
-      : { candle: 0.3, vol: { top: 0.72, bottom: 0.05 }, rsi: { top: 0.8, bottom: 0.04 } };
+    /*
+     * 아래 칸 높이. 띠로 나누던 때의 비율(0.26·0.2)을 320px 기준으로 옮긴 값이다 —
+     * 눈에 익은 크기를 그대로 두려는 것이다. 칸은 차트 밖이라 **봉 차트에서 그만큼 뺀다**,
+     * 안 그러면 전체 높이를 정해 준 곳(전체화면·보드)에서 넘쳐 스크롤이 생긴다.
+     */
+    /*
+     * 봉 아래 여백. 거래량·RSI 가 **차트 밖으로 나가면서** 띠를 비워 둘 까닭이 없어졌다 —
+     * 예전엔 0.46·0.3 을 비워 그 자리에 두 지표를 겹쳐 그렸다(2026-10-12 고침).
+     * 그래도 바닥을 조금 남긴다. 봉이 축 선에 딱 붙으면 마지막 봉의 꼬리가 잘려 보인다.
+     */
+    const band = { candle: 0.06 };
     /* 위 여백 5→12% (2026-09-10 — 「고」·S 마커가 위에서 잘렸다). 마커 두 단(고 + S)이 들어갈 자리 */
     candleSeries.priceScale().applyOptions({ scaleMargins: { top: 0.12, bottom: band.candle } });
     candleRef.current = candleSeries;
@@ -1038,14 +1072,44 @@ export function CandleChart({
         )
       : [];
 
-    const volumeSeries = chart.addHistogramSeries({
-      priceScaleId: "volume",
+    /*
+     * ── 아래 칸들 ──
+     *
+     * 봉 차트와 **같은 모양**으로 만들되 시간 눈금은 끄고 가격 눈금은 켠다.
+     * 축 폭(`minimumWidth`)을 셋 다 같게 박아 둬야 세 칸의 그림이 세로로 줄이 맞는다 —
+     * 안 맞추면 거래량 축이 「92,879K」로 넓어지는 날 봉만 왼쪽으로 밀린다.
+     */
+    const PANE_SCALE_W = 68;
+    chart.priceScale("right").applyOptions({ minimumWidth: PANE_SCALE_W });
+    const paneChart = (el2: HTMLDivElement, h: number): IChartApi => {
+      const ch = createChart(el2, {
+        width: el2.clientWidth || el.clientWidth,
+        height: h,
+        layout: {
+          background: { type: ColorType.Solid, color: theme === "excel" ? "#ffffff" : "transparent" },
+          textColor: c.text,
+        },
+        grid: { vertLines: { color: c.grid }, horzLines: { color: c.grid } },
+        rightPriceScale: { borderColor: c.border, autoScale: true, minimumWidth: PANE_SCALE_W },
+        /* 날짜는 봉 차트 밑에 한 번만 — 키움도 그렇다 */
+        timeScale: { borderColor: c.border, visible: false },
+        handleScroll: false,
+        handleScale: false,
+        crosshair: { horzLine: { visible: false, labelVisible: false } },
+      });
+      return ch;
+    };
+
+    const volChart = paneChart(volElRef.current!, VOL_H);
+    volChartRef.current = volChart;
+    const volumeSeries = volChart.addHistogramSeries({
       priceFormat: { type: "volume" },
       color: c.volume,
       priceLineVisible: false,
-      lastValueVisible: false,
+      /* 제 칸 제 축이라 이제 **값표를 켜도 된다** — 키움의 23,392K 자리다 */
+      lastValueVisible: true,
     });
-    volumeSeries.priceScale().applyOptions({ scaleMargins: band.vol, visible: false });
+    volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.12, bottom: 0 } });
     volRef.current = volumeSeries;
 
     /*
@@ -1054,8 +1118,9 @@ export function CandleChart({
      * 지표인데 30·70 의 자리가 날마다 달라지면 볼 수가 없다.
      */
     if (prefs.rsiOn) {
-      const rsiSeries = chart.addLineSeries({
-        priceScaleId: "rsi",
+      const rsiChart = paneChart(rsiElRef.current!, RSI_H);
+      rsiChartRef.current = rsiChart;
+      const rsiSeries = rsiChart.addLineSeries({
         color: prefs.rsiColor,
         lineWidth: 1,
         priceLineVisible: false,
@@ -1067,10 +1132,11 @@ export function CandleChart({
          * (…·0·-40,000·-80,000) 옆에 붙어, 그 축의 값인 것처럼 보였다.
          * 숨긴 축의 라벨은 어디에 찍히든 거짓말이 된다. 값은 아래 범례로 옮긴다.
          */
-        lastValueVisible: false,
+        /* 제 칸 제 축이 생겼으니 되살린다 — 키움의 41.69 자리다 */
+        lastValueVisible: true,
         autoscaleInfoProvider: () => ({ priceRange: { minValue: 0, maxValue: 100 } }),
       });
-      rsiSeries.priceScale().applyOptions({ scaleMargins: band.rsi, visible: false });
+      rsiSeries.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.1 } });
       /*
        * 과매수·과매도 선 — 이 지표를 보는 이유 자체다.
        *
@@ -1090,15 +1156,14 @@ export function CandleChart({
           color,
           lineWidth: 1,
           lineStyle: LineStyle.Dashed,
-          /* 라벨은 끈다 — RSI 축은 숨겨져 있어 70·30 이 **가격 축**에 엉뚱하게 찍힌다 */
-          axisLabelVisible: false,
+          /* 이제 제 축이라 70·30 을 거기 적어도 된다 — 문턱이 어디인지가 이 지표의 전부다 */
+          axisLabelVisible: true,
           title: "",
         });
       rsiRef.current = rsiSeries;
       /* 시그널선 — RSI 와 **같은 축**이라야 엇갈림이 눈에 맞는다 */
       rsiSigRef.current = prefs.rsiSignalOn
-        ? chart.addLineSeries({
-            priceScaleId: "rsi",
+        ? rsiChart.addLineSeries({
             color: prefs.rsiSignalColor,
             lineWidth: 1,
             priceLineVisible: false,
@@ -1406,7 +1471,11 @@ export function CandleChart({
         if (!narrow) bar.innerHTML = "";
       }
       const barH = narrow && bar ? bar.offsetHeight : 0;
-      chart.applyOptions({ width: w, height: Math.max(120, heightRef.current - barH) });
+      /* 아래 칸 몫을 빼고 남는 것이 봉 차트 — 전체 높이는 예전 그대로다 */
+      const paneH = VOL_H + (prefs.rsiOn ? RSI_H : 0);
+      chart.applyOptions({ width: w, height: Math.max(120, heightRef.current - barH - paneH) });
+      volChartRef.current?.applyOptions({ width: w, height: VOL_H });
+      rsiChartRef.current?.applyOptions({ width: w, height: RSI_H });
       /*
        * **폭이 크게 달라지면 봉을 다시 채운다** (2026-08-27).
        *
@@ -1424,6 +1493,36 @@ export function CandleChart({
         lastWidthRef.current = w;
       }
     };
+    /*
+     * **시간축을 하나처럼 묶는다** (2026-10-12).
+     *
+     * 차트를 셋으로 나눈 값은 축이 셋이라는 것인데, 시간축까지 셋이면 확대·이동이 따로 놀아
+     * 세 칸이 다른 날을 보여 준다. 봉 차트에서 보이는 구간이 바뀌면 아래 칸들을 같은 구간으로
+     * 맞춘다. 아래 칸은 손으로 못 움직이게 해 뒀으므로(`handleScroll/Scale: false`)
+     * 한쪽 방향만 묶으면 되고, 그래서 되먹임 고리가 아예 안 생긴다 — 깃발로 막을 일이 없다.
+     */
+    const panes = () => [volChartRef.current, rsiChartRef.current].filter(Boolean) as IChartApi[];
+    const syncRange = () => {
+      const r = chart.timeScale().getVisibleLogicalRange();
+      if (!r) return;
+      for (const ch of panes()) ch.timeScale().setVisibleLogicalRange(r);
+    };
+    chart.timeScale().subscribeVisibleLogicalRangeChange(syncRange);
+    /*
+     * 십자선도 따라간다 — 봉 위에서 어느 날을 짚었는지 아래 칸에서도 보여야
+     * 「그날 거래량이 얼마였나」를 눈으로 잇는다. 세로선만 쓰므로 가격은 아무 값이나 된다.
+     */
+    chart.subscribeCrosshairMove((param) => {
+      if (!param.time) {
+        for (const ch of panes()) ch.clearCrosshairPosition();
+        return;
+      }
+      for (const ch of panes()) {
+        const ser = ch === volChartRef.current ? volRef.current : rsiRef.current;
+        if (ser) ch.setCrosshairPosition(0, param.time, ser);
+      }
+    });
+
     resizeRef.current = resize;
     lastWidthRef.current = el.clientWidth;
     window.addEventListener("resize", resize);
@@ -1493,7 +1592,11 @@ export function CandleChart({
       window.removeEventListener("resize", resize);
       ro.disconnect();
       chart.remove();
+      volChartRef.current?.remove();
+      rsiChartRef.current?.remove();
       chartRef.current = null;
+      volChartRef.current = null;
+      rsiChartRef.current = null;
       candleRef.current = null;
       maRefs.current = [];
       volRef.current = null;
@@ -2043,6 +2146,9 @@ export function CandleChart({
       <div ref={barRef} className="candle-bar" />
       <div className="candle-host">
         <div ref={containerRef} style={{ width: "100%" }} />
+        {/* 지표 칸 — 차트 밖의 형제라야 제 축을 갖는다 (2026-10-12) */}
+        <div ref={volElRef} style={{ width: "100%" }} />
+        <div ref={rsiElRef} style={{ width: "100%" }} />
         {/* 추세선 캔버스 — 차트 위에 얹되 마우스는 통과시킨다(십자선·클릭은 차트 몫) */}
         <canvas ref={overlayRef} className="chart-draw-overlay" />
         {/*
