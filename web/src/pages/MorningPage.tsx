@@ -123,12 +123,12 @@ export function MorningPage() {
       <Unveil bars={[140, 140, 140, 140]}>
       <div className="mrn-grid">
         {/* ── 시장 신호등 — 공용 패널 그대로 ── */}
-        <section className="card mrn-card">
+        <section className="card mrn-card mrn-signal">
           <MarketSignalPanel />
         </section>
 
         {/* ── 미국 마감 ── */}
-        <section className="card mrn-card">
+        <section className="card mrn-card mrn-us">
           <button className="mrn-title" onClick={() => go("overview")}>
             🌙 밤사이 미국 <i>›</i>
           </button>
@@ -172,7 +172,7 @@ export function MorningPage() {
 
         {/* ── 테마 흐름 (2026-08-28, 테마 DB 개편) — 아침의 두 물음 ──
              ① 어제 주도 테마가 이어질 자리인가  ② 밤사이 미국은 어느 테마가 움직였나 */}
-        <section className="card mrn-card">
+        <section className="card mrn-card mrn-lead">
           <button className="mrn-title" onClick={() => go("briefing")}>
             🔄 테마 흐름 <i>›</i>
           </button>
@@ -208,7 +208,7 @@ export function MorningPage() {
         </section>
 
         {/* ── 오늘·내일 일정 ── */}
-        <section className="card mrn-card">
+        <section className="card mrn-card mrn-cal">
           <button className="mrn-title" onClick={() => go("calendar")}>
             📅 오늘·내일 일정 <i>›</i>
           </button>
@@ -245,7 +245,7 @@ export function MorningPage() {
         </section>
 
         {/* ── 데일리 리포트 (최신 판) ── */}
-        <section className="card mrn-card">
+        <section className="card mrn-card mrn-report">
           <button className="mrn-title" onClick={() => go("report")}>
             📰 데일리 리포트 <i>›</i>
           </button>
@@ -283,7 +283,7 @@ export function MorningPage() {
         </section>
 
         {/* ── 슈퍼신호등 밤사이 ── */}
-        <section className="card mrn-card">
+        <section className="card mrn-card mrn-lead">
           <button className="mrn-title" onClick={() => go("superSignal")}>
             🌟 슈퍼신호등 <i>›</i>
           </button>
@@ -318,7 +318,7 @@ export function MorningPage() {
         </section>
 
         {/* ── 밤사이 버즈 — 채널 언급 급증 (2026-08-27 버즈 레이더) ── */}
-        <section className="card mrn-card">
+        <section className="card mrn-card mrn-buzz">
           <button className="mrn-title" onClick={() => go("telegram")}>
             🌋 밤사이 버즈 <i>›</i>
           </button>
@@ -417,7 +417,7 @@ export function MorningPage() {
         </section>
 
         {/* ── 주요 채널 밤사이 글 ── */}
-        <section className="card mrn-card">
+        <section className="card mrn-card mrn-rooms">
           <button className="mrn-title" onClick={() => go("telegram")}>
             📡 주요 채널 밤사이 <i>›</i>
           </button>

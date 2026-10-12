@@ -5835,6 +5835,41 @@ tr.drag-src td { opacity: 0.45; }
 }
 .mrn-title i { font-style: normal; color: var(--muted); }
 .mrn-title:hover { color: var(--blue); }
+
+/*
+ * **장전 브리핑룸 — 눈길의 차례를 만든다** (2026-10-12).
+ *
+ * 벤티지: "장전 브리핑룸 말야 좀 더 눈에 확 띄게 해줄 수 있을까?" 그리고 아침에 제일 먼저
+ * 알고 싶은 것을 물으니 **「어디로 돈이 가나」**라고 했다.
+ *
+ * 그 전에는 카드 여덟이 **다 같은 크기·같은 테두리**로 놓여 있었다. 정보는 다 있는데 눈이
+ * 어디부터 볼지를 매번 골라야 했고, 그 고르는 일이 매일 아침 되풀이된다. 「눈에 안 띈다」는
+ * 색이 흐려서가 아니라 **아무것도 앞서지 않아서**다 — 다 강조하면 아무것도 강조가 아니다.
+ *
+ * 그래서 벤티지가 고른 물음에 답하는 둘(테마 흐름·슈퍼신호등)을 **맨 앞에 두 칸 폭으로**
+ * 올린다. 나머지는 근거와 참고라 뒤로 간다. 숨기지는 않는다 — 아침에 보던 것이 사라지면
+ * 그게 더 나쁘다. 차례만 바꾼다.
+ */
+.mrn-lead {
+  order: -1;
+  grid-column: span 2;
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 7%, transparent), transparent 120px);
+}
+.mrn-lead .mrn-title { font-size: 1.02rem; }
+/* 장세 판단은 그 둘 바로 뒤 — 「사도 되는 날인가」는 어디에 담을지보다 나중이다 */
+.mrn-signal { order: 0; }
+.mrn-us { order: 1; }
+.mrn-report { order: 2; }
+.mrn-buzz { order: 3; }
+.mrn-rooms { order: 4; }
+/* 일정은 길어서 자리를 많이 먹는데 날마다 바뀌는 값이 아니다 — 맨 뒤 */
+.mrn-cal { order: 5; }
+
+/* 한 칸짜리 폭에서는 두 칸을 못 준다 — 자리만 비뚤어진다 */
+@media (max-width: 719px) {
+  .mrn-lead { grid-column: auto; }
+}
 .mrn-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
 .mrn-table td { padding: 2px 4px; border-bottom: 1px solid var(--border); }
 .mrn-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
