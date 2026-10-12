@@ -533,6 +533,14 @@ export function CandleChart({
    *   · 십자선이 없을 때는 **마지막 봉**을 띄워 둔다. 띠가 빈 채로 자리만 먹지 않는다.
    */
   const barRef = useRef<HTMLDivElement>(null);
+  /*
+   * 범례 줄도 **차트 밖**이다 (2026-10-12).
+   *
+   * 띠(barRef)는 높이에서 빼면서 범례는 안 뺐다. 예전에는 넘쳐도 봉 차트 축 끝이 살짝
+   * 잘릴 뿐이라 아무도 몰랐는데, 아래 칸이 생기자 **맨 아래 칸이 통째로** 잘려 나갔다.
+   * 칸 안에 있지만 차트가 아닌 것은 전부 빼야 한다 — 하나라도 빠뜨리면 그만큼 밀린다.
+   */
+  const legendRef = useRef<HTMLDivElement>(null);
   /** 지금 좁은 화면인가 — 띠를 쓸지, 차트 높이에서 띠 몫을 뺄지 여기 하나로 정한다 */
   const narrowRef = useRef(false);
   /**
@@ -1604,7 +1612,12 @@ export function CandleChart({
        * 차트 밖에 있는 것은 전부 빼야 한다 — 띠(barH)를 뺐던 것과 같은 까닭이다.
        */
       const splitH = SPLIT_H * (1 + (prefs.rsiOn ? 1 : 0));
-      chart.applyOptions({ width: w, height: Math.max(120, heightRef.current - barH - p.vol - p.rsi - splitH) });
+      /* 범례 줄 — 이평·RSI 를 켜면 두 줄이 되기도 한다. 재서 뺀다 */
+      const legH = legendRef.current?.offsetHeight ?? 0;
+      chart.applyOptions({
+        width: w,
+        height: Math.max(120, heightRef.current - barH - legH - p.vol - p.rsi - splitH),
+      });
       volChartRef.current?.applyOptions({ width: w, height: p.vol });
       rsiChartRef.current?.applyOptions({ width: w, height: p.rsi });
       /*
@@ -1737,6 +1750,8 @@ export function CandleChart({
      * (띠 높이 변화 → 캔버스 높이 변화 → `el` RO → 같은 값이라 한 번에 멎는다.)
      */
     if (barRef.current) ro.observe(barRef.current);
+    /* 범례도 같은 까닭으로 — 이평을 켜고 끄면 줄 수가 바뀐다 */
+    if (legendRef.current) ro.observe(legendRef.current);
     /*
      * **한 번은 손으로 부른다** (2026-09-22).
      *
@@ -2264,7 +2279,7 @@ export function CandleChart({
         hoverRef.current = false;
       }}
     >
-      <div className="chart-legend">
+      <div className="chart-legend" ref={legendRef}>
         {/*
           고·저 괴리 — 범례 **맨 앞**이다 (2026-08-25).
           오른쪽 끝에 뒀더니 그 위에 붙박이인 「⤢ 크게」 버튼(absolute, 우상단)과

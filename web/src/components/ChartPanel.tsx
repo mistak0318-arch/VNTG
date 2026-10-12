@@ -539,7 +539,16 @@ export function ChartPanel({
   useEffect(() => {
     const el = wrapRef.current;
     if (!el || !full) return;
-    const measure = () => setWrapH(el.clientHeight);
+    /*
+     * **안쪽 여백은 빼고 준다** (2026-10-12). `clientHeight` 는 패딩을 포함하는데
+     * 차트가 쓸 수 있는 자리는 그 안쪽이다. 16px 이 작아 보여도 아래 칸이 생긴 뒤로는
+     * 그만큼 맨 아래가 잘린다 — 넘치면 `.chart-wrap` 이 그대로 자른다.
+     */
+    const measure = () => {
+      const cs = getComputedStyle(el);
+      const pad = parseFloat(cs.paddingTop || "0") + parseFloat(cs.paddingBottom || "0");
+      setWrapH(Math.max(0, el.clientHeight - pad));
+    };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
