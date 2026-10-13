@@ -78,7 +78,7 @@ export const STOCK_TABS: { key: StockTab; label: string }[] = [
     「차트만」 — 종합 탭은 신호등과 장중 수급이 위에 얹혀 차트가 아래로 밀린다.
     차트를 크게 오래 보고 싶을 때가 따로 있어서 그 탭을 둔다.
   */
-  { key: "chartOnly", label: "차트만" },
+  { key: "chartOnly", label: "차트" },
   { key: "orderbook", label: "호가" },
   { key: "broker", label: "거래원" },
   { key: "program", label: "프로그램" },
@@ -295,9 +295,22 @@ export function StockTabsSection({
    * 차례**(`orderOf`)다. 둘을 섞으면 벤티지가 순서를 고친 뒤 엉뚱한 탭으로 넘어간다.
    */
   const orderedKeys = visualOrder(visibleTabs.map((t) => t.key), tabOrder.orderOf);
-  const topKeys = new Set(
-    visibleTabs.slice(0, Math.ceil(visibleTabs.length / 2)).map((t) => t.key as string),
-  );
+  /*
+   * **윗줄·아랫줄은 「눈에 보이는 차례」로 가른다** (2026-10-14 — 벤티지: "위쪽을
+   * 아래쪽으로도 내릴 수 있고 아래쪽도 위로 올릴 수 있게 순서 변경 바꿔 줄래? 그냥
+   * 드래그 앤 드롭으로").
+   *
+   * 끌어 놓기는 **이미 줄을 안 가렸다** — `useDragOrder` 가 `elementFromPoint` 로 밑에
+   * 깔린 탭을 찾으므로 아랫줄 탭을 윗줄에 떨궈도 순서는 바뀌었다. 그런데 **화면이 안
+   * 따라왔다.** 어느 줄에 설지를 저장된 순서가 아니라 **`STOCK_TABS` 에 적힌 차례**로
+   * 갈라 놓았기 때문이다. 순서를 바꿔도 제자리에 남으니 「안 된다」로 보였다.
+   *
+   * 자르는 자리를 `orderedKeys`(저장된 순서) 로 옮긴다. 그러면 끌어서 앞쪽 절반으로
+   * 보내면 윗줄로 올라오고, 뒤쪽 절반으로 보내면 아래로 내려간다 — 따로 만든 장치가
+   * 아니라 **순서 하나로 둘 다 설명된다.** ◀▶ 단추도 같이 줄을 넘는다.
+   */
+  const half = Math.ceil(orderedKeys.length / 2);
+  const topKeys = new Set(orderedKeys.slice(0, half));
   const swipe = useSwipeTabs({
     order: splitTabs
       ? orderedKeys.filter((k) => topKeys.has(k) === topKeys.has(tab))
@@ -373,11 +386,11 @@ export function StockTabsSection({
       */}
       {splitTabs && (
         <TabScroller className="detail-tabs dt-top" activeKey={tab}>
-          {visibleTabs.slice(0, Math.ceil(visibleTabs.length / 2)).map(tabBtn)}
+          {visibleTabs.filter((t) => topKeys.has(t.key)).map(tabBtn)}
         </TabScroller>
       )}
       <TabScroller className="detail-tabs" activeKey={tab}>
-        {(splitTabs ? visibleTabs.slice(Math.ceil(visibleTabs.length / 2)) : visibleTabs).map(tabBtn)}
+        {(splitTabs ? visibleTabs.filter((t) => !topKeys.has(t.key)) : visibleTabs).map(tabBtn)}
         {/*
           ETF 정보 — ETF 일 때만. order 를 종합과 같게 주면 flex 동점 규칙(DOM 순서)으로
           종합 바로 옆에 선다. 저장되는 순서 배열에는 안 끼운다 — 종목 따라 있다 없다 하는
