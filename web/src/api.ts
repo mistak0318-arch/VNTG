@@ -146,7 +146,39 @@ async function req(path: string, init?: RequestInit): Promise<Response> {
  */
 const BUSY_WAITS_MS = [900, 2200, 4500];
 
-async function getJson<T = RawRecord>(path: string): Promise<T> {
+/**
+ * **같은 GET 이 동시에 두 번 나가지 않게** (2026-10-14).
+ *
+ * 벤티지: "넓게 보기 하면서 처음 로딩할 때 시간이 꽤 걸리거든? 지연되는 원인이 있는지
+ * 확인하고 개선 포인트 좀 잡아 봐."
+ *
+ * 재 보니 **넓게 보기는 원인이 아니었다** — 켜고 끄고 재면 요청 수가 46 대 48 로 오히려
+ * 하나 적다. 진짜 원인은 종목상세가 열릴 때 **서로 다른 28개 요청을 한꺼번에 쏘는 것**이다.
+ * 브라우저는 한 출처에 6개만 동시에 보내므로 다섯 줄로 줄을 서고, 각자 키움을 300~800ms
+ * 기다리니 마지막 응답이 3초에 닿는다.
+ *
+ * 그중 **같은 주소를 두세 번 부르는 것**이 있었다(일봉 3곳·KRX 지표 2곳·거래소별 2곳·
+ * 칸 순서 2곳). 서로 다른 컴포넌트가 저마다 필요해서 부르는 것이라 어느 한쪽을 지울 수는
+ * 없다 — 대신 **이미 날아가 있는 요청이면 그 약속을 같이 쓴다.** 호출하는 쪽은 아무것도
+ * 안 바뀌고, 줄에서 자리 몇 개가 빈다.
+ *
+ * ⚠️ 끝나면 즉시 지운다. 결과를 들고 있으면 그건 캐시가 되고, **HTS 에서 낡은 값은
+ * 안 보여 주는 것보다 나쁘다**(서비스 워커에 적어 둔 것과 같은 이유). 「지금 날아가는
+ * 중인 것만」 합친다.
+ */
+const inFlightGet = new Map<string, Promise<unknown>>();
+
+function getJson<T = RawRecord>(path: string): Promise<T> {
+  const hit = inFlightGet.get(path);
+  if (hit) return hit as Promise<T>;
+  const p = getJsonOnce<T>(path).finally(() => {
+    inFlightGet.delete(path);
+  });
+  inFlightGet.set(path, p);
+  return p;
+}
+
+async function getJsonOnce<T = RawRecord>(path: string): Promise<T> {
   for (let tries = 0; ; tries += 1) {
     const res = await req(path);
     const body = (await res.json()) as T & { error?: string; 과부하?: boolean };
