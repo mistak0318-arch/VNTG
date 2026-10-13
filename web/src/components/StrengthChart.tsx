@@ -22,6 +22,8 @@
  * 흐린 선으로 깔면 「튄 것」과 「흐름이 바뀐 것」이 갈린다.
  */
 
+import { useState } from "react";
+
 const W = 320;
 const H = 108;
 const PAD = { t: 10, b: 10 };
@@ -43,6 +45,11 @@ function label(t: string): string {
 }
 
 export function StrengthChart({ points }: { points: StrengthPoint[] }) {
+  /*
+   * ⚠️ 훅은 **이른 return 앞**에 둔다 — 뒤에 두면 점이 둘 미만인 렌더에서 훅 수가
+   * 달라져 React 가 터진다.
+   */
+  const [tip, setTip] = useState(false);
   if (points.length < 2) return null;
 
   const vals = points.map((p) => p.strength);
@@ -109,6 +116,24 @@ export function StrengthChart({ points }: { points: StrengthPoint[] }) {
         <span className="pt-n">
           평균 {last.avg > 0 ? last.avg.toFixed(0) : "-"} · {points.length}점
         </span>
+        {/*
+          **읽는 법은 접어 둔다** (2026-10-14 — 벤티지: "체결강도 밑에 이 설명은 기본
+          접힘으로 놔주고 눌렀을 때 설명 나올 수 있게 바꿔 줘").
+
+          넉 줄짜리 설명이 늘 펴져 있었다. 처음 한 번은 꼭 필요한 글이지만 **두 번째부터는
+          자리만 먹는다** — 날마다 보는 화면에서 안 읽는 글이 그래프만큼 자리를 차지하면
+          그래프가 작아진다. 지우지는 않는다. 모르는 사람에게는 이 값이 통째로 안 읽히는
+          글이라, 한 번 눌러 찾을 수 있는 자리에 둔다.
+        */}
+        <button
+          type="button"
+          className={`sp-tip${tip ? " on" : ""}`}
+          onClick={() => setTip((v) => !v)}
+          aria-expanded={tip}
+          title="이 그래프를 읽는 법"
+        >
+          ⓘ
+        </button>
       </div>
 
       <div className="sp-chart">
@@ -169,6 +194,7 @@ export function StrengthChart({ points }: { points: StrengthPoint[] }) {
         </div>
       )}
 
+      {tip && (
       <div className="table-note">
         <b>100 이 균형</b>입니다 — 위로 벌어지면 매수 체결이 우세합니다. 등락률은 결과라서
         「오르고 멈춘 것」과 「계속 사는 것」이 안 갈리는데 이 값이 그 둘을 가릅니다.
@@ -176,6 +202,7 @@ export function StrengthChart({ points }: { points: StrengthPoint[] }) {
         <b> ●</b> 는 100 을 넘나든 자리, <b>세로줄</b>은 갑자기 튄 자리입니다 — 그 시각의
         뉴스·공시와 맞춰 보세요.
       </div>
+      )}
     </div>
   );
 }
