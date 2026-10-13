@@ -220,8 +220,23 @@ export function StockDetail({
   }
 
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="sheet" ref={sheetRef} onClick={(e) => e.stopPropagation()}>
+    /*
+      **「넓게 보기」는 이 시트에만 걸린다** (2026-10-14 — 벤티지: "종목상세 확대모드가
+      여기저기 적용돼서 부작용이 생기네. 텔레그램 창도 이상하고 지수창이랑 해외종목
+      상세도 이상해졌어").
+
+      내 잘못이다. 넓게 보기 CSS 를 `html[data-widestock="1"] .sheet …` 로 적었는데
+      `.sheet` 는 **이 앱의 모든 시트**가 쓰는 이름이다 — 지수 상세·텔레그램 방·키워드·
+      야후 차트·테마 구성종목까지 열여덟 군데다. 특히 10/13 에 시트를 세로 flex 상자로
+      바꾸고 `overflow: hidden` 을 건 것이 치명적이었다: **종목상세 말고는 전부 스크롤이
+      막혔다.** 모양이 조금 이상한 게 아니라 못 읽게 된 것이다.
+
+      표를 하나 달아 그 아래로만 좁힌다(`sdw` = stock detail wide). 이 표는 **이 컴포넌트가
+      `wide` 로 열렸을 때만** 붙으므로, ETF 패널 안의 상세·미니창처럼 `wide` 를 안 넘기는
+      곳도 저절로 빠진다.
+    */
+    <div className={`overlay${wide ? " sdw" : ""}`} onClick={onClose}>
+      <div className={`sheet${wide ? " sdw" : ""}`} ref={sheetRef} onClick={(e) => e.stopPropagation()}>
         <div className="sheet-header" ref={headRef}>
           {/*
             **감싸는 칸만 더한다** (2026-10-12 — 「넓게 보기」 2/4).

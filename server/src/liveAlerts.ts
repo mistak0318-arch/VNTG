@@ -92,6 +92,29 @@ function num(v: unknown): number {
   const n = Number(String(v ?? "").replace(/[+,\s]/g, ""));
   return Number.isFinite(n) ? Math.abs(n) : NaN;
 }
+/**
+ * **부호를 살려 읽는다** (2026-10-13 — 벤티지: "알림에서 나오는 등락률이 거꾸로 되어
+ * 있는 듯. 실제는 마이너스인데 알람은 플러스로 나온다").
+ *
+ * 위 `num()` 은 `Math.abs()` 를 건다. 키움 실시간은 **현재가(FID 10)에도 부호를 달아**
+ * 방향을 알리는데(`-32500` = 내림), 그 값을 가격으로 쓰려면 절댓값이라야 한다.
+ * 그래서 abs 가 기본이 된 것이고 가격·체결강도에는 맞다.
+ *
+ * 그런데 **등락률(FID 12)은 부호가 뜻의 전부다.** 같은 함수로 읽는 바람에 −5.8% 가
+ * +5.8% 로 찍혔다. 체결강도가 뛰었다는 알림에 「주가 +6.2%」가 붙으면 **사람은 그걸
+ * 보고 들어간다** — 실제로는 −5.8% 로 빠지는 중이었다(10/13 한화솔루션). 숫자 하나가
+ * 뜻을 통째로 뒤집는 자리라 읽는 함수를 따로 둔다.
+ *
+ * 키움이 더러 부호를 두 번 다는 일이 있어(`--520995` 를 겪었다) 맨 앞 연속된 − 는
+ * 하나로 접는다. 접지 않으면 NaN 이 되어 칸이 조용히 사라진다.
+ */
+function signedNum(v: unknown): number {
+  const s = String(v ?? "")
+    .replace(/[+,\s]/g, "")
+    .replace(/^-+/, "-");
+  const n = Number(s);
+  return Number.isFinite(n) ? n : NaN;
+}
 
 export interface LiveAlert {
   kind: "vi" | "strength";
@@ -264,7 +287,7 @@ export async function runLiveAlerts(
         dirty = true;
       }
       /* 지금 등락률도 같이 — 체결강도만으로는 오르는 중인지 모른다 */
-      const rate = num(store.getLatestKrx("0B", code)?.values?.["12"]);
+      const rate = signedNum(store.getLatestKrx("0B", code)?.values?.["12"]);
       const ratePart = Number.isFinite(rate) && rate !== 0 ? ` · 주가 ${rate > 0 ? "+" : ""}${rate.toFixed(1)}%` : "";
       out.push({
         kind: "strength",
