@@ -25,6 +25,7 @@ import { ProgramFlowPanel } from "./ProgramFlowPanel";
 import { CreditPanel, DailyDetailPanel, QuoteSummary, StrengthPanel } from "./StockDepthPanels";
 import { useCardOrder } from "../useCardOrder";
 import { useSwipeTabs, visualOrder } from "../useSwipeTabs";
+import { useTabRows } from "../useTabRows";
 
 /**
  * 종목 하나를 보는 **탭 묶음 — 화면 두 곳이 같이 쓴다.**
@@ -266,9 +267,23 @@ export function StockTabsSection({
    * ETF 는 순서를 따로 저장한다: 보는 정보가 다르니 배치도 따로가 맞다.
    * 키는 시트가 쓰던 것을 그대로 쓴다 — 이미 정해 둔 순서가 안 날아간다.
    */
+  /*
+   * **줄은 순서와 따로 저장한다** (2026-10-14 — 벤티지: "위쪽 아래쪽에 배치한 건 고정으로
+   * 하자. 어느 메뉴가 디바이스에 따라 위아래로 가면 헷갈리니깐").
+   *
+   * 아까까지는 줄이 「순서의 앞 절반·뒤 절반」이었다. 그러면 줄이 제 값이 아니라 다른
+   * 것의 그림자라, 탭 하나를 앞으로 옮기면 경계에 걸린 탭이 밀려 내려간다.
+   * 기본값은 예전 모양 그대로(뒤 절반이 아랫줄) — 벤티지가 한 번 끌어 옮기기 전까지는
+   * 화면이 한 픽셀도 안 달라진다.
+   */
+  const rowScope = isEtf ? "stockDetail.tabRows.etf" : "stockDetail.tabRows";
+  const defaultBottom = visibleTabs.slice(Math.ceil(visibleTabs.length / 2)).map((t) => t.key as string);
+  const rows = useTabRows(rowScope, defaultBottom);
   const tabOrder = useCardOrder(
     isEtf ? "stockDetail.tabs.etf" : "stockDetail.tabs",
     visibleTabs.map((t) => t.key),
+    /* 끌어서 다른 줄의 탭 위에 놓으면 **그 줄로 간다** — 순서와 줄이 한 손짓에 같이 정해진다 */
+    (from, target) => rows.moveTo(from, target),
   );
 
   /*
@@ -309,8 +324,7 @@ export function StockTabsSection({
    * 보내면 윗줄로 올라오고, 뒤쪽 절반으로 보내면 아래로 내려간다 — 따로 만든 장치가
    * 아니라 **순서 하나로 둘 다 설명된다.** ◀▶ 단추도 같이 줄을 넘는다.
    */
-  const half = Math.ceil(orderedKeys.length / 2);
-  const topKeys = new Set(orderedKeys.slice(0, half));
+  const topKeys = new Set(orderedKeys.filter((k) => !rows.isBottom(k)));
   const swipe = useSwipeTabs({
     order: splitTabs
       ? orderedKeys.filter((k) => topKeys.has(k) === topKeys.has(tab))
@@ -365,6 +379,24 @@ export function StockTabsSection({
               >
                 ▶
               </span>
+              {/*
+                **줄 바꾸기** (2026-10-14). 끌어 놓기로도 되지만 폰에서는 길게 눌러야
+                잡히고, 탭 줄은 가로로 미는 자리라 그 둘이 손에서 겹친다. 편집 중에는
+                단추 하나로 확실하게 — ◀▶ 가 자리를 옮기듯 ▲▼ 는 줄을 옮긴다.
+              */}
+              {splitTabs && (
+                <span
+                  className="dt-move dt-row"
+                  role="button"
+                  title={rows.isBottom(t.key) ? "윗줄로" : "아랫줄로"}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    rows.toggle(t.key);
+                  }}
+                >
+                  {rows.isBottom(t.key) ? "▲" : "▼"}
+                </span>
+              )}
             </>
           )}
         </button>

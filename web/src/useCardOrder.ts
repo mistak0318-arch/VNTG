@@ -65,7 +65,7 @@ export function orderMap(known: string[], saved: string[]): Map<string, number> 
  */
 const ORDER_EVENT = "vntg:card-order";
 
-export function useCardOrder(scope: string, known: string[]) {
+export function useCardOrder(scope: string, known: string[], onDrop?: (from: string, target: string) => void) {
   const [saved, setSaved] = useState<string[]>([]);
   const [all, setAll] = useState<Record<string, string[]>>({});
 
@@ -145,7 +145,7 @@ export function useCardOrder(scope: string, known: string[]) {
    * PC 는 끌고, 폰은 화살표 그대로. 소비처는 요소에 `{...order.drag.props(key)}` 를
    * 스프레드하고 `order.drag.cls(key)` 를 클래스에 붙이면 끝이다.
    */
-  const drag = useDragOrder(current, write);
+  const drag = useDragOrder(current, write, onDrop);
 
   return {
     /** 카드에 넘길 CSS order 값 */

@@ -57,7 +57,16 @@ export interface DragOrder {
   dragging: string | null;
 }
 
-export function useDragOrder(current: string[], commit: (next: string[]) => void): DragOrder {
+export function useDragOrder(
+  current: string[],
+  commit: (next: string[]) => void,
+  /**
+   * 놓인 자리까지 알려 준다 (2026-10-14). 순서만으로는 **어느 줄에 놓았는지**를 알 수
+   * 없는데, 종목상세 탭 줄은 위·아래 둘이라 그걸 알아야 한다. 순서는 위에서 이미 쓰고,
+   * 이 콜백은 「누구를 누구 자리에 놓았나」만 전한다 — 쓰는 쪽이 뜻을 정한다.
+   */
+  onDrop?: (from: string, target: string) => void,
+): DragOrder {
   /*
    * 끌던 키는 ref 로 — 움직임은 초당 수십 번 오는데 그때마다 상태를 바꾸면 표 전체가
    * 다시 그려진다. 화면용 상태(dragging/over)는 잡힐 때·대상이 바뀔 때·끝날 때만 바뀐다.
@@ -70,6 +79,8 @@ export function useDragOrder(current: string[], commit: (next: string[]) => void
   listRef.current = current;
   const commitRef = useRef(commit);
   commitRef.current = commit;
+  const onDropRef = useRef(onDrop);
+  onDropRef.current = onDrop;
 
   const drop = useCallback((target: string | null) => {
     const from = src.current;
@@ -86,6 +97,7 @@ export function useDragOrder(current: string[], commit: (next: string[]) => void
     const at = next.indexOf(target) + (fromIdx < toIdx ? 1 : 0);
     next.splice(at, 0, from);
     commitRef.current(next);
+    onDropRef.current?.(from, target);
   }, []);
 
   /** 그 좌표 밑에 있는 항목의 키 — 없으면 null */
