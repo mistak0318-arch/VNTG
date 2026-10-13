@@ -522,61 +522,85 @@ export function PriceHeader({
         )}
       </div>
       <div className="ph-grid">
-        {[
-          /*
-           * KRX 줄은 **거래소별 조회의 진짜 KRX 값** (2026-08-26) — info 는 통합(_AL)
-           * 이라 여기 쓰면 NXT 와 늘 같아 보였다. krx 조회가 아직이면 info(통합)로
-           * 임시. 마감 국면에만 마지막 거래일 값으로 메운다 — 07:50 부터는 오늘 값만.
-           */
-          /* 넘어간 새벽엔 거래소별 조회가 0 을 준다 — 그 0 을 쓰지 않고 어제 일봉으로 (위 `rolled` 주석) */
-          { label: "시가", value: rolled ? last!.open : krx?.open || (fillOk ? fill(info.open_pric, last?.open) : info.open_pric), nxtValue: rolled ? null : nxt?.open ?? null },
-          { label: "고가", value: rolled ? last!.high : krx?.high || (fillOk ? fill(info.high_pric, last?.high) : info.high_pric), nxtValue: rolled ? null : nxt?.high ?? null },
-          { label: "저가", value: rolled ? last!.low : krx?.low || (fillOk ? fill(info.low_pric, last?.low) : info.low_pric), nxtValue: rolled ? null : nxt?.low ?? null },
-        ].map((it) => {
-          const v = vsBase(it.value, base);
-          const nv = vsBase(it.nxtValue, base);
-          /*
-           * ⚠️ **자리는 늘 잡아 둔다.**
-           *
-           * 「KRX 와 같으면 안 적는다」로 두었더니, 10초마다 값을 다시 받으면서
-           * 두 값이 붙었다 떨어졌다 할 때마다 **줄이 생겼다 없어졌다** 했다.
-           * 세 칸(시·고·저)이 제각각 그러니 화면이 계속 덜컹거린다.
-           *
-           * NXT 값이 아예 없을 때만 안 그린다(그건 안 바뀐다). 값이 있는데 KRX 와
-           * 같으면 숫자 대신 「= KRX」다 — 같은 숫자를 두 번 안 쓰면서 높이는 고정된다.
-           */
-          /*
-           * 「= KRX」 접기는 그만뒀다 (2026-08-26 — 「NXT 에서 이 정도 고저였는데
-           * KRX 는 이렇네, 를 보려는 건데 값을 숨기면 못 본다」). 같은 값이어도
-           * 숫자로 적는다 — 견주는 게 목적이면 양쪽 다 숫자여야 한다.
-           */
-          const hasNxt = it.nxtValue !== null && it.nxtValue > 0;
+        {/*
+          **시·고·저를 한 칸 미니표로** (2026-10-14 — 벤티지: "이 부분 좀 더 컴팩트하면서
+          한눈에 확 들어오게 바꿀 수 있나? 한눈에 확 들어오는 구조").
+
+          여태 셋이 **따로 테두리 진 칸**이었고 각각 KRX·NXT 두 줄이라 여섯 줄이었다.
+          라벨도 셋, 테두리도 셋, 거래소 배지는 여섯 번 찍혔다 — 정작 보고 싶은 것은
+          숫자 여섯 개뿐인데 그걸 감싼 것이 더 컸다.
+
+          한 칸 안에 **3열 × 2행** 미니표로 묶는다. 라벨(시·고·저)은 머리에 한 번,
+          거래소는 행 머리에 한 번. 숫자는 **하나도 안 없앴다** — 8월에 정한 「값이 같아도
+          양쪽 다 숫자로 적는다(견주는 게 목적이면 숨기면 안 된다)」는 그대로다.
+          줄어든 것은 테두리·라벨·배지, 즉 **숫자가 아닌 것들**이다.
+
+          ⚠️ NXT 행은 값이 없어도 **자리를 비워 둔다.** 「없으면 행을 뺀다」로 했다가
+          10초마다 값이 붙었다 떨어졌다 할 때 표 높이가 덜컹거린 적이 있다(위 옛 주석).
+        */}
+        {(() => {
+          const items = [
+            /*
+             * KRX 줄은 **거래소별 조회의 진짜 KRX 값** (2026-08-26) — info 는 통합(_AL)
+             * 이라 여기 쓰면 NXT 와 늘 같아 보였다. krx 조회가 아직이면 info(통합)로
+             * 임시. 마감 국면에만 마지막 거래일 값으로 메운다 — 07:50 부터는 오늘 값만.
+             * 넘어간 새벽엔 거래소별 조회가 0 을 준다 — 그 0 대신 어제 일봉으로(`rolled`).
+             */
+            { label: "시", value: rolled ? last!.open : krx?.open || (fillOk ? fill(info.open_pric, last?.open) : info.open_pric), nxtValue: rolled ? null : nxt?.open ?? null },
+            { label: "고", value: rolled ? last!.high : krx?.high || (fillOk ? fill(info.high_pric, last?.high) : info.high_pric), nxtValue: rolled ? null : nxt?.high ?? null },
+            { label: "저", value: rolled ? last!.low : krx?.low || (fillOk ? fill(info.low_pric, last?.low) : info.low_pric), nxtValue: rolled ? null : nxt?.low ?? null },
+          ];
+          const anyNxt = items.some((it) => it.nxtValue !== null && it.nxtValue > 0);
           return (
-            <div className="ph-cell" key={it.label}>
-              <span className="ph-label">{it.label}</span>
-              <span className="ph-row">
+            <div className="ph-cell ph-ohl" style={{ gridColumn: "span 2" }}>
+              <div className="ph-ohl-grid">
+                <span />
+                {items.map((it) => (
+                  <span className="ph-ohl-h" key={`h-${it.label}`}>
+                    {it.label}
+                  </span>
+                ))}
+
                 <em className="ph-ex">KRX</em>
-                {Math.abs(Number(it.value)) === 0 ? (
-                  <b className="ph-value pt-n" title="오늘 아직 체결이 없습니다">
-                    -
-                  </b>
-                ) : (
-                  <>
-                    <b className={`ph-value ${v.cls}`}>{fmtAbsNum(it.value)}</b>
-                    {v.rate && <em className={`ph-pct ${v.cls}`}>{v.rate}</em>}
-                  </>
-                )}
-              </span>
-              {hasNxt && (
-                <span className="ph-row">
-                  <em className="ph-ex nxt">NXT</em>
-                  <b className={`ph-value ${nv.cls}`}>{fmtNum(it.nxtValue)}</b>
-                  {nv.rate && <em className={`ph-pct ${nv.cls}`}>{nv.rate}</em>}
-                </span>
-              )}
+                {items.map((it) => {
+                  const v = vsBase(it.value, base);
+                  return (
+                    <span className="ph-ohl-c" key={`k-${it.label}`}>
+                      {Math.abs(Number(it.value)) === 0 ? (
+                        <b className="ph-value pt-n" title="오늘 아직 체결이 없습니다">
+                          -
+                        </b>
+                      ) : (
+                        <>
+                          <b className={`ph-value ${v.cls}`}>{fmtAbsNum(it.value)}</b>
+                          {v.rate && <em className={`ph-pct ${v.cls}`}>{v.rate}</em>}
+                        </>
+                      )}
+                    </span>
+                  );
+                })}
+
+                <em className={`ph-ex nxt${anyNxt ? "" : " pt-n"}`}>NXT</em>
+                {items.map((it) => {
+                  const nv = vsBase(it.nxtValue, base);
+                  const has = it.nxtValue !== null && it.nxtValue > 0;
+                  return (
+                    <span className="ph-ohl-c" key={`n-${it.label}`}>
+                      {has ? (
+                        <>
+                          <b className={`ph-value ${nv.cls}`}>{fmtNum(it.nxtValue)}</b>
+                          {nv.rate && <em className={`ph-pct ${nv.cls}`}>{nv.rate}</em>}
+                        </>
+                      ) : (
+                        <b className="ph-value pt-n">-</b>
+                      )}
+                    </span>
+                  );
+                })}
+              </div>
             </div>
           );
-        })}
+        })()}
         {/*
           거래소별 지금 값. KRX 는 15:30 이후면 그게 종가이고, NXT 는 20:00 까지 움직인다.
           같은 칸에 나란히 둬야 "어느 쪽 숫자를 보고 있는지"가 헷갈리지 않는다.
@@ -773,23 +797,26 @@ export function PriceHeader({
               </>
             );
           })()}
-          <span className="ph-sep" />
-          <span className="ph-row">
-            <em className="ph-sublabel" title="매수 체결 ÷ 매도 체결 × 100. 100 이 균형">
-              체결강도
-            </em>
-            <span className="ph-value sub ph-strength">
-              {strength === null ? "-" : `${strength.toFixed(0)}%`}
-            </span>
-          </span>
-          <span className="ph-sep" />
+        </div>
+        {/*
+          **거래량·체결강도를 제 칸으로 뺐다** (2026-10-14 — 벤티지: "한눈에 확 들어오는
+          구조").
+
+          한 칸에 거래대금·KRX·NXT·체결강도·거래량·그중NXT 가 쌓여 **일곱 줄**이었다.
+          격자는 줄 높이를 그 줄에서 제일 긴 칸에 맞추므로, 이 칸 하나가 「전일比 거래량」
+          (한 줄짜리)까지 일곱 줄 높이로 끌어올렸다 — 그 옆이 통째로 빈칸이었다.
+
+          셋은 서로 다른 물음이다 — 얼마가 돌았나 · 몇 주가 돌았나 · 사자가 세냐.
+          칸을 가르면 제일 긴 칸이 세 줄로 줄고, 남던 자리는 칸이 들어가 메운다.
+        */}
+        <div className="ph-cell">
           {/*
             거래량은 이제 **통합(KRX+NXT)** 이다 (/info 가 _AL). 그 옆 NXT 는
             「그중 NXT 몫」 — 합산 대상이 아니라 부분집합이다. 헷갈리지 않게 툴팁에 적는다.
           */}
+          <span className="ph-label" title="KRX+NXT 통합 누적 거래량">거래량</span>
           <span className="ph-row">
-            <em className="ph-sublabel" title="KRX+NXT 통합 누적 거래량">거래량</em>
-            <span className="ph-value sub">{fmtNum(totalVol)}</span>
+            <span className="ph-value">{fmtNum(totalVol)}</span>
           </span>
           {nxt?.volume != null && nxt.volume > 0 && (
             <span className="ph-row" title="통합 거래량 중 NXT 에서 체결된 몫">
@@ -797,6 +824,16 @@ export function PriceHeader({
               <span className="ph-value sub">{fmtNum(nxt.volume)}</span>
             </span>
           )}
+        </div>
+        <div className="ph-cell">
+          <span className="ph-label" title="매수 체결 ÷ 매도 체결 × 100. 100 이 균형">
+            체결강도
+          </span>
+          <span className="ph-row">
+            <span className="ph-value ph-strength">
+              {strength === null ? "-" : `${strength.toFixed(0)}%`}
+            </span>
+          </span>
         </div>
         <div className="ph-cell">
           <span className="ph-label">전일比 거래량</span>
