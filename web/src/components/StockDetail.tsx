@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSheetBack } from "../useSheetBack";
-import { api, pick, stockNameOf, type RawRecord } from "../api";
+import { api, normalizeStockCode, pick, stockNameOf, type RawRecord } from "../api";
+import { krxOverlayLive, useRealtime } from "../useRealtime";
 import { StatusMark, StockStatusBanner, useStockStatus } from "./StockStatusBanner";
 import { InvestorEstimate } from "./InvestorEstimate";
 import { WatchAddSheet, type WatchAddTarget } from "./WatchAddSheet";
@@ -257,7 +258,21 @@ export function StockDetail({
               {/* 상태 한 글자 — 배너까지 안 내려가도 이름 옆에서 「주의」가 보인다 (2026-09-10) */}
               <StatusMark flags={flags} />
             </span>
+            {/*
+              **실시간이 실제로 들어오는지** (2026-10-14 — 벤티지: "실시간 표시를 종목명
+              앞에 한번 둬야겠어. 실제 받아오는지 안 받아오는지 모르겠다").
+
+              이 시트의 값은 두 길로 온다 — 1초 폴링(REST)과 소켓(0B). 그런데 화면만 봐서는
+              **어느 쪽이 살아 있는지 알 길이 없었다.** 숫자가 안 바뀌면 「안 움직이는
+              종목인가」와 「안 들어오는 건가」가 구별이 안 된다. 그 둘은 전혀 다른 일이고,
+              뒤를 모르면 멈춘 값을 보고 판단하게 된다.
+            */}
+            {/*
+              ⚠️ 등은 **이름 칸 안**에 둔다. 머리줄 h2 가 줄바꿈 flex 라, 밖에 두면 낱개
+              자식이 되어 제 줄을 통째로 차지한다(실제로 이름 윗줄에 혼자 떴다).
+            */}
             <span className="sd-name">
+              <LiveLamp code={code} />
               {name} ({code})
             </span>
           </h2>
@@ -643,5 +658,50 @@ export function StockDetail({
       {/* 그룹을 고르고 담는다. 담기 전엔 별이 안 켜진다 */}
       {addTarget && <WatchAddSheet target={addTarget} onClose={() => setAddTarget(null)} />}
     </div>
+  );
+}
+
+/**
+ * **실시간 등** — 종목명 앞의 작은 불.
+ *
+ * 세 가지만 말한다. 더 말하면 머리줄에서 자리를 뺏는다.
+ *
+ *   · 초록 ● **실시간** — 소켓(0B)으로 체결이 들어오는 중. 90초 안에 틱이 있었다
+ *   · 주황 ● **1초 갱신** — 소켓은 안 붙었고 REST 폴링만 돈다. 값은 맞지만 한 박자 늦다
+ *   · 회색 ○ **장 아님** — 08:00~20:10 밖. 안 들어오는 게 정상이라 경고가 아니다
+ *
+ * ⚠️ 「안 들어온다」와 「안 움직인다」를 가르는 것이 이 불의 전부다. 그래서 **마지막 틱
+ * 시각**을 툴팁에 적는다 — 숫자가 멎었을 때 그게 종목 탓인지 길 탓인지는 그 시각 하나로
+ * 갈린다.
+ *
+ * ⚠️ 소켓 정원은 200석이고 늘 거의 차 있다(health.json). 자리를 못 받으면 이 불은
+ * 주황이 된다 — 그것도 **사실 그대로**다. 자리를 억지로 늘리지 않는다.
+ */
+function LiveLamp({ code }: { code: string }) {
+  const bare = normalizeStockCode(code);
+  const expect = /^\d{6}$/.test(bare) && krxOverlayLive();
+  const rt = useRealtime(expect ? [`0B:${bare}`] : [], 1500);
+  const v = rt.values[`0B:${bare}`] ?? null;
+  const ago = v ? Date.now() - v.at : null;
+  const live = Boolean(rt.healthy && ago !== null && ago < 90_000);
+
+  if (!expect) {
+    return (
+      <span className="sd-lamp off" title="08:00~20:10 밖입니다 — 실시간이 안 들어오는 것이 정상입니다">
+        ○
+      </span>
+    );
+  }
+  return (
+    <span
+      className={`sd-lamp${live ? " on" : " poll"}`}
+      title={
+        live
+          ? `실시간 체결이 들어오는 중입니다 — 마지막 ${new Date(v!.at).toLocaleTimeString("ko-KR", { hour12: false })}`
+          : "소켓이 안 붙어 1초 폴링으로만 받고 있습니다 — 값은 맞지만 한 박자 늦습니다"
+      }
+    >
+      ●
+    </span>
   );
 }

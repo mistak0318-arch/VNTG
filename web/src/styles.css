@@ -8324,6 +8324,21 @@ button.nav-group-toggle {
   font-variant-numeric: tabular-nums;
 }
 
+/*
+ * 실시간 등 — 종목명 앞의 작은 불 (2026-10-14).
+ * 글자보다 작게, 그러나 색은 분명하게. 머리줄에서 자리를 거의 안 쓰는 것이 조건이다.
+ */
+.sd-lamp {
+  font-size: 0.6rem;
+  line-height: 1;
+  margin-right: 4px;
+  vertical-align: 0.18em;
+  letter-spacing: 0;
+}
+.sd-lamp.on { color: #22c55e; }
+.sd-lamp.poll { color: #f59e0b; }
+.sd-lamp.off { color: var(--muted); }
+
 .sd-name {
   flex: 1 1 auto;
   min-width: 0;
