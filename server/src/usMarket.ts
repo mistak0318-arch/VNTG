@@ -192,9 +192,30 @@ export async function usEtfFlow(opts: { fresh?: boolean } = {}): Promise<{ at: n
   const fresh = Boolean(opts.fresh) && (!etfCache || Date.now() - etfCache.at > 30_000);
   if (!fresh && etfCache && Date.now() - etfCache.at < ETF_TTL) return { ...etfCache, stale: false };
   try {
+    /*
+     * **줄 세우지 않는다** (2026-10-14).
+     *
+     * 돈의 흐름이 느린 까닭을 조각별로 재 보니 `미국ETF` 한 조각이 **캐시가 더워도 매번
+     * 4초**였다(실측 4,365 · 4,203 · 4,029ms). 까닭은 여기 — ETF 서른 개를 야후에
+     * **한 번에 하나씩** 물어보고 있었다. 하나가 130ms 라도 서른이면 4초다.
+     *
+     * 서로 아무 상관 없는 서른 번이라 줄 세울 까닭이 없다. 다만 한꺼번에 서른을 던지면
+     * 야후가 막을 수 있으니 **여섯씩 묶어** 보낸다 — 4초가 1초 밑으로 내려오고,
+     * 야후에게는 「한 번에 여섯」이라 예의도 지킨다.
+     *
+     * ⚠️ 차례는 지킨다(`ETFS` 순서대로 담는다). 화면이 이 순서로 묶음을 가르므로
+     * 끝나는 순서대로 담으면 날마다 자리가 바뀐다.
+     */
+    const CHUNK = 6;
     const rows: UsEtfRow[] = [];
+    const charts = new Map<string, Awaited<ReturnType<typeof yahooChart>> | null>();
+    for (let i = 0; i < ETFS.length; i += CHUNK) {
+      const part = ETFS.slice(i, i + CHUNK);
+      const got = await Promise.all(part.map((e) => yahooChart(e.symbol, "3mo").catch(() => null)));
+      part.forEach((e, k) => charts.set(e.symbol, got[k]));
+    }
     for (const e of ETFS) {
-      const ch = await yahooChart(e.symbol, "3mo").catch(() => null);
+      const ch = charts.get(e.symbol) ?? null;
       const c = (ch?.candles ?? []).filter((x) => x.close > 0);
       const last = c[c.length - 1];
       const at = (k: number) => c[c.length - 1 - k]?.close ?? null;

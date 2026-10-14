@@ -495,9 +495,25 @@ async function buildWhere(client: KiwoomClient, errors: string[]): Promise<{ whe
   } catch {
     errors.push("로테이션");
   }
+  /*
+   * **국내 ETF 와 미국 ETF 는 서로 안 기다린다** (2026-10-14).
+   *
+   * 조각별 실측에서 이 둘이 `ETF흐름 4,994` · `미국ETF 4,365` 로 줄줄이 섰다 —
+   * 서로 아무 상관 없는 둘인데 9초를 쓴 것이다. 먼저 **둘 다 띄워 놓고** 각자의
+   * try 에서 받는다. 긴 쪽 하나만큼만 걸린다.
+   *
+   * ⚠️ `catch(() => {})` 를 미리 달아 둔다. 띄워 놓은 약속이 **await 전에** 깨지면
+   * node 가 「아무도 안 받은 거절」로 보고 경고를 찍는다(상황에 따라 죽이기도 한다).
+   * 미리 달아도 아래 await 가 거절을 그대로 다시 받으므로 에러 처리는 안 바뀐다.
+   */
+  const pKrEtf = inner("ETF흐름", etfFlow(client));
+  const pUsEtf = inner("미국ETF", usEtfFlow());
+  pKrEtf.catch(() => {});
+  pUsEtf.catch(() => {});
+
   let krEtf: MoneyNow["where"]["krEtf"] = [];
   try {
-    const f = await inner("ETF흐름", etfFlow(client));
+    const f = await pKrEtf;
     krEtf = f.rows
       .filter((r) => r.group === "테마·업종" && r.d1 !== null)
       .sort((a, b) => (b.d1 ?? 0) - (a.d1 ?? 0))
@@ -508,7 +524,7 @@ async function buildWhere(client: KiwoomClient, errors: string[]): Promise<{ whe
   }
   let usEtf: MoneyNow["where"]["usEtf"] = [];
   try {
-    const u = await inner("미국ETF", usEtfFlow());
+    const u = await pUsEtf;
     const sec = u.rows.filter((r) => r.group === "섹터" && r.d1 !== null).sort((a, b) => (b.d1 ?? 0) - (a.d1 ?? 0));
     usEtf = [...sec.slice(0, 2), ...sec.slice(-2)].map((r) => ({ symbol: r.symbol, name: r.name, d1: r.d1, volRatio: r.volRatio }));
   } catch {
