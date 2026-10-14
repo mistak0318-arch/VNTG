@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTabTitle } from "../tabTitle";
 import { api, type ScopeDetail, type ScopeFlow, type ScopeRow, fmtKst, kstYmd } from "../api";
 import { useTabActive } from "../tabActive";
+import { useStockFocus } from "../useStockFocus";
 import { MiniLine } from "../components/MiniLine";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { useWatchedCodes } from "../useWatchedCodes";
@@ -493,6 +494,8 @@ function Detail({
 /* ── 페이지 ──────────────────────────────────────────────────────── */
 
 export function ScopePage({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
+  /* 창 연동 — 줄을 누르면 옆 창이 따라온다 (2026-10-14). 꺼져 있으면 `publish` 가 스스로 아무 일도 안 한다 */
+  const focus = useStockFocus();
   /* 설정에서 바꾼 메뉴 이름을 제목에도 (2026-09-14) */
   const pageTitle = useTabTitle("매수직전");
   const [rows, setRows] = useState<ScopeRow[]>([]);
@@ -683,7 +686,22 @@ export function ScopePage({ onSelectStock }: { onSelectStock: (code: string, nam
                 <tr
                   key={r.code}
                   className={`sc-row${open === r.code ? " on" : ""}`}
-                  onClick={() => setOpen(open === r.code ? null : r.code)}
+                  onClick={() => {
+                    setOpen(open === r.code ? null : r.code);
+                    /*
+                      **연동도 같이 쏜다** (2026-10-14 — 벤티지: "현미경 메뉴에서 종목 눌러도
+                      종목 연동되게 할 수 있나? 현미경에서 누르는 건 연동이 작동 안 되네").
+
+                      연동은 `onSelectStock` 을 지나는 길에만 붙어 있었다(App 이 거기서
+                      `focus.publish` 를 부른다). 그런데 이 줄은 **상세를 여는 길이 아니라
+                      펼치는 길**이라 그 함수를 안 지난다 — 그래서 혼자 빠져 있었다.
+
+                      상세를 열어 버리면 안 된다. 여기서 줄을 누르는 것은 「이 종목을 자세히
+                      보자」가 아니라 「이 줄을 펼쳐 보자」이고, 시트가 덮으면 표를 떠나게 된다.
+                      **펼치기는 그대로 두고 연동만** 보낸다 — 옆 창(미니창·보드)이 따라온다.
+                    */
+                    focus.publish(r.code, r.name);
+                  }}
                 >
                   {/*
                     세 줄 (2026-09-09 밤 — 벤티지 "3줄이니까 무지개 이런 마크들도 밑에 내리고"):
