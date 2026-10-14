@@ -140,16 +140,37 @@ export function FlowSeries({
   /** HTS 처럼 **표가 먼저**고 그림은 버튼으로 연다 */
   const [chart, setChart] = useState(true);
 
+  /*
+   * **시각은 숫자만 남긴다** (2026-10-14 — 벤티지: "얜 왜 그래프 안 나오냐, 외국계 합계").
+   *
+   * 이 칸의 약속은 `HHmmss` 또는 `HHmm` 인데, 들어오는 쪽이 둘로 갈려 있었다. 창구
+   * 그래프가 읽는 실시간 시계열은 `152030` 처럼 숫자만이고, 거래원이 직접 찍는 점
+   * (외국계·프로그램)은 `23:20` 처럼 **콜론이 끼어 있다**(`brokerFlow` 의 `kstNow`).
+   *
+   * 자리로 잘라 읽으므로 콜론 하나에 전부 어긋난다 — `mins("23:20")` 은
+   * `Number("23")*60 + Number(":2")` 라 **NaN** 이다. 그 결과가 벤티지가 본 화면이다:
+   * 눈금이 `NaN:NaN`, 선은 안 그려지고, 묶는 칸의 열쇠까지 NaN 이라 **스무 점이 한 줄로**
+   * 뭉쳤다(`23::2` 한 줄). 값은 멀쩡히 와 있었다 — 읽지를 못한 것이다.
+   *
+   * 고치는 자리는 **받는 쪽**이다. 서버의 모양을 바꾸면 「23:20 기준」처럼 사람에게
+   * 보여 주는 자리가 같이 깨지고, 오늘 이미 찍어 둔 점들과도 어긋난다. 여기서 숫자만
+   * 남기면 두 모양이 다 들어온다.
+   */
+  const fixed = useMemo(
+    () => samples.map((s) => (/\D/.test(s.t) ? { ...s, t: s.t.replace(/\D/g, "") } : s)),
+    [samples],
+  );
+
   /* 분 단위로 묶는다 — 누적값이므로 그 분의 **마지막** 점이 그 분의 결과다 */
   const rows = useMemo(() => {
-    if (step === 0) return samples;
+    if (step === 0) return fixed;
     const byBucket = new Map<number, FlowSample>();
-    for (const s of samples) {
+    for (const s of fixed) {
       if (s.t.length < 4) continue;
       byBucket.set(Math.floor(mins(s.t) / step), s);
     }
     return [...byBucket.entries()].sort((a, b) => a[0] - b[0]).map(([, s]) => s);
-  }, [samples, step]);
+  }, [fixed, step]);
 
   if (rows.length === 0) return null;
 
