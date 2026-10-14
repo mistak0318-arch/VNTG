@@ -469,7 +469,15 @@ function toPoints(rows: RawRecord[], mode: "daily" | "time"): StrengthPoint[] {
 }
 
 export function StrengthPanel({ code }: { code: string }) {
-  const [mode, setMode] = useState<"daily" | "time">("daily");
+  /*
+   * **시간별이 먼저다** (2026-10-14 — 벤티지: "체결강도 탭에서는 시간별을 일별보다 앞에
+   * 배치해 줘. 탭 들어가면 오늘의 체결강도 바로 알 수 있게").
+   *
+   * 체결강도를 보러 오는 까닭은 「오늘 사자가 세나」이지 「지난 달에 어땠나」가 아니다.
+   * 기본이 일별이면 들어올 때마다 한 번 더 눌러야 오늘이 나온다 — 한 번 더 누르는 것은
+   * 날마다 치르는 값이다.
+   */
+  const [mode, setMode] = useState<"daily" | "time">("time");
   const { data, loading, error } = useFetch(() => api.strength(code, mode), [code, mode]);
 
   const rows = pickList(data ?? undefined, ["cntr_str_daly", "cntr_str_tm"]);
@@ -498,11 +506,11 @@ export function StrengthPanel({ code }: { code: string }) {
   return (
     <div>
       <div className="filter-row">
-        <button className={`filter-btn ${mode === "daily" ? "active" : ""}`} onClick={() => setMode("daily")}>
-          일별
-        </button>
         <button className={`filter-btn ${mode === "time" ? "active" : ""}`} onClick={() => setMode("time")}>
           시간별
+        </button>
+        <button className={`filter-btn ${mode === "daily" ? "active" : ""}`} onClick={() => setMode("daily")}>
+          일별
         </button>
       </div>
       {loading && <div className="empty">체결강도 불러오는 중...</div>}

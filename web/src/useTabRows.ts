@@ -77,7 +77,8 @@ export function useTabRows(scope: string, defaultBottom: string[]): TabRows {
       const merged = { ...all, [scope]: next };
       setAll(merged);
       window.dispatchEvent(new CustomEvent(EVENT, { detail: { scope, keys: next } }));
-      void api.cardOrderSave(merged).catch(() => {
+      /* 제 칸만 보낸다 — 서버가 합친다(`cardOrder.ts`). 통째로 보내면 남의 칸을 지운다 */
+      void api.cardOrderSave({ [scope]: next }).catch(() => {
         /* 서버에 못 올려도 이번 화면에는 적용돼 있다 */
       });
     },

@@ -109,7 +109,8 @@ export function useCardOrder(scope: string, known: string[], onDrop?: (from: str
       setAll(merged);
       // 같은 scope 를 보고 있는 다른 화면도 즉시 따라온다 (열려 있는 탭 포함)
       window.dispatchEvent(new CustomEvent(ORDER_EVENT, { detail: { scope, order: next } }));
-      void api.cardOrderSave(merged).catch(() => {
+      /* 제 칸만 보낸다 — 서버가 합친다(`cardOrder.ts`). 통째로 보내면 남의 칸을 지운다 */
+      void api.cardOrderSave({ [scope]: next }).catch(() => {
         /* 서버에 못 올려도 이번 화면에는 적용돼 있다 */
       });
     },

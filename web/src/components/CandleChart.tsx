@@ -1404,10 +1404,31 @@ export function CandleChart({
       const dateShort = whole
         ? `${tooltipDate(rows[rows.length - 1].time, false).replace(/^\d{4}\//, "")} ${pc != null && pc > 0 ? "전일대비" : "시가대비"}`
         : tooltipDate(cur.time, intraday).replace(/^\d{4}\//, "");
+      /*
+       * **지난 봉은 「현재」가 아니라 「종가」다** (2026-10-14 — 벤티지: "차트에서 지난날 봉
+       * 클릭했을 때 현재가 아니라 종가라고 표현해 줘야지. 그리고 조회하는 당일 대비 몇 % 빠지거나
+       * 오른 값인지도 표시해 주면 좋을 듯").
+       *
+       * 9/22 에 끝난 봉도 「현재」로 적고 있었다. 마지막 봉에서는 맞는 말이지만 지난 봉에서는
+       * **틀린 말**이다 — 그날 장이 끝나며 정해진 값이니 종가다. 말이 틀리면 숫자도 못 믿는다.
+       *
+       * 그리고 지난 봉에는 **오늘 대비**를 한 줄 더 붙인다. 지난 봉의 등락률(앞 봉 대비)은
+       * 「그날 얼마나 올랐나」인데, 차트를 뒤로 짚는 까닭은 대개 「그때 샀으면 지금 얼마인가」다.
+       * 그 답이 없으면 머릿속으로 나눗셈을 해야 한다.
+       */
+      const last = rows[rows.length - 1];
+      const isLast = i === rows.length - 1;
+      const vsToday =
+        !isLast && !whole && last && last.close > 0 && cur.close > 0
+          ? ((last.close - cur.close) / cur.close) * 100
+          : null;
       const head =
         `<span class="cb-d">${dateShort}</span>` +
-        `<span class="cb-c cb-now"><i>현재</i><b class="${rateCls(cur.close, base)}">${won(cur.close)}</b>` +
+        `<span class="cb-c cb-now"><i>${whole || isLast ? "현재" : "종가"}</i><b class="${rateCls(cur.close, base)}">${won(cur.close)}</b>` +
         `<em class="cb-r ${rateCls(cur.close, base)}">${rate(cur.close, base)}</em></span>` +
+        (vsToday === null
+          ? ""
+          : `<span class="cb-c"><i>오늘대비</i><b class="${vsToday > 0 ? "up" : vsToday < 0 ? "down" : ""}">${vsToday > 0 ? "+" : ""}${vsToday.toFixed(2)}%</b></span>`) +
         cell("시", cur.open) +
         cell("고", cur.high) +
         cell("저", cur.low);

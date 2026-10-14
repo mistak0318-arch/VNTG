@@ -46,8 +46,29 @@ export async function getCardOrder(): Promise<CardOrder> {
   }
 }
 
+/**
+ * **보낸 칸만 고친다 — 통째로 덮지 않는다** (2026-10-14).
+ *
+ * 벤티지: "상하단 메뉴 내가 위아래로 드래그 앤 드롭으로 수정하는데 창 껐다 키면
+ * 초기화되네."
+ *
+ * 여태 이 함수는 받은 것을 **파일 전체로** 삼았다. 그런데 화면 쪽은 훅마다 제 스냅샷
+ * (`all`)을 들고 `{...all, [내칸]: 값}` 을 통째로 보낸다. 훅이 하나뿐일 때는 맞았는데,
+ * 10/14 에 줄 배치(`stockDetail.tabRows`)를 쓰는 훅이 하나 더 생기면서 깨졌다 —
+ *
+ *   ① 줄 배치 훅이 저장한다 → 파일에 `tabRows` 가 생긴다
+ *   ② 탭 순서 훅은 **마운트 때 읽은 옛 스냅샷**을 들고 있다(거기엔 `tabRows` 가 없다)
+ *   ③ 탭 순서를 한 번만 바꿔도 그 옛 스냅샷이 파일을 덮어 **줄 배치가 사라진다**
+ *
+ * 여기서 합치면 이 경합이 **구조적으로** 없어진다 — 보낸 사람이 자기 칸만 책임지면 되고,
+ * 다른 기기·다른 탭이 동시에 고쳐도 서로 안 지운다. 화면 쪽도 이제 제 칸만 보낸다.
+ *
+ * ⚠️ 그래서 **칸을 지우는 길은 없다.** 지금은 지울 일이 없고(「원래대로」는 빈 배열을
+ * 보낸다), 없는 길이 있는 길보다 안전하다. 필요해지면 그때 따로 만든다.
+ */
 export async function saveCardOrder(input: unknown): Promise<CardOrder> {
-  const next = clean(input);
+  const patch = clean(input);
+  const next = { ...(await getCardOrder()), ...patch };
   await mkdir(dirname(FILE), { recursive: true });
   await writeFile(FILE, JSON.stringify(next, null, 2), "utf-8");
   return next;

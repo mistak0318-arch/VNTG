@@ -10159,6 +10159,17 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
   /* 단추다 — 눌러서 시간별. 창구 줄과 같은 손 */
   border: none; background: none; color: inherit; font: inherit; padding: 0.15rem 0.35rem; margin-left: -0.35rem; border-radius: 6px; cursor: pointer; text-align: left;
 }
+/*
+ * **눌러 보여야 누른다** (2026-10-14 — 벤티지: "거래원 화면에서 외국계랑 프로그램도
+ * 거래원처럼 미니창에서 그래프랑 당일 추이 볼 수 있게 해 줄래?").
+ *
+ * 이미 단추였고 누르면 팝업이 떴다. 그런데 **평범한 글줄처럼 보였다** — 테두리도 없고
+ * 표지도 없으니 누를 수 있다는 걸 알 길이 없다. 「기능이 없다」와 「있는 줄 모른다」는
+ * 쓰는 사람에게 같은 말이다.
+ * 창구 줄과 같은 옷(옅은 테두리)을 입히고, 끝에 그래프 표지를 둔다.
+ */
+.bf-fx-sum { border: 1px solid var(--border); background: var(--panel); }
+.bf-fx-sum::after { content: "📈"; font-size: 0.72rem; opacity: 0.75; margin-left: 0.1rem; }
 .bf-fx-sum:hover { background: var(--panel-2); }
 .bf-fx-sum.on { background: var(--panel-2); outline: 1px solid var(--border); }
 .bf-fx-sum em { font-style: normal; color: var(--muted); }

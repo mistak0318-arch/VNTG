@@ -428,73 +428,17 @@ export function OrderBookPanel({
           ② 저울  최근 체결 스무 건의 **매수량 : 매도량**을 한 줄로 갈라 칠한다
         ①은 하루 전체의 누적이고 ②는 방금이다 — 둘이 어긋나면 그게 바뀌는 순간이다.
       */}
-      {(book.strength !== null || book.ticks.length > 0) && (
-        <div className="ob-str">
-          {book.strength !== null && (
-            <div className="ob-str-row">
-              <span className="ob-str-label">체결강도</span>
-              <span className={`ob-str-val ${book.strength >= 100 ? "positive" : "negative"}`}>
-                {book.strength.toFixed(0)}%
-              </span>
-              {/* 눈금 — 100 이 가운데. 값이 오른쪽이면 사자, 왼쪽이면 팔자가 셌다 */}
-              <span className="ob-str-gauge" title="체결강도 — 100 을 넘으면 사자가 우세. 오늘 누적입니다">
-                <i className="ob-str-mid" />
-                <i
-                  className={`ob-str-pin ${book.strength >= 100 ? "buy" : "sell"}`}
-                  style={{ left: `${Math.min(100, Math.max(0, ((book.strength - 50) / 100) * 100))}%` }}
-                />
-              </span>
-              {/* 말도 색으로 (2026-09-08 벤티지 "잘 보이는 색깔로, 눈에 띄게") — 흐린 회색이라 값과 따로 놀았다 */}
-              <span className={`ob-str-say ${book.strength >= 120 ? "hot buy" : book.strength >= 100 ? "buy" : book.strength >= 80 ? "sell" : "hot sell"}`}>
-                {book.strength >= 120
-                  ? "사자가 세다"
-                  : book.strength >= 100
-                    ? "사자가 조금 우세"
-                    : book.strength >= 80
-                      ? "팔자가 조금 우세"
-                      : "팔자가 세다"}
-              </span>
-            </div>
-          )}
+      {/*
+        **체결강도 덩이를 호가 탭에서 걷었다** (2026-10-14 — 벤티지: "호가창에서는 체결강도
+        보여주지 마. 체결강도 탭이 있으니 여기에서는 호가 정보를 의미 있게 보여주는 게 날 듯").
 
-          {/*
-            **오늘 흐름** (2026-10-08) — 벤티지: "체결강도 그래프로 보여줄 수 있어? 그래서 아,
-            장 초반엔 체결강을 셌다가 이게 체결강 좀 떨어지네? 이렇게 할 수 있도록."
+        09-04 에 「한눈에 보기 좋다」며 올렸고 10-08 에 그래프까지 붙였는데, 그러는 사이
+        **체결강도 탭이 따로 생겼다.** 같은 것을 두 군데서 키우면 둘 다 어정쩡해진다 —
+        호가 탭은 호가가 밀려 내려가고, 체결강도 탭은 「여기 안 와도 되는 곳」이 된다.
+        이 탭이 답할 물음은 「지금 어느 가격에 얼마가 걸려 있나」 하나다.
 
-            위 막대는 **지금 값 하나**다. 120% 라는 숫자로는 「아침부터 120 이었나」와
-            「160 이었다가 식는 중인가」를 못 가르는데, 매매에서 쓰는 건 뒤쪽이다.
-
-            그래프는 이미 있었다(`StrengthChart`) — 체결강도 **탭** 안에서만 그려지고 있었다.
-            보는 자리가 여기인데 그래프는 저기 있으면 안 본다. 같은 조회(`ka10046`)를 쓰고
-            키움이 09:00부터 **빈 구간 없이** 주므로 우리가 따로 쌓을 것도 없다.
-          */}
-          <StrengthTrendLine code={code} />
-
-          {book.ticks.length > 0 &&
-            (() => {
-              /* 방금 스무 건의 무게를 잰다 — 부호가 방향, 절대값이 양이다 */
-              const buy = book.ticks.reduce((a, t) => a + (t.qty > 0 ? t.qty : 0), 0);
-              const sell = book.ticks.reduce((a, t) => a + (t.qty < 0 ? -t.qty : 0), 0);
-              const sum = buy + sell;
-              const bp = sum > 0 ? (buy / sum) * 100 : 50;
-              return (
-                <div className="ob-str-row">
-                  <span className="ob-str-label" title="지금 화면에 든 최근 체결 스무 건의 수량 비율입니다">
-                    최근 {book.ticks.length}건
-                  </span>
-                  <span className="ob-str-scale">
-                    <i className="buy" style={{ width: `${bp}%` }} />
-                    <i className="sell" style={{ width: `${100 - bp}%` }} />
-                  </span>
-                  <span className="ob-str-say">
-                    사자 <b className="positive">{bp.toFixed(0)}%</b> · 팔자{" "}
-                    <b className="negative">{(100 - bp).toFixed(0)}%</b>
-                  </span>
-                </div>
-              );
-            })()}
-        </div>
-      )}
+        지운 것이 아니다 — 눈금·그래프·시간별 표가 전부 체결강도 탭에 이미 있다.
+      */}
 
       <div className="ob-body">
         <div className="ob-book">
