@@ -15,7 +15,7 @@ import { routeStatsTop } from "./routeStats.js";
 import { recoveryStats } from "./recovery.js";
 import { shareGetStats } from "./shareGet.js";
 import { dropSamplesCache } from "./signalSamples.js";
-import { peekRealtime, subscribedCount } from "./realtimeHub.js";
+import { peekRealtime, realtimeFidSurvey, subscribedCount } from "./realtimeHub.js";
 import { hantooRealtimeStatus } from "./hantooRealtime.js";
 import { hantooQueueDepth } from "./hantooClient.js";
 import { afterCloseStatus, afterCloseStateSummary } from "./afterClose.js";
@@ -315,6 +315,12 @@ async function writeOnceInner(): Promise<void> {
     /* 해외선물 키2 시험 (2026-09-15) — 된다/사유 문장뿐. 키·계좌·값은 없다 */
     해외선물시험: hantooFutProbeSnapshot(),
     한투해외순위시험: hantooUsRankProbeSnapshot(),
+    /*
+     * 거래원 실시간에 외국계 합계가 실려 오나 (2026-10-15 — 벤티지: "프로그램은 화면 안
+     * 열어놔도 쌓고 있잖아, 얘는 왜?"). **FID 번호와 건수뿐** — 값도 종목코드도 안 싣는다.
+     * 「모르는필드」에 새 번호가 뜨면 그게 더 받을 수 있는 것이다. 장중에만 숫자가 찬다.
+     */
+    거래원필드: realtimeFidSurvey("0F"),
   };
 
   try {

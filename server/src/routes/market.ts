@@ -50,7 +50,7 @@ import { stockReports } from "../naverResearch.js";
 import { usCandles, usDetail } from "../usDetail.js";
 import { orderBook } from "../orderBook.js";
 import { brokerFlow } from "../brokerFlow.js";
-import { brokerAutoStatus } from "../brokerAuto.js";
+import { brokerAutoStatus, brokerAutoTracks } from "../brokerAuto.js";
 import { getEtfInfo } from "../etfInfo.js";
 import { etfRowOf, etfTaxInfo } from "./etf.js";
 import { futuresFlow } from "../naverFuturesFlow.js";
@@ -1619,7 +1619,13 @@ export function createMarketRouter(client: KiwoomClient): Router {
 
 router.get("/broker-flow/:code", async (req, res, next) => {
     try {
-      res.json(await brokerFlow(client, String(req.params.code)));
+      const code = String(req.params.code);
+      /*
+       * `auto` — **이 종목은 서버가 따라가나** (2026-10-15). 화면이 외국계 밑에 적는 말이
+       * 종목마다 달라야 해서다(`brokerAutoTracks` 에 까닭). 여기서 붙이는 이유는 순환
+       * 참조 때문이다 — `brokerAuto` 가 `brokerFlow` 를 부르므로 그 반대로는 못 import 한다.
+       */
+      res.json({ ...(await brokerFlow(client, code)), auto: brokerAutoTracks(code) });
     } catch (err) {
       next(err);
     }

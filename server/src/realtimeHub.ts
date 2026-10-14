@@ -129,6 +129,14 @@ export function peekRealtime(): { client: RealtimeClient | null; store: Realtime
 }
 
 /**
+ * 거래원 실시간(`0F`)에 무슨 필드가 오나 — health.json 으로 내보낸다 (2026-10-15).
+ * 숫자뿐이다(FID 번호·건수). 자세한 까닭은 `RealtimeStore.surveyFids`.
+ */
+export function realtimeFidSurvey(type: string): ReturnType<RealtimeStore["surveyFids"]> | null {
+  return store ? store.surveyFids(type) : null;
+}
+
+/**
  * 자동감시가 부른다 (2026-09-07) — 이 종목의 체결(0B)이 **꼭** 들어와야 한다. 고정 자리(subscribeKeep)로
  * 건다. 연결이 아직 없으면(밤) 아무것도 안 한다 — 스케줄러가 뜰 때 다시 부른다.
  */

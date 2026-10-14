@@ -567,6 +567,38 @@ export class RealtimeStore {
   }
 
   /**
+   * **무슨 필드가 실제로 오나** (2026-10-15).
+   *
+   * 벤티지: "프로그램은 화면 안 열어놔도 쌓고 있잖아, 얘는 왜?" — 외국계 합계는
+   * 조회(`ka10040`)에만 있다고 **문서를 보고** 답했는데, 거래원 실시간(`0F`) 프레임에
+   * 그 숫자가 같이 실려 오는지는 **한 번도 재 본 적이 없다.** 우리는 창구 다섯 칸만
+   * 골라 저장하므로(`KEEP`), 와도 그 자리에서 버려진다 — 그래서 로그를 뒤져도 안 나온다.
+   *
+   * `latest` 는 거르지 않은 **원본 프레임**을 들고 있다. 거기서 **FID 번호와 몇 종목에서
+   * 봤는지만** 센다. 값도 종목코드도 안 싣는다 — 이건 health.json 으로 나가는 숫자다.
+   *
+   * 와 있으면 FID 두 개 더 받는 것만으로 외국계도 프로그램처럼 전 종목 공짜로 쌓인다.
+   * 안 와 있으면 그때 「조회뿐」이 **실측된 사실**이 된다. 어느 쪽이든 답이 남는다.
+   */
+  surveyFids(type: string, maxItems = 20): { 종목수: number; 필드: Record<string, number>; 모르는필드: string[] } {
+    const seen: Record<string, number> = {};
+    let items = 0;
+    for (const [key, v] of this.latest) {
+      if (!key.startsWith(`${type}:`)) continue;
+      if (items >= maxItems) break;
+      items += 1;
+      for (const k of Object.keys(v.values ?? {})) seen[k] = (seen[k] ?? 0) + 1;
+    }
+    const known = KEEP[type];
+    return {
+      종목수: items,
+      필드: seen,
+      /* 우리가 안 챙기는 번호 — 여기에 새 번호가 뜨면 그게 「더 받을 수 있는 것」이다 */
+      모르는필드: known ? Object.keys(seen).filter((k) => !known.has(k)).sort((a, b) => Number(a) - Number(b)) : [],
+    };
+  }
+
+  /**
    * **KRX 체결만** — 분석·알림용 (2026-08-31).
    *
    * 실시간을 통합(`_AL`)으로 구독하면서 프레임에 **NXT 체결이 섞인다.** 시세를

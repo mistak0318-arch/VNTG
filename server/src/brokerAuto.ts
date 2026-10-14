@@ -81,6 +81,25 @@ let codesAt = 0;
 let timer: ReturnType<typeof setInterval> | null = null;
 const stat = { rounds: 0, points: 0, fails: 0, lastAt: "" };
 
+/**
+ * **이 종목을 서버가 따라가고 있나** (2026-10-15).
+ *
+ * 벤티지: "프로그램은 화면 안 열어놔도 쌓고 있잖아, 얘는 왜?"
+ *
+ * 외국계 합계 밑에 **「이 화면이 열려 있는 동안만 쌓입니다」**라고 적혀 있다. 9/08 에는
+ * 맞는 말이었는데 **9/01 에 이 수집기를 만들고도 문구를 안 고쳤다** — 관심종목과 오늘
+ * 초록(최대 80)은 그때부터 화면과 무관하게 쌓이고 있다. 틀린 안내가 더 나쁜 까닭은,
+ * 값이 비어 보일 때 사용자가 **「내가 안 열어놔서 그렇구나」**라고 **엉뚱한 자기 탓**을
+ * 하게 만들기 때문이다. 실제로는 「목록에 없는 종목」인 것이다.
+ *
+ * 종목 하나마다 답이 다르므로 **종목별로** 답한다. 목록에 있기만 하면 참이다 —
+ * 장 밖이라 지금 안 도는 것과 「따라가는 종목이 아닌 것」은 다른 말이다.
+ */
+export function brokerAutoTracks(code: string): boolean {
+  const bare = String(code).replace(/_(AL|NX)$/i, "");
+  return codes.includes(bare);
+}
+
 /** 무엇을 따라가고 있나 — 화면이 「지금 N종목을 자동으로 쌓는 중」이라고 말할 수 있게 */
 export function brokerAutoStatus() {
   return {

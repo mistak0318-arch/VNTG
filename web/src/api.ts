@@ -7190,9 +7190,15 @@ export interface BrokerFlow {
   /** 우리가 쌓은 시간대별 — 화면을 안 본 시간은 빈다 */
   /** 프로그램 순매수(백만원). 못 받으면 null */
   program: number | null;
-  /** fx·prog 는 REST 라 화면이 열려 있는 동안만 찍힌다 — 옛 점엔 없을 수 있다 */
+  /** fx·prog 는 REST 라 **부를 때만** 찍힌다 — 옛 점엔 없을 수 있다 */
   series: { t: string; net: Record<string, number>; fx?: { sell: number; buy: number }; prog?: number }[];
   names: Record<string, string>;
+  /**
+   * 이 종목을 **서버가 장중에 자동으로 따라가나** (2026-10-15).
+   * 관심종목·오늘 초록(최대 80)이면 참 — 화면을 안 열어도 외국계가 쌓인다.
+   * 옛 서버면 없다(undefined).
+   */
+  auto?: boolean;
   error: string | null;
 }
 
