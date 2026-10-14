@@ -170,17 +170,34 @@ function nightOpen(kst: Date): boolean {
   return h >= 18 || h < 5;
 }
 
-let nightCache: { session: string; row: UsMajorRow | null; at: number } | null = null;
+/**
+ * `길` 이 왜 필요한가 (2026-10-15 아침에 배운 것).
+ *
+ * 날짜를 고치고 나서 값이 나오길래 그 덕인 줄 알았는데, 들어온 길은 **①현재가**였다 —
+ * 날짜를 안 쓰는 길이다. 즉 06:35 에 빈칸이던 이유는 **①이 그때 0을 줬기** 때문이고,
+ * 07분 뒤엔 줬다는 뜻이다. 한투가 마감 처리를 끝내는 시각이 그 사이 어딘가일 수 있다.
+ *
+ * 들어온 길을 안 적어 두면 이런 건 **영영 추측으로 남는다.** 내일 아침 health 한 줄로
+ * 답이 나오게 적어 둔다.
+ */
+let nightCache: { session: string; row: UsMajorRow | null; at: number; 길: string } | null = null;
 /** 못 받은 세션을 다시 묻기까지 */
 const NIGHT_RETRY_MS = 10 * 60_000;
 
 /** 들고 있는 야간선물이 어느 판의 값인가 — health.json 「야간선물」 (2026-10-15) */
-export function nightFuturesSnapshot(): { 세션: string; 값: number | null; 시세시각: string | null; 잰때: string } | null {
+export function nightFuturesSnapshot(): {
+  세션: string;
+  값: number | null;
+  길: string;
+  시세시각: string | null;
+  잰때: string;
+} | null {
   if (!nightCache) return null;
   const q = nightCache.row?.quotedAt ?? null;
   return {
     세션: nightCache.session,
     값: nightCache.row?.price ?? null,
+    길: nightCache.길,
     시세시각: q ? new Date(q).toISOString() : null,
     잰때: new Date(nightCache.at).toISOString(),
   };
@@ -197,7 +214,11 @@ export function nightFuturesSnapshot(): { 세션: string; 값: number | null; �
  * 미국장이 열려 있는 동안 **한국 지수가 어디로 가는지**를 현물 개장 전에 보여 준다.
  */
 export async function nightFutures(): Promise<UsMajorRow | null> {
-  if (!hantooReady()) return null;
+  if (!hantooReady()) {
+    /* 이것도 빈칸의 한 가지 까닭이다 — 밖에서 보이게 적어 둔다 (세션을 비워 다음 번엔 다시 묻는다) */
+    nightCache = { session: "", row: null, at: Date.now(), 길: "한투미준비" };
+    return null;
+  }
   const kst = kstLocal();
   const dates = nightSessionDates(kst);
   const session = dates[0] ?? "";
@@ -208,15 +229,15 @@ export async function nightFutures(): Promise<UsMajorRow | null> {
     /* 못 받았으면 매분 열한 번씩 되묻지 않는다 */
     if (!nightCache.row && Date.now() - nightCache.at < NIGHT_RETRY_MS) return null;
   }
-  const row = await fetchNight(dates);
-  nightCache = { session, row, at: Date.now() };
-  return row;
+  const got = await fetchNight(dates);
+  nightCache = { session, row: got.row, at: Date.now(), 길: got.길 };
+  return got.row;
 }
 
-async function fetchNight(dates: string[]): Promise<UsMajorRow | null> {
+async function fetchNight(dates: string[]): Promise<{ row: UsMajorRow | null; 길: string }> {
   try {
     const front = await kospi200Futures(null);
-    if (!front) return null;
+    if (!front) return { row: null, 길: "전광판없음" };
     /*
      * 만기일 저녁엔 전광판 맨 앞(front)이 **죽은 월물**이다 (2026-09-10 실측 — 9월물 만기일 19시, `CM` 이 빈 응답).
      * 목록을 앞에서부터 돌며 야간 값이 있는 첫 월물을 쓴다. 값은 두 길로 찾는다:
@@ -235,29 +256,32 @@ async function fetchNight(dates: string[]): Promise<UsMajorRow | null> {
       const price = Math.abs(Number(o.futs_prpr));
       if (Number.isFinite(price) && price > 0) {
         return {
-          key: "kospiNight",
-          label: "코스피 야간선물",
-          symbol: code,
-          price,
-          change: Number(o.futs_prdy_vrss) || 0,
-          changeRate: Number(o.futs_prdy_ctrt) || 0,
-          isRate: false,
-          digits: 2,
-          quotedAt: Date.now(),
-          source: "hantoo",
-          signal: null,
-          error: null,
+          row: {
+            key: "kospiNight",
+            label: "코스피 야간선물",
+            symbol: code,
+            price,
+            change: Number(o.futs_prdy_vrss) || 0,
+            changeRate: Number(o.futs_prdy_ctrt) || 0,
+            isRate: false,
+            digits: 2,
+            quotedAt: Date.now(),
+            source: "hantoo",
+            signal: null,
+            error: null,
+          },
+          길: "현재가",
         };
       }
       /* ② 분 차트 마지막 봉 — 최근 판부터 */
       for (const bizDate of dates) {
         const got = await nightFromChart(code, bizDate, front).catch(() => null);
-        if (got) return got;
+        if (got) return { row: got, 길: `분차트:${bizDate}` };
       }
     }
-    return null;
+    return { row: null, 길: "현재가0·차트없음" };
   } catch {
-    return null;
+    return { row: null, 길: "조회실패" };
   }
 }
 
