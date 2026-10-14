@@ -10124,6 +10124,8 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
  * 매도 열은 거울(row-reverse)이라 숫자가 안쪽에 온다.
  */
 .bf-body { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+/* 창구 그래프를 띄우는 창 — 표가 길어 높이는 넉넉히, 폭은 읽기 좋은 만큼만 */
+.sheet.bf-pop { max-width: min(760px, 96vw); }
 .bf-h { font-weight: 700; font-size: 0.85rem; padding-bottom: 0.2rem; border-bottom: 1px solid var(--border); text-align: center; }
 .bf-row {
   position: relative; display: flex; align-items: center; justify-content: space-between; gap: 0.4rem;
@@ -20290,7 +20292,14 @@ html[data-widestock="1"] .sdw .sd-spark-wrap {
 }
 @media (max-width: 640px) {
   /* 폰에서 2열 고정 격자는 1열 */
-  .bf-body, .jn-edge-two, .kb-grid, .peek-kv, .bd-watch, .ma-hint-split2 { grid-template-columns: 1fr; }
+  /*
+   * ⚠️ `.bf-body`(거래원 매도·매수)는 **폰에서도 두 단으로 둔다** (2026-10-14 — 벤티지:
+   * "키움처럼 구현할 수 있지 않을까"). 키움 모바일도 매도상위·매수상위를 좌우로 둔다 —
+   * 이 둘은 **마주 보라고 있는 값**이라, 세로로 쌓으면 매도 5줄을 지나야 매수가 나와서
+   * 「누가 사고 누가 파나」를 한눈에 못 본다. 줄 하나는 수량과 이름뿐이라 반 폭에 든다.
+   */
+  .jn-edge-two, .kb-grid, .peek-kv, .bd-watch, .ma-hint-split2 { grid-template-columns: 1fr; }
+  .bf-body { gap: 0.3rem; }
   .chart-review-row { grid-template-columns: 5.6em 4em 3.4em 5.2em 1fr; font-size: 0.72rem; gap: 4px; }
 }
 

@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import type React from "react";
+import { useSheetBack } from "../useSheetBack";
 import { FlowSeries, useMinutePrices, type FlowSample, type FlowSeriesData } from "./FlowSeries";
 import { api, fmtNum, signClass, type BrokerFlow, type BrokerDayRow } from "../api";
 import { useLive } from "../useLive";
@@ -426,14 +428,22 @@ export function BrokerFlowPanel({ code }: { code: string }) {
           const shown = isSpecial ? special : picks;
           const label = picked === "__fx" ? "외국계 합계" : picked === "__prog" ? "프로그램" : (data.names[picked] ?? picked);
           const unit = picked === "__prog" ? "억" : "주";
+          /*
+            **그래프는 띄운다 — 밑에 깔지 않는다** (2026-10-14 — 벤티지: "키움처럼 구현할
+            수 있지 않을까. 각 거래원 클릭하면 미니창 팝업에서 그래프 보여 주면 되고,
+            지금은 아래로 보여주니깐 보기가 불편하네").
+
+            9/08 에 「창구 누르면 밑에 그래프」로 만들었다. 그때는 맞았는데 지금은 아니다 —
+            창구 목록이 좌우 두 단이 되면서 **누른 줄과 그래프가 멀어졌다.** 아래로 밀려난
+            그래프를 보려면 스크롤해야 하고, 스크롤하면 **어느 창구를 눌렀는지가 화면에서
+            사라진다.** 견주려고 누른 것인데 견줄 대상이 안 보인다.
+
+            띄워서 겹치면 누른 자리를 안 떠난다. 닫으면 보던 자리 그대로다.
+            `.overlay`+`.sheet` 를 그대로 쓴다 — 10/14 에 넓게 보기 규칙을 `.sdw` 로
+            가두어서, 이제 평범한 시트는 어디서 열어도 예전 모양이다.
+          */
           return (
-            <section className="card">
-              <h3 className="section-heading">
-                {label} — 시간별 {picked === "__prog" ? "순매수" : "매매"}
-                <button className="filter-btn" onClick={() => setPicked(null)}>
-                  닫기
-                </button>
-              </h3>
+            <BrokerChartPop title={`${label} — 시간별 ${picked === "__prog" ? "순매수" : "매매"}`} onClose={() => setPicked(null)}>
               {shown.pts.length < 2 ? (
                 <div className="page-note">
                   아직 점이 <b>{shown.pts.length}개</b>뿐입니다.{" "}
@@ -489,7 +499,7 @@ export function BrokerFlowPanel({ code }: { code: string }) {
               )}
               {/* 일별 매매 — 시간별 점이 없어도(장 초반·장 마감 뒤) 보인다 */}
               {!isSpecial && <BrokerDaysTable rows={brokerDays.rows} loading={brokerDays.loading} name={label} />}
-            </section>
+            </BrokerChartPop>
           );
         })()}
 
@@ -503,6 +513,42 @@ export function BrokerFlowPanel({ code }: { code: string }) {
         창구를 누르면 <b>시간별 매도·매수·누적 순매수</b>가 줄줄이 나옵니다(HTS 거래원 상세와
         같은 모양). 순매수 옆 작은 글씨가 <b>앞 줄 대비 증감</b>이라 「그 사이에 얼마나
         붙었나」는 거기서 읽습니다. 단위는 <b>주</b>입니다.
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 창구 그래프를 **띄우는 창** (2026-10-14).
+ *
+ * 시트를 그대로 쓴다 — 이 앱에서 「띄운 것」의 모양·뒤로가기·바깥 눌러 닫기가 이미
+ * 거기 다 들어 있다. 새 모양을 만들면 그 셋을 다시 만들어야 하고, 셋 중 하나는 꼭
+ * 빠뜨린다.
+ *
+ * ⚠️ 이 패널은 종목상세 시트 **안**에서도 열린다. 시트 위에 시트가 겹치는 셈인데,
+ * `useSheetBack` 이 뒤로가기를 한 겹씩 받으므로 뒤로 누르면 이 창만 닫히고 종목상세는
+ * 남는다 — 10/08 에 ETF 상세에서 엉켰던 것은 그 장치를 안 달아서였다.
+ */
+function BrokerChartPop({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  useSheetBack(true, onClose);
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="sheet bf-pop" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-header">
+          <h2>{title}</h2>
+          <button className="close-btn" onClick={onClose}>
+            ✕
+          </button>
+        </div>
+        {children}
       </div>
     </div>
   );

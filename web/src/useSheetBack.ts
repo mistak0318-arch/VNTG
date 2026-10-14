@@ -51,6 +51,20 @@ let suppressUntil = 0;
 /** 아직 실행 안 된 「칸 빼기」 — 곧바로 다시 마운트되면 취소하고 물려받는다 */
 let pendingBack: ReturnType<typeof setTimeout> | null = null;
 
+/**
+ * **열려 있는 시트들** — 나중에 열린 것이 뒤에 온다 (2026-10-14).
+ *
+ * 여태 이 훅은 「한 번에 한 겹」을 가정했다. 그래서 시트 위에 시트를 올리면 뒤로가기
+ * 한 번에 **둘 다 닫혔다** — `popstate` 는 열려 있는 **모든** 인스턴스에 가는데 저마다
+ * 제 `close()` 를 불렀기 때문이다. 거래원 그래프를 종목상세 위에 띄우고 뒤로 눌러 보니
+ * 그래프와 종목상세가 같이 사라졌다.
+ *
+ * 쌓인 차례를 들고, **맨 위 한 겹만** 받는다. 한 번 누르면 한 겹 — 사람이 기대하는 그것이다.
+ * (10/08 에 「시트 위에 시트를 올리면 뒤로가기가 엉킨다」며 피해 다녔던 것이 이것이다.
+ * 피하지 말고 고쳤어야 했다.)
+ */
+let stack: symbol[] = [];
+
 export function useSheetBack(open: boolean, close: () => void): void {
   const closeRef = useRef(close);
   closeRef.current = close;
@@ -60,6 +74,9 @@ export function useSheetBack(open: boolean, close: () => void): void {
   useEffect(() => {
     if (!open) return;
     poppedRef.current = false;
+
+    const token = Symbol("sheet");
+    stack.push(token);
 
     if (pendingBack !== null) {
       /* 방금 해제된 인스턴스의 칸이 아직 살아 있다 — 그걸 그대로 쓴다 */
@@ -76,6 +93,9 @@ export function useSheetBack(open: boolean, close: () => void): void {
       }
       /* 유통기한이 지난 억제는 안 온 것이다 — 버리고 사용자의 뒤로가기로 받는다 */
       suppress = 0;
+      /* 겹쳐 있으면 **맨 위 한 겹만** 닫는다 — 밑에 깔린 시트는 제 차례를 기다린다 */
+      if (stack[stack.length - 1] !== token) return;
+      stack.pop();
       poppedRef.current = true;
       closeRef.current();
     };
@@ -83,6 +103,7 @@ export function useSheetBack(open: boolean, close: () => void): void {
 
     return () => {
       window.removeEventListener("popstate", onPop);
+      stack = stack.filter((t) => t !== token);
       /* 뒤로가기로 닫혔으면 그 칸은 이미 빠졌다 */
       if (poppedRef.current) return;
       if (!window.history.state?.vntgSheet) return;
