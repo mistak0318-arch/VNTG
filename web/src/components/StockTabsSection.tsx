@@ -9,6 +9,7 @@ import { CompanyPanel } from "./CompanyPanel";
 import { type PeriodReturns } from "./CompanySnapshot";
 import { InvestorTrendTable } from "./InvestorTrendTable";
 import { NewsDisclosurePanel } from "./NewsDisclosurePanel";
+import { WhenNear } from "./WhenNear";
 import { BuzzSheet } from "./BuzzSheet";
 import { OpinionPanel } from "./OpinionPanel";
 import { ReportsPanel } from "./ReportsPanel";
@@ -201,16 +202,25 @@ export function StockTabsSection({
   const [daily, setDaily] = useState<RawRecord | null>(null);
   const [isEtf, setIsEtf] = useState(false);
 
-  /* ETF 인가 — 맞으면 「ETF 정보」 탭이 종합 옆에 나타나고 기업 전용 탭이 빠진다 */
+  /*
+   * ETF 인가 — 맞으면 「ETF 정보」 탭이 종합 옆에 나타나고 기업 전용 탭이 빠진다.
+   *
+   * **한 박자 뒤로 미룬다** (2026-10-14). 이건 탭 줄의 생김새를 정할 뿐 본문과 상관이 없는데,
+   * 열자마자 부르느라 **처음 보이는 값들과 여섯 자리를 다퉜다**(실측 1.9초). 0.9초 뒤에
+   * 물어도 탭 하나가 그때 나타날 뿐이다 — 그 사이에 ETF 탭을 누를 사람은 없다.
+   */
   useEffect(() => {
     let alive = true;
     setIsEtf(false);
+    const t = setTimeout(() => {
     api
       .etfInfo(code)
       .then((r) => alive && setIsEtf(r.etf))
       .catch(() => undefined);
+    }, 900);
     return () => {
       alive = false;
+      clearTimeout(t);
     };
   }, [code]);
 
@@ -228,8 +238,21 @@ export function StockTabsSection({
    * 120일까지는 이걸로 이미 충분하고, 240일을 고른 사람만 한 쪽을 더 받는다.
    */
   const [investorDays, setInvestorDays] = useState(0);
-  useEffect(() => setInvestorDays(0), [code]); // 종목이 바뀌면 다시 기본으로
+  /*
+   * **그 칸이 보일 때 받는다** (2026-10-14). 이 표는 종합 탭 한참 아래라 열자마자 보이지
+   * 않는데, 받기는 열자마자 받고 있었다(실측 2.3초). 「투자자 수급」 탭을 누르면 그때도
+   * 필요하므로 둘 중 먼저 오는 쪽에 켠다.
+   */
+  const [wantInvestor, setWantInvestor] = useState(false);
   useEffect(() => {
+    setInvestorDays(0);
+    setWantInvestor(false);
+  }, [code]); // 종목이 바뀌면 다시 기본으로
+  useEffect(() => {
+    if (tab === "investor") setWantInvestor(true);
+  }, [tab]);
+  useEffect(() => {
+    if (!wantInvestor) return;
     let cancelled = false;
     setInvestorChart(null);
     api
@@ -486,14 +509,38 @@ export function StockTabsSection({
               시트·개별종목분석·종목발굴 셋 다 이제 탭 위에 그린다. 여기 두면 한 화면에
               같은 그림이 두 번 나온다.
             */}
-            <ChartPanel code={code} name={name} />
-            <h3 className="section-heading">투자자 수급</h3>
-            <InvestorTrendTable rows={investorRows} onNeedDays={setInvestorDays} />
-            <h3 className="section-heading">프로그램 수급</h3>
-            <ProgramFlowBars code={code} />
-            {/* 거래량 흐름 — 프로그램 수급 다음, 외국인 지분율 앞 (2026-09-09 벤티지 요청) */}
-            <VolumeFlowChart code={code} />
-            <SupplyMiniCharts code={code} />
+            {/*
+              **여기부터는 화면에 들어올 때쯤 그린다** (2026-10-14 — 벤티지: "종목 상세
+              들어갈 때 로딩이 걸리는데 이유 좀 분석해 봐").
+
+              재 보니 서버는 결백했다 — 루프 지연 평균 30ms · 조회 대기 평균 126ms ·
+              관문 한가. 느린 까닭은 **시트 하나를 여는 데 서로 다른 28개 요청이 한꺼번에**
+              나가는 것이다. 브라우저는 한 출처에 여섯 개만 동시에 보내므로 다섯 줄로
+              줄을 서고, 하나하나는 300~800ms 인데 마지막이 3초에 닿는다.
+
+              그런데 아래 넷은 **열자마자 보이지도 않는다** — 차트·투자자 추이·프로그램·
+              거래량은 한참 내려야 나온다. 안 보이는 것을 먼저 받느라 보이는 것이 기다린 셈이다.
+              줄의 앞자리를 **지금 보고 있는 것**에게 돌려준다.
+
+              ⚠️ 머리맡(`summaryTop`)·신호등·시세 요약은 **그대로 둔다.** 열자마자 보이는
+              것들이라 미루면 그게 곧 느린 것이다.
+            */}
+            <WhenNear minHeight={420}>
+              <ChartPanel code={code} name={name} />
+            </WhenNear>
+            <WhenNear minHeight={260} onShow={() => setWantInvestor(true)}>
+              <h3 className="section-heading">투자자 수급</h3>
+              <InvestorTrendTable rows={investorRows} onNeedDays={setInvestorDays} />
+            </WhenNear>
+            <WhenNear minHeight={200}>
+              <h3 className="section-heading">프로그램 수급</h3>
+              <ProgramFlowBars code={code} />
+            </WhenNear>
+            <WhenNear minHeight={240}>
+              {/* 거래량 흐름 — 프로그램 수급 다음, 외국인 지분율 앞 (2026-09-09 벤티지 요청) */}
+              <VolumeFlowChart code={code} />
+              <SupplyMiniCharts code={code} />
+            </WhenNear>
           </>
         )}
         {tab === "chartOnly" && <ChartPanel code={code} name={name} viewId="detail.chartOnly" height={chartOnlyH} />}
