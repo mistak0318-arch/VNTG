@@ -46,6 +46,22 @@ export function useSection<T>(name: string, intervalMs: number) {
   const inFlight = useRef(false);
   /** 값을 한 번이라도 받았나. 로딩 표시를 띄울지 정하는 기준 */
   const hasData = useRef(false);
+  /*
+   * **낡은 값을 받으면 곧 한 번 더 묻는다** (2026-10-14 — 벤티지: "미국지수나 야간선물
+   * 한번씩 들어가서 볼 때 새로고침 두세 번은 해야 현재 시간이 적용돼서 받아오는데").
+   *
+   * 서버는 **낡은 값을 먼저 주고 뒤에서 갱신한다**(`getSection` 의 stale-while-revalidate).
+   * 화면이 빈 채로 기다리지 않게 하려는 것이라 그 자체는 맞다. 그런데 화면은 그 응답을
+   * 받고 **제 주기만큼(30초) 다시 안 묻는다** — 서버가 1~2초 뒤에 새 값을 다 만들어
+   * 놓아도 그게 화면에 오지 않는다. 그래서 사람이 ↻ 를 눌러 **대신 물어 주고** 있었다.
+   * 두세 번 눌러야 했던 까닭이 이것이다.
+   *
+   * 응답에 `stale` 이 서 있으면 「지금 만드는 중」이라는 뜻이므로, 잠깐 뒤에 한 번 더
+   * 묻는다. 폴링을 당기는 것이 아니다 — **낡았을 때만** 몇 번, 그것도 점점 뜸하게.
+   * 새 값이 오면 세던 수를 지운다.
+   */
+  const staleTries = useRef(0);
+  const staleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /** @param silent 로딩 표시를 건드리지 않는다 (주기 갱신) */
   const load = useCallback(
@@ -61,6 +77,21 @@ export function useSection<T>(name: string, intervalMs: number) {
         if (typeof res.ttlMs === "number" && res.ttlMs > 0) setServerTtl(res.ttlMs);
         hasData.current = res.data !== null;
         setError(res.error);
+        if (staleTimer.current) {
+          clearTimeout(staleTimer.current);
+          staleTimer.current = null;
+        }
+        if (res.stale && staleTries.current < 3) {
+          /* 1.2 → 2.4 → 4.8초. 서버가 뒤에서 만드는 데 보통 1~2초다 */
+          const wait = 1200 * 2 ** staleTries.current;
+          staleTries.current += 1;
+          staleTimer.current = setTimeout(() => {
+            staleTimer.current = null;
+            void load(true);
+          }, wait);
+        } else if (!res.stale) {
+          staleTries.current = 0;
+        }
       } catch (err) {
         if (cancelledRef.current) return;
         // 주기 갱신이 한 번 실패했다고 화면의 기존 값을 지우지 않는다
@@ -109,6 +140,10 @@ export function useSection<T>(name: string, intervalMs: number) {
     return () => {
       cancelledRef.current = true;
       stop();
+      if (staleTimer.current) {
+        clearTimeout(staleTimer.current);
+        staleTimer.current = null;
+      }
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [load, intervalMs, tabActive, serverTtl]);
