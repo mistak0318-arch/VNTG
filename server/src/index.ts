@@ -90,6 +90,7 @@ import { loadCloses, startClosesScheduler } from "./dailyCloses.js";
 /* 돋보기가 ETF 도 찾게 — 이름표를 기동 때 미리 받아 둔다 (2026-10-07) */
 import { warmEtfIndex } from "./stockListCache.js";
 import { startLoopLag } from "./loopLag.js";
+import { routeStats } from "./routeStats.js";
 import { moneyNow } from "./moneyNow.js";
 /* 과부하 관문 — 죽는 대신 느려지게 (2026-10-07 밤) */
 import { loadGate } from "./loadGate.js";
@@ -217,6 +218,11 @@ app.use(
  * **같은 조회 합치기는 관문보다 앞** (2026-10-08) — 합쳐진 요청은 자리를 아예 안 쓴다.
  * 뒤에 두면 보드 셋이 자리를 셋 잡고서 하나로 합쳐지는 꼴이라 반만 버는 셈이다.
  */
+/*
+ * **길목마다 시간을 센다** (2026-10-14) — 관문보다 **앞**이다. 줄에서 기다린 시간까지
+ * 넣어야 「이 길목이 비싸다」가 사람이 겪는 시간과 같아진다.
+ */
+app.use(routeStats);
 app.use(shareGet);
 app.use(loadGate);
 /*

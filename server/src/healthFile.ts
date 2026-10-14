@@ -11,6 +11,7 @@ import v8 from "node:v8";
 import { lifeSummary, noteLife, selfHeal } from "./lifecycle.js";
 import { loadGateStats } from "./loadGate.js";
 import { loopLagStats } from "./loopLag.js";
+import { routeStatsTop } from "./routeStats.js";
 import { recoveryStats } from "./recovery.js";
 import { shareGetStats } from "./shareGet.js";
 import { dropSamplesCache } from "./signalSamples.js";
@@ -204,6 +205,8 @@ async function writeOnceInner(): Promise<void> {
     과부하관문: loadGateStats(),
     /* 서버가 실제로 멈추는지 — 「느리다」가 서버 탓인지 기기·네트워크 탓인지 가른다 (2026-10-14) */
     루프지연: loopLagStats(),
+    /* 길목별 비용 — 합이 큰 순서. 「어디를 고치면 체감이 바뀌나」의 답 (2026-10-14) */
+    길목비용: routeStatsTop(15),
     /*
      * 복구 루틴 (2026-10-07 밤) — 「지금 어떤 상태인가」와 「몇 번 복구했나」.
      * `상태` 가 자주 「복구」면 봉우리가 구조적으로 큰 것이고, `GC가능: false` 면

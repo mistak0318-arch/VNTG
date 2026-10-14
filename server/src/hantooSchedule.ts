@@ -270,10 +270,33 @@ const EST_TIME: Record<string, string> = { "1": "09:30", "2": "10:00", "3": "11:
  * 나오는 잠정치. 장 마감 뒤 확정치(ka10059/ka10060)보다 **몇 시간 먼저** 방향을 말해 준다.
  * 단위는 주(수량). 장전·장후엔 빈 배열이다(실측 07:5x).
  */
+/**
+ * 집계가 **나오는 시간대인가** — 09:30 ~ 15:30 평일 (2026-10-14).
+ *
+ * 이 값은 장중에 다섯 번(09:30·10:00·11:20·13:20·14:30) 나온다. 그 밖에는 한투가
+ * 빈 배열을 준다 — 함수 주석에 그렇게 적혀 있고 실측도 그랬다(07:5x).
+ *
+ * 그런데 **빈 배열을 받으려고 한투 왕복을 치르고 있었다.** 종목상세를 열 때마다, 밤에도.
+ * 종목상세에서 제일 느린 축에 드는 요청이라(실측 2~3초) 저녁에 종목을 훑는 동안
+ * 그만큼씩 기다린 셈이다. 안 나올 시간엔 묻지 않는다.
+ *
+ * ⚠️ 여유를 둔다(09:20~15:40). 09:30 집계가 조금 일찍/늦게 실릴 수 있는데, 경계에서
+ * 몇 분 때문에 **있는 값을 안 보여 주는 것**이 없는 값을 묻는 것보다 나쁘다.
+ */
+function estimateHours(): boolean {
+  const now = new Date(Date.now() + 9 * 3600_000);
+  const d = now.getUTCDay();
+  if (d === 0 || d === 6) return false;
+  const m = now.getUTCHours() * 60 + now.getUTCMinutes();
+  return m >= 9 * 60 + 20 && m <= 15 * 60 + 40;
+}
+
 export async function investorEstimate(code: string): Promise<InvestorEstimate[]> {
   if (!hantooReady()) return [];
   const hit = estCache.get(code);
   if (hit && Date.now() - hit.at < EST_TTL) return hit.rows;
+  /* 안 나올 시간엔 묻지 않는다 — 빈 배열을 받자고 2~3초를 치를 까닭이 없다 */
+  if (!estimateHours()) return [];
   try {
     const r = await hantooGet<{ output2?: Row[] }>(
       "/uapi/domestic-stock/v1/quotations/investor-trend-estimate",
