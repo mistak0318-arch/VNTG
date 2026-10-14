@@ -323,7 +323,7 @@ async function buildRecord(client: KiwoomClient, day: string): Promise<{ trend: 
   let hit1330 = 0;
   let days = 0;
   try {
-    const c = (await indexDetail(client, "001", "day")).candles;
+    const c = (await inner("지수일봉", indexDetail(client, "001", "day"))).candles;
     const chgOf = new Map<string, number>();
     for (let i = 1; i < c.length; i += 1) if (c[i - 1].close > 0) chgOf.set(c[i].dt, ((c[i].close - c[i - 1].close) / c[i - 1].close) * 100);
     const hit = (k: Verdict["kind"], chg: number) => (k === "in" ? chg >= 0.3 : k === "out" ? chg <= -0.3 : k === "rotate" ? Math.abs(chg) < 0.5 : false);
@@ -370,7 +370,7 @@ async function buildVerdict(client: KiwoomClient, minute: number, errors: string
 
   /* 외인·기관 오늘 (섹션 캐시 — 억원) */
   try {
-    const flow = (await getSection("flow", client)).data as MarketFlow | null;
+    const flow = (await inner("수급", getSection("flow", client))).data as MarketFlow | null;
     if (flow) {
       const f = flow.kospi.foreign + flow.kosdaq.foreign;
       const i = flow.kospi.institution + flow.kosdaq.institution;
@@ -385,7 +385,7 @@ async function buildVerdict(client: KiwoomClient, minute: number, errors: string
   /* 프로그램 30분 (코스피, 시간대별 누적의 차) */
   try {
     /* ka90005 는 최신이 앞이고 매수·매도가 **누적**(백만원)이다. allNet 칸은 0 으로 오니(실측 9/17) 매수−매도로 낸다 */
-    const rows = (await getProgramTrades(client, "kospi", "time")).filter((r) => /^\d{6}$/.test(r.time)).sort((a, b) => a.time.localeCompare(b.time));
+    const rows = (await inner("프로그램", getProgramTrades(client, "kospi", "time"))).filter((r) => /^\d{6}$/.test(r.time)).sort((a, b) => a.time.localeCompare(b.time));
     const netOf = (r: ProgramRow) => (r.allNet !== 0 ? r.allNet : r.allBuy - r.allSell);
     if (rows.length >= 2) {
       const last = rows[rows.length - 1];
@@ -405,7 +405,7 @@ async function buildVerdict(client: KiwoomClient, minute: number, errors: string
 
   /* 레버리지·인버스 심리 */
   try {
-    const s = await etfSentiment(client);
+    const s = await inner("ETF심리", etfSentiment(client));
     const k = s.sides.find((x) => x.market === "코스피");
     const cur = k ? (k.today ?? k.days[k.days.length - 1]) : null;
     if (k && cur && cur.ratio !== null && k.avg20 !== null) {
@@ -445,7 +445,7 @@ async function buildVerdict(client: KiwoomClient, minute: number, errors: string
 
   /* 체온 — 지금 오른 종목 비율 */
   try {
-    const t = await marketThermo();
+    const t = await inner("체온계", marketThermo());
     const rise = t.riseNow ?? (t.series.rise.length > 0 ? t.series.rise[t.series.rise.length - 1] : null);
     if (rise !== null) parts.push({ key: "thermo", label: "오른 종목 비율", sign: rise >= 55 ? 1 : rise <= 40 ? -1 : 0, text: `${Math.round(rise)}%${t.riseNow === null ? " (어제 마감)" : ""}` });
   } catch {
@@ -477,7 +477,7 @@ async function buildWhere(client: KiwoomClient, errors: string[]): Promise<{ whe
   let rest: WhereTheme[] = [];
   let ready = false;
   try {
-    const [rot, ts] = await Promise.all([themeRotation(), themeStrength("kr")]);
+    const [rot, ts] = await Promise.all([inner("테마순환", themeRotation()), inner("테마강도", themeStrength("kr"))]);
     ready = rot.ready;
     const byKey = new Map(ts.themes.map((t) => [t.key, t]));
     const enrich = (r: RotationTheme, pos: "주도" | "부상" | "휴식"): WhereTheme => {
@@ -497,7 +497,7 @@ async function buildWhere(client: KiwoomClient, errors: string[]): Promise<{ whe
   }
   let krEtf: MoneyNow["where"]["krEtf"] = [];
   try {
-    const f = await etfFlow(client);
+    const f = await inner("ETF흐름", etfFlow(client));
     krEtf = f.rows
       .filter((r) => r.group === "테마·업종" && r.d1 !== null)
       .sort((a, b) => (b.d1 ?? 0) - (a.d1 ?? 0))
@@ -508,7 +508,7 @@ async function buildWhere(client: KiwoomClient, errors: string[]): Promise<{ whe
   }
   let usEtf: MoneyNow["where"]["usEtf"] = [];
   try {
-    const u = await usEtfFlow();
+    const u = await inner("미국ETF", usEtfFlow());
     const sec = u.rows.filter((r) => r.group === "섹터" && r.d1 !== null).sort((a, b) => (b.d1 ?? 0) - (a.d1 ?? 0));
     usEtf = [...sec.slice(0, 2), ...sec.slice(-2)].map((r) => ({ symbol: r.symbol, name: r.name, d1: r.d1, volRatio: r.volRatio }));
   } catch {
@@ -980,6 +980,22 @@ async function buildPlan(
   return { slot: slot.key, title: slot.label, items, note: "" };
 }
 
+
+/**
+ * **안쪽 조각도 재 둔다** (2026-10-14). 바깥 계측이 「판정·어디로」 한 덩이에서 93%(10.0초)를
+ * 쓴다고 알려 줬는데, 그 덩이 안에 또 여덟 조각이 직렬로 있다. 한 겹 더 들어가야 범인이 나온다.
+ * `compute` 는 단일비행(`job`)이라 이 전역이 겹칠 일은 없다.
+ */
+let innerLap: string[] = [];
+async function inner<T>(name: string, p: Promise<T>): Promise<T> {
+  const s = Date.now();
+  try {
+    return await p;
+  } finally {
+    innerLap.push(`${name} ${Date.now() - s}`);
+  }
+}
+
 /* ═══════════════ 조립 · 캐시 ═══════════════ */
 
 let cache: MoneyNow | null = null;
@@ -1013,6 +1029,7 @@ async function compute(client: KiwoomClient): Promise<MoneyNow> {
   const { date, minute, day, hhmm } = kst();
   const slot = slotOf(minute, day === 0 || day === 6);
   const errors: string[] = [];
+  innerLap = [];
   const [marksFile, vi] = await step(
     "표식·VI",
     Promise.all([loadStockMarks().catch(() => null), viTodayMap(client).catch(() => null)]),
@@ -1040,7 +1057,7 @@ async function compute(client: KiwoomClient): Promise<MoneyNow> {
 
   const total = Date.now() - t0;
   /* 문턱은 「무거운 요청」과 같은 4초 — 평소에는 한 줄도 안 쌓인다 */
-  if (total >= 4000) noteLife("WARN", `돈의흐름 ${total}ms — ${lap.join(" · ")} (ms)`);
+  if (total >= 4000) noteLife("WARN", `돈의흐름 ${total}ms — ${lap.join(" · ")} 〔안쪽: ${innerLap.join(" · ")}〕 (ms)`);
   return { at: Date.now(), stale: false, slot, verdict, trend, record, buckets, where: w.where, buyers, account, plan, errors };
 }
 
