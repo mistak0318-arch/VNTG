@@ -608,6 +608,36 @@ export function SettingsPage() {
           드로어가 열리는 방향과 ☰ 버튼 자리도 같이 넘어갑니다.
         </div>
 
+        {/*
+          동그란 메뉴 버튼 켜고 끄기 (2026-10-15 — 벤티지: "어차피 드래그로도 되는데
+          폰 같은 데서는 이게 좀 방해가 될 수도 있더라고").
+
+          **바로 위 「메뉴바 위치」 밑에 둔다** — 같은 버튼 이야기라 떨어뜨리면 두 번
+          찾게 된다.
+        */}
+        <div className="appearance-row">
+          <span className="appearance-label">동그란 메뉴 버튼</span>
+          <div className="filter-row" style={{ margin: 0 }}>
+            {([
+              { key: true, label: "표시" },
+              { key: false, label: "숨김" },
+            ] as const).map((t) => (
+              <button
+                key={String(t.key)}
+                className={`filter-btn ${appearance.navFab === t.key ? "active" : ""}`}
+                onClick={() => appearance.set({ navFab: t.key })}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="table-note">
+          화면 구석에 뜨는 <b>☰</b> 버튼입니다. 숨겨도 메뉴는 그대로 열립니다 — 폰·태블릿은
+          <b>화면 가장자리에서 안쪽으로 밀면</b> 민 쪽에서 나오고, PC 는 사이드바(자동숨김이
+          아니면 늘 붙어 있습니다)와 위 단축키로 엽니다. 폰에서 본문 구석을 가릴 때 끄세요.
+        </div>
+
         {/* 사이드바 자동숨김 (2026-08-25, PDF #2) — PC 에서도 드로어로 */}
         <div className="appearance-row">
           <span className="appearance-label">사이드바 자동숨김</span>
@@ -751,6 +781,8 @@ export function SettingsPage() {
                   sidebarShowKey: appearance.sidebarShowKey,
                   sidebarHideKey: appearance.sidebarHideKey,
                   tabsSticky: appearance.tabsSticky,
+                  /* 2026-10-15 추가 — 이 목록에서 빠지면 「모든 기기에 적용」이 그 칸만 조용히 안 옮긴다 */
+                  navFab: appearance.navFab,
                 }));
                 pushGlobalSnapshot("appearance", ["vntg.appearance"]);
                 setGlobalMsg(

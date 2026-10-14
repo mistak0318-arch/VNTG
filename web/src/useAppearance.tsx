@@ -79,6 +79,19 @@ export interface Appearance {
   sidebarShowKey: Hotkey;
   sidebarHideKey: Hotkey;
   /**
+   * 동그란 메뉴 버튼(☰)을 띄울지 (2026-10-15).
+   *
+   * 벤티지: "사이드바 숨기기 했을 때 이 플로팅 버튼, 켜고 끌 수 있게 설정에 옵션 하나만.
+   * 어차피 드래그로도 되는데 폰 같은 데서는 이게 좀 방해가 될 수도 있더라고."
+   *
+   * 끄는 것이 **길을 막지 않는다**는 게 이 옵션의 전제다 — `useEdgeSwipe` 가 있어서
+   * 모서리에서 안쪽으로 밀면 민 쪽에서 메뉴가 나온다. PC 에서는 사이드바가 상시로
+   * 붙어 있고(자동숨김을 안 켰다면), 단축키도 따로 있다. 즉 ☰ 는 **네 번째 길**이다.
+   *
+   * 기본은 켬이다. 지금까지 늘 있던 것이고, 없는 편이 나은 사람만 끈다.
+   */
+  navFab: boolean;
+  /**
    * 인앱 탭바 고정 (2026-08-26) — 스크롤을 내려도 탭바가 따라와서 바로 갈아탄다.
    * 기본 켬. 화면 한 줄이 아쉬우면 끄면 되고, 탭이 하나뿐이면 바 자체가 없다.
    */
@@ -174,6 +187,7 @@ const DEFAULTS: Appearance = {
   sidebarShowKey: "tap-bracket-left",
   sidebarHideKey: "tap-bracket-right",
   tabsSticky: true,
+  navFab: true,
 };
 
 /**
