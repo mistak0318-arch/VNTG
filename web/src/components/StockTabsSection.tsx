@@ -9,6 +9,7 @@ import { CompanyPanel } from "./CompanyPanel";
 import { type PeriodReturns } from "./CompanySnapshot";
 import { InvestorTrendTable } from "./InvestorTrendTable";
 import { NewsDisclosurePanel } from "./NewsDisclosurePanel";
+import { BuzzSheet } from "./BuzzSheet";
 import { OpinionPanel } from "./OpinionPanel";
 import { ReportsPanel } from "./ReportsPanel";
 import { RawJson } from "./RawJson";
@@ -173,6 +174,8 @@ export function StockTabsSection({
     else setOwnTab(k);
   };
   const [editTabs, setEditTabs] = useState(false);
+  /* 뉴스·공시 탭에서 띄우는 텔레그램 창 (2026-10-14) */
+  const [buzzOpen, setBuzzOpen] = useState(false);
   /*
    * **차트만 — 화면 높이를 따라간다** (2026-10-13 — 벤티지: "차트만 메뉴 들어가니까
    * 위에가 폭이 너무 없어서 좀 답답해 보인다").
@@ -513,12 +516,42 @@ export function StockTabsSection({
         {tab === "notes" && <StockNotes code={code} name={name} currentPrice={curPrice} />}
         {tab === "sector" && <SectorMoodPanel code={code} onSelectStock={onSelectStock} />}
         {tab === "etfHolders" && <EtfHoldersPanel code={code} name={name} onSelectStock={onSelectStock} />}
-        {tab === "feed" && <NewsDisclosurePanel code={code} name={name} />}
+        {/*
+          **뉴스·공시 옆에 텔레그램** (2026-10-14 — 벤티지: "종목상세에 뉴스/공시에 텔레그램도
+          넣자. 해당 종목명의 텔레그램 조회될 수 있게").
+
+          같은 물음이다 — 「이 종목에 무슨 말이 돌고 있나」. 뉴스·공시는 **공식적으로 나온 말**
+          이고 텔레그램은 **먼저 도는 말**이라, 둘을 따로 찾아다니면 어느 쪽이 먼저였는지를
+          못 본다. 그게 이 종목을 보는 사람이 제일 알고 싶은 것인데.
+
+          화면은 이미 있다(`BuzzSheet` — 방·시각·원문까지). 띄워서 겹친다 — 10/14 에
+          뒤로가기가 겹친 시트를 한 겹씩 닫게 고쳐서 이제 안전하다.
+        */}
+        {tab === "feed" && (
+          <>
+            <button type="button" className="filter-btn sb-buzz" onClick={() => setBuzzOpen(true)}>
+              📨 텔레그램에서 「{name}」 찾아보기
+            </button>
+            <NewsDisclosurePanel code={code} name={name} />
+          </>
+        )}
         {tab === "finance" && <CompanyPanel code={code} name={name} info={info} returns={returns} />}
         {tab === "etf" && <EtfPanel code={code} onSelectStock={onSelectStock} />}
         {tab === "board" && <StockBoardPanel code={code} />}
         {tab === "raw" && <RawJson data={{ info, investorChart, daily }} />}
       </div>
+
+      {buzzOpen && (
+        <BuzzSheet
+          code={code}
+          name={name}
+          onClose={() => setBuzzOpen(false)}
+          onSelectStock={(c, n) => {
+            setBuzzOpen(false);
+            onSelectStock?.(c, n);
+          }}
+        />
+      )}
     </div>
   );
 }

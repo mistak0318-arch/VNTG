@@ -208,7 +208,19 @@ const MENU: {
     group: "종목 분석",
     accent: "#35c46a",
     items: [
-      { key: "stockAnalysis", label: "개별종목분석", icon: "🔍" },
+      /*
+       * **개별종목분석은 메뉴에서 뺐다** (2026-10-14 — 벤티지: "개별종목분석 메뉴는 이제
+       * 의미가 없는 거 같다. 맨 위에 종목 검색에서 검색하고 누르면 개별종목분석 메뉴 말고
+       * 종목상세 창을 띄워 줘. 다른 데도 개별종목분석으로 이동하는 거 있으면 종목상세 창으로").
+       *
+       * 이 화면은 종목상세 시트와 **같은 모듈**(`StockTabsSection`)을 쓴다. 다른 점은
+       * 시트가 아니라 탭이라는 것뿐이었는데, 10/12~14 에 시트가 전체 화면 한 장이 되면서
+       * 그 차이마저 없어졌다. 게다가 이쪽은 `splitTabs` 를 안 넘겨 **탭이 한 줄**이라
+       * 「메모·엑셀에서는 서브메뉴가 위에만 보인다」의 정체가 바로 이 화면이었다.
+       *
+       * ⚠️ 경로(`stockAnalysis`)는 **남겨 둔다.** 이미 열어 둔 인앱 탭이 있으면 그게
+       * 깨지면 안 된다. 들어가는 문만 닫는다.
+       */
       // 다른 창에서 고른 종목을 따라 그리는 자리 — 모니터를 여러 대 쓸 때
       { key: "board", label: "보드 (창 연동)", icon: "🖥️" },
       /*
@@ -875,7 +887,7 @@ export default function App() {
       case "themedb": return <ThemeDbPage onSelectStock={onSelectStock} />;
       case "program": return <ProgramTradePage />;
       case "news": return <NewsPage onSelectStock={onSelectStock} />;
-      case "discovery": return <StockDiscoveryPage onOpenAnalysis={openAnalysis} />;
+      case "discovery": return <StockDiscoveryPage onOpenAnalysis={onSelectStock} />;
       case "watchAi": return <MyPage onSelectStock={onSelectStock} />;
       case "scope": return <ScopePage onSelectStock={onSelectStock} />;
       case "watchKiwoom": return <KiwoomWatchlistPage onSelectStock={onSelectStock} />;
@@ -1431,7 +1443,7 @@ export default function App() {
         */}
         <div className="top-strip">
           <div className="qss-row">
-            <QuickStockSearch onPick={openAnalysis} />
+            <QuickStockSearch onPick={onSelectStock} />
             {/*
               알림 종 (2026-08-31) — 검색창과 **같은 줄**에 둔다. 벤티지가
               「검색하면 밑에 나오는 창처럼」이라고 한 그 모양을 그대로 쓰려는 것이라,
@@ -1549,7 +1561,6 @@ export default function App() {
           code={selected.code}
           name={selected.name}
           onClose={() => navigate({ stock: null })}
-          onOpenAnalysis={openAnalysis}
           onSelectStock={onSelectStock}
           wide={wideStock}
         />
