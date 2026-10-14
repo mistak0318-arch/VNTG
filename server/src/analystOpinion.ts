@@ -1,3 +1,4 @@
+import { hantooCacheGet, hantooCachePut } from "./hantooCache.js";
 import { hantooGet, hantooReady, HantooError } from "./hantooClient.js";
 
 /**
@@ -133,6 +134,16 @@ export async function analystOpinion(
     // 현재가만 바뀌었을 수 있으니 괴리율은 다시 계산한다
     return withPrice(hit.data, currentPrice);
   }
+  /*
+   * **디스크에도 물어본다** (2026-10-14). 위 캐시는 6시간짜리인데 **메모리에만** 있어서
+   * 서버가 뜰 때마다 비었다. 배포가 잦은 날에는 같은 종목을 하루에도 여러 번 새로 받고,
+   * 한투는 초당 2.5건 한 줄이라 그게 바로 「앞에 20건」이 된다(벤티지 캡처).
+   */
+  const disk = await hantooCacheGet<OpinionSummary>("opinion", code, TTL_MS);
+  if (disk) {
+    cache.set(code, { at: Date.now(), data: disk });
+    return withPrice(disk, currentPrice);
+  }
 
   const to = new Date();
   const from = new Date(to.getTime() - LOOKBACK_DAYS * 86400_000);
@@ -256,6 +267,7 @@ export async function analystOpinion(
    */
   const priced = withPrice(data, currentPrice ?? fallbackPrice(rows));
   cache.set(code, { at: Date.now(), data: priced });
+  void hantooCachePut("opinion", code, priced);
   return priced;
 }
 

@@ -1,3 +1,4 @@
+import { hantooCacheGet, hantooCachePut } from "./hantooCache.js";
 import { hantooGet, hantooReady } from "./hantooClient.js";
 
 /**
@@ -60,6 +61,12 @@ const cache = new Map<string, { at: number; rows: FinanceRatio[] }>();
 export async function financeRatios(code: string): Promise<FinanceRatio[]> {
   const hit = cache.get(code);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.rows;
+  /* 디스크에도 물어본다 — 재시작으로 캐시가 비어 한투 줄이 길어지던 것 (2026-10-14) */
+  const disk = await hantooCacheGet<FinanceRatio[]>("ratio", code, TTL_MS);
+  if (disk) {
+    cache.set(code, { at: Date.now(), rows: disk });
+    return disk;
+  }
   if (!hantooReady()) return [];
 
   const body = await hantooGet<{ output?: Raw[] }>(
@@ -87,6 +94,7 @@ export async function financeRatios(code: string): Promise<FinanceRatio[]> {
     .sort((a, b) => b.period.localeCompare(a.period));
 
   cache.set(code, { at: Date.now(), rows });
+  void hantooCachePut("ratio", code, rows);
   return rows;
 }
 
