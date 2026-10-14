@@ -89,6 +89,7 @@ import { startThemeScheduler } from "./naverThemes.js";
 import { loadCloses, startClosesScheduler } from "./dailyCloses.js";
 /* 돋보기가 ETF 도 찾게 — 이름표를 기동 때 미리 받아 둔다 (2026-10-07) */
 import { warmEtfIndex } from "./stockListCache.js";
+import { moneyNow } from "./moneyNow.js";
 /* 과부하 관문 — 죽는 대신 느려지게 (2026-10-07 밤) */
 import { loadGate } from "./loadGate.js";
 /* 같은 조회 합치기 — 창을 여럿 띄워 쓰는 사람을 위한 한 겹 (2026-10-08) */
@@ -640,6 +641,26 @@ app.listen(port, host, () => {
    * 일봉 예열(84MB 파싱)과 겹치지 않게 조금 뒤로 미룬다.
    */
   setTimeout(() => warmEtfIndex(client), 20_000).unref?.();
+  /*
+   * **돈의 흐름도 미리 데운다** (2026-10-14).
+   *
+   * `lifecycle.log` 를 집계해 보니 `/money-now` 가 최근 사흘 「무거운 요청」 45건에
+   * **중앙 14.0초**로 압도적 1위인데, 그중 **41건이 서버 시작 3분 안**이었다.
+   * 60초 캐시가 받쳐 주므로 느린 것은 **재시작 뒤 첫 빌드 하나뿐**이고, 그 하나를
+   * 사용자가 통째로 뒤집어쓴다. 오늘처럼 배포를 열 번 하면 벤티지가 열 번 기다린다.
+   *
+   * 어차피 한 번은 치러야 하는 값이다. 아무도 안 보는 기동 직후로 옮긴다 —
+   * 일봉(2초)·ETF 이름표(20초) 다음이라 셋이 겹치지 않는다.
+   *
+   * ⚠️ 실패해도 조용히 넘어간다. 데우기가 안 되면 **예전처럼 첫 요청이 짓는 것**이지
+   * 서버가 뜨는 데 지장이 있으면 안 된다.
+   */
+  setTimeout(() => {
+    const t0 = Date.now();
+    void moneyNow(client)
+      .then(() => console.log(`[moneyNow] 예열 완료 — ${Date.now() - t0}ms`))
+      .catch(() => undefined);
+  }, 40_000).unref?.();
   /*
    * **복구 루틴** (2026-10-07 밤) — 3초마다 heap 을 보고, 차면 캐시를 놓고 GC 를 직접 부르고,
    * 그래도 안 내려오면 깨끗하게 내려간다(감시자가 다시 띄운다).
