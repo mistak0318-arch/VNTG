@@ -442,11 +442,22 @@ export default function App() {
    * 끄고 켤 수 있게 둔다 — 모양 취향은 사람마다 다르고, 무엇보다 **되돌릴 길이 있어야**
    * 새 모양을 마음 놓고 써 본다. 기기마다 다른 값이라 로컬이다(글자 크기와 같은 층).
    */
+  /*
+   * **이 모양이 기본이 됐다** (2026-10-14 — 벤티지: "지금 구현한 거 종목상세 기존 거보다
+   * 난 더 좋거든? 넓게 보기 모드 아닌 모드에서도 이 구성으로 보여주게 개편해 줄래?").
+   *
+   * 10/12 에 「마음 놓고 써 보라」고 스위치를 달아 두 모양을 같이 뒀다. 이틀 쓰고 판정이
+   * 났으므로 **기본을 뒤집는다** — 아무것도 안 켠 사람이 새 모양을 본다.
+   *
+   * 스위치는 남긴다. 「켜는 스위치」가 아니라 **옛 모양으로 돌아가는 비상구**다 — 뭔가
+   * 깨졌을 때 장중에 돌아갈 길이 없으면 안 된다. 명시적으로 끈 사람(`"0"`)만 옛 모양이고,
+   * 한 번도 안 건드린 사람은 새 모양이다.
+   */
   const [wideStock, setWideStock] = useState<boolean>(() => {
     try {
-      return localStorage.getItem("vntg.wideStock") === "1";
+      return localStorage.getItem("vntg.wideStock") !== "0";
     } catch {
-      return false;
+      return true;
     }
   });
   useEffect(() => {
@@ -1334,10 +1345,10 @@ export default function App() {
             <button
               className="nav-item foot-btn"
               onClick={() => setWideStock((v) => !v)}
-              title={wideStock ? "종목상세를 예전 모양(바닥 시트)으로" : "종목상세를 전체 화면 한 장으로 — 폰에서 넓게 봅니다"}
+              title={wideStock ? "종목상세를 예전 모양(바닥 시트)으로 — 되돌리는 길입니다" : "종목상세를 지금 모양(전체 화면 한 장)으로"}
             >
               <span className="nav-icon">🔳</span>
-              <span className="nav-label">{wideStock ? "종목상세 넓게 끄기" : "종목상세 넓게"}</span>
+              <span className="nav-label">{wideStock ? "종목상세 옛 모양으로" : "종목상세 새 모양으로"}</span>
             </button>
             {/*
               읽기 모드도 **여기서 바로** (2026-10-07). 벤티지: "설정에서 읽기모드도 여기에

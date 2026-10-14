@@ -14,6 +14,7 @@
  * 신호등 점수엔 아무것도 안 들어간다 — 보는 자리다.
  */
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { noteLife } from "./lifecycle.js";
 import { getSection, getProgramTrades, viTodayMap, type MarketFlow, type ProgramRow, type ViToday } from "./marketOverview.js";
 import { marketThermo, themeRotation, type RotationTheme } from "./marketLens.js";
 import { themeStrength } from "./themeStrength.js";
@@ -986,18 +987,60 @@ let job: Promise<MoneyNow> | null = null;
 const TTL = 60_000;
 const MAX_AGE = 30 * 60_000;
 
+/**
+ * **어디서 시간을 먹는지 스스로 일러바치게 한다** (2026-10-14).
+ *
+ * `lifecycle.log` 의 「무거운 요청」 집계에서 `/money-now` 가 **기록된 77건의 중앙값
+ * 13.7초**로 나왔다 — 가끔 느린 것이 아니라 **늘** 느리다. 그런데 이 함수는 조각이
+ * 일곱이라 총 시간만 봐서는 어느 조각인지 알 수 없고, 벤티지가 느끼는 때와 내가 보는
+ * 때가 달라 재현을 기다릴 수도 없다.
+ *
+ * 조각마다 시간을 재서 느린 날에만 한 줄 남긴다. 다음에 「느리다」가 나오면 **코드를
+ * 뒤질 것이 아니라 로그를 읽으면 된다.** 재는 비용은 `Date.now()` 몇 번뿐이다.
+ */
 async function compute(client: KiwoomClient): Promise<MoneyNow> {
+  const t0 = Date.now();
+  const lap: string[] = [];
+  const step = async <T>(name: string, p: Promise<T>): Promise<T> => {
+    const s = Date.now();
+    try {
+      return await p;
+    } finally {
+      lap.push(`${name} ${Date.now() - s}`);
+    }
+  };
+
   const { date, minute, day, hhmm } = kst();
   const slot = slotOf(minute, day === 0 || day === 6);
   const errors: string[] = [];
-  const [marksFile, vi] = await Promise.all([loadStockMarks().catch(() => null), viTodayMap(client).catch(() => null)]);
+  const [marksFile, vi] = await step(
+    "표식·VI",
+    Promise.all([loadStockMarks().catch(() => null), viTodayMap(client).catch(() => null)]),
+  );
   const marks = marksFile?.marks ?? null;
-  const [verdict, w] = await Promise.all([buildVerdict(client, minute, errors), buildWhere(client, errors)]);
-  await recordVerdict(date, minute, hhmm, verdict);
-  const { trend, record } = await buildRecord(client, date);
-  const { buyers, buckets, pool, liveOf } = await buildBuyers(client, minute, w.themeOf, marks, vi, errors);
-  const account = await buildAccount(client, minute, w.themeOf, marks, vi, liveOf, errors);
-  const plan = await buildPlan(slot, w.where, buyers, pool, marks, account, vi, date);
+  const [verdict, w] = await step(
+    "판정·어디로",
+    Promise.all([buildVerdict(client, minute, errors), buildWhere(client, errors)]),
+  );
+  await step("판정쓰기", recordVerdict(date, minute, hhmm, verdict));
+  /*
+   * **기록과 사는손은 서로 안 기다린다** (2026-10-14). `buildRecord` 는 날짜와 판정
+   * 파일만 보고(바로 위에서 썼다), `buildBuyers` 는 그걸 아예 안 본다 — 줄 세울 까닭이
+   * 없는데 줄을 세우고 있었다. 둘 중 긴 쪽 하나만큼만 걸린다.
+   */
+  const [{ trend, record }, { buyers, buckets, pool, liveOf }] = await step(
+    "기록‖사는손",
+    Promise.all([
+      buildRecord(client, date),
+      buildBuyers(client, minute, w.themeOf, marks, vi, errors),
+    ]),
+  );
+  const account = await step("계좌", buildAccount(client, minute, w.themeOf, marks, vi, liveOf, errors));
+  const plan = await step("계획", buildPlan(slot, w.where, buyers, pool, marks, account, vi, date));
+
+  const total = Date.now() - t0;
+  /* 문턱은 「무거운 요청」과 같은 4초 — 평소에는 한 줄도 안 쌓인다 */
+  if (total >= 4000) noteLife("WARN", `돈의흐름 ${total}ms — ${lap.join(" · ")} (ms)`);
   return { at: Date.now(), stale: false, slot, verdict, trend, record, buckets, where: w.where, buyers, account, plan, errors };
 }
 
