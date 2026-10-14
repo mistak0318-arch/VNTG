@@ -480,10 +480,44 @@ export async function runAfterClose(
    * 마무리는 정규 회차의 finishedAt 을 그대로 두고, 실패 목록만 제 것을 덧댄다.
    */
   const isWrap = !!only && only.length > 0 && only.every((k) => WRAP_KEYS.has(k));
+  /* `partial` 과 같은 뜻 — 아래에서 다시 쓰지만 `want` 보다 먼저 필요하다 */
+  const partial0 = !!only && only.length > 0;
   const partial = !!only && only.length > 0;
 
+  /*
+   * **끊겼다 다시 뜬 회차는 오늘 이미 끝난 단계를 건너뛴다** (2026-10-14).
+   *
+   * 벤티지: "일별 원장 전종목 받는 중인데 이것도 영향이 있겠지?" — 있었다. 그런데 더 나쁜 건
+   * **내 배포가 그 수집을 계속 처음부터 돌려세우고 있었다**는 것이다. 이 모듈은 「오늘 회차가
+   * `done`」일 때만 안 도는데(:454), 도중에 끊긴 회차는 `done` 이 아니다. 그래서 서버가 다시 뜰
+   * 때마다 ①일봉부터 새로 갔다. 10/14 에 열다섯 번 배포했으니 그만큼 되돌아간 셈이고,
+   * 30분짜리 원장 수집이 하루 종일 안 끝나며 앱이 계속 느렸다.
+   *
+   * ⚠️ **회차를 통째로 건너뛰지는 않는다.** 그건 9/21 에 겪은 사고다 — 그때 넣은 가드가
+   * 15:55 정규 회차를 조용히 삼켜 원장이 사흘 묵은 채였고, 주석에 「조용히 건너뛰는 것이 이
+   * 도구에서 가장 비싼 실패」라고 적어 뒀다. 여기서 건너뛰는 것은 **단계 하나**이고, 조건이
+   * 세 겹이다:
+   *
+   *   ① 전체 회차일 것(부분·재시도·손으로 고른 것은 그대로 다 돈다)
+   *   ② 오늘 시작한 회차가 **안 끝난 채로** 남아 있을 것 = 도중에 끊겼다는 뜻
+   *   ③ 그 단계의 마지막 결과가 **오늘 것이고 성공**일 것
+   *
+   * 셋이 다 맞으면 그 단계는 이미 오늘 치를 만들어 놨다. 다시 하는 것은 같은 값을 또 만드는
+   * 일이고, 그 대가가 키움 조회 수만 건과 30분이다.
+   */
+  const interrupted = !partial0 && prevState?.day === day && !prevState.finishedAt;
+  const doneToday = new Set<string>();
+  if (interrupted) {
+    const last = await afterCloseLastByStep().catch(() => ({}) as Record<string, StepResult & { day: string }>);
+    for (const [k, v] of Object.entries(last)) if (v.day === day && v.ok) doneToday.add(k);
+  }
+  if (doneToday.size > 0) {
+    console.log(`[afterClose] 끊긴 회차를 이어받는다 — 오늘 이미 끝난 ${doneToday.size}단계 건너뜀 (${[...doneToday].join(", ")})`);
+  }
+
   /* `only` 를 안 주면 **마무리 단계를 뺀** 전부 — 그 둘은 20:10 에 따로 돈다 */
-  const want = (k: string) => (!only || only.length === 0 ? !WRAP_KEYS.has(k) : only.includes(k));
+  const want = (k: string) =>
+    (!only || only.length === 0 ? !WRAP_KEYS.has(k) : only.includes(k)) && !doneToday.has(k);
   run = {
     day,
     startedAt: new Date().toISOString(),

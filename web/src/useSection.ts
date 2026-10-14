@@ -62,11 +62,26 @@ export function useSection<T>(name: string, intervalMs: number) {
    */
   const staleTries = useRef(0);
   const staleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /*
+   * **사람이 누른 ↻ 는 삼키지 않는다** (2026-10-14 — 벤티지: "요기 새로고침 버튼 작동 안 함").
+   *
+   * `load` 의 첫 줄이 `if (inFlight.current) return` 이다 — 요청이 날아가는 중이면 **아무 일도
+   * 안 하고 돌아간다.** 주기 갱신끼리 겹치는 걸 막으려던 것이고 거기까진 맞다. 그런데 **사람이
+   * 누른 것까지** 같이 삼켰다. 누른 사람에게는 버튼이 고장 난 것과 구별되지 않는다.
+   *
+   * 원래도 있던 결함인데 오늘 내가 넣은 「낡으면 한 번 더 묻기」가 날아가는 창을 늘려서
+   * 자주 걸리게 됐다. 겹치면 **기억해 뒀다가 끝나는 대로 한 번 돌린다** — 버림이 아니라 미룸이다.
+   */
+  const queuedForce = useRef(false);
 
   /** @param silent 로딩 표시를 건드리지 않는다 (주기 갱신) */
   const load = useCallback(
     async (silent = false, fresh = false) => {
-      if (inFlight.current) return;
+      if (inFlight.current) {
+        /* 사람이 누른 것이면 기억해 둔다 — 지금 날아가는 것이 끝나면 바로 돌린다 */
+        if (fresh) queuedForce.current = true;
+        return;
+      }
       inFlight.current = true;
       // 값이 이미 있으면 조용히 — 있는 걸 지우고 스켈레톤을 띄울 이유가 없다
       if (!silent && !hasData.current) setLoading(true);
@@ -99,6 +114,10 @@ export function useSection<T>(name: string, intervalMs: number) {
       } finally {
         inFlight.current = false;
         if (!cancelledRef.current) setLoading(false);
+        if (queuedForce.current && !cancelledRef.current) {
+          queuedForce.current = false;
+          void load(true, true);
+        }
       }
     },
     [name],
