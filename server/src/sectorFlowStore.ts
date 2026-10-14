@@ -181,6 +181,47 @@ export async function listSectorFlow(days?: number): Promise<SectorFlowDay[]> {
   return days && days > 0 ? rows.slice(-days) : rows;
 }
 
+/**
+ * **시장 전체 한 줄** — 날짜별 종합지수 행만 (2026-10-15).
+ *
+ * 벤티지(07:10, 데일리 리포트): "이 수급 부분 왜 0으로 다 표시되지? 이 부분을 전일
+ * 기준으로 해야 될 것 같은데 이게 지금 아침 브리핑이거든. 그리고 5일·10일·20일·60일
+ * 추이도 보여주면 좋겠다."
+ *
+ * 둘 다 **이미 들고 있는 것**으로 된다. 이 창고는 `ka10051` 의 60행을 통째로 남기는데,
+ * 그 안에 **종합지수 행(001·101)이 같이 있다.** 그게 곧 시장 전체 수급이고, `base_dt`
+ * 로 과거를 받아 둔 덕에 **500일치**가 있다. 조회를 한 건도 더 안 쓴다.
+ *
+ * 쓰는 쪽이 둘이다:
+ *   · 장 전이라 오늘이 0 일 때 **지난 장**을 대신 보여 주기
+ *   · 5·10·20·60 거래일 **누적**
+ *
+ * ⚠️ 여기 담긴 날은 전부 **마감 뒤에 굳힌 날**이다(`todaySettled`·`hasNoTrading`).
+ * 그래서 오늘 장중에는 오늘이 안 들어 있다 — 그게 맞다. 진행 중인 값을 그날의
+ * 최종값으로 섞으면 누적이 조용히 틀어진다.
+ */
+export interface MarketTotalDay {
+  /** YYYY-MM-DD */
+  date: string;
+  /** SUBJECTS 순서대로 순매수(억원) */
+  kospi: number[];
+  kosdaq: number[];
+}
+
+export async function listMarketTotals(days?: number): Promise<MarketTotalDay[]> {
+  const rows = await readAll();
+  rows.sort((a, b) => a.date.localeCompare(b.date));
+  const out: MarketTotalDay[] = [];
+  for (const d of rows) {
+    const ks = d.kospi.find((r) => TOTAL_CODES.has(r.code));
+    const kq = d.kosdaq.find((r) => TOTAL_CODES.has(r.code));
+    /* 종합 행이 없는 날은 건너뛴다 — 0 으로 채우면 「안 샀다」는 거짓이 된다 */
+    if (!ks && !kq) continue;
+    out.push({ date: d.date, kospi: ks?.v ?? [], kosdaq: kq?.v ?? [] });
+  }
+  return days && days > 0 ? out.slice(-days) : out;
+}
+
 // ---------------------------------------------------------------- 수집
 
 interface Row {

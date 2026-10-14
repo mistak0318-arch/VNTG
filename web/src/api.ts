@@ -2981,6 +2981,14 @@ export interface InvestorFlow {
 export interface MarketFlow {
   kospi: InvestorFlow;
   kosdaq: InvestorFlow;
+  /**
+   * 이 숫자가 **어느 날 것인가** (2026-10-15). 오늘이면 없다.
+   * 장 전에는 오늘이 전부 0 이라 서버가 **지난 장**을 대신 싣는다 — 날짜를 안 적으면
+   * 아침 브리핑에서 그게 오늘로 읽힌다.
+   */
+  asOf?: string;
+  /** 5·10·20·60 거래일 누적 (억원) */
+  windows?: { days: number; kospi: InvestorFlow; kosdaq: InvestorFlow }[];
 }
 
 /** 시가총액(marketCap)은 억원 단위. 상장주식수를 못 찾으면 null */

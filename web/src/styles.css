@@ -9217,6 +9217,21 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .rp-flowtbl-sum { background: var(--panel-2); }
 .rp-flowtbl th.rp-flowtbl-sum { color: var(--text); }
 .rp-flowtbl-bars { margin-top: 10px; }
+/*
+  「언제 것인가」 (2026-10-15) — 장 전에 지난 장을 대신 보여 줄 때의 머리말.
+  눈에 띄되 숫자를 가리지 않게, 표 바로 위에 한 줄.
+*/
+.rp-flow-asof {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px;
+  margin: 0 0 6px; padding: 5px 9px; border-radius: 7px;
+  background: color-mix(in srgb, var(--accent) 9%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
+  font-size: 0.7333rem;
+}
+.rp-flow-asof > b { color: var(--text); }
+.rp-flow-asof > span { color: var(--muted); }
+/* 누적 표 — 하루치 표 바로 밑에 붙여 둘이 한 덩이로 읽히게 */
+.rp-flow-win { margin-top: 6px; }
 .rp-flowtbl-bars > summary { font-size: 0.7333rem; color: var(--muted); cursor: pointer; }
 
 /* 지수 수급 합산 — 쌓인 날이 모자란 줄은 흐리게 둔다 */

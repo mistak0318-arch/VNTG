@@ -616,6 +616,20 @@ export function DailyReportPage({
         <>
         {f ? (
           <>
+            {/*
+              **어느 날 것인지 먼저 적는다** (2026-10-15 — 벤티지: "이 수급 부분 왜 0으로
+              다 표시되지? 전일 기준으로 해야 될 것 같은데 이게 지금 아침 브리핑이거든").
+
+              아침 7시에는 오늘 수급이 전부 0 이다. 사실이긴 한데 **아무것도 안 알려 주는
+              참말**이라, 서버가 지난 장을 대신 싣는다. 그러면 이번엔 날짜가 문제가 된다 —
+              같은 자리에 어제 숫자가 말없이 앉아 있으면 그건 오늘로 읽힌다.
+            */}
+            {f.asOf && (
+              <div className="rp-flow-asof">
+                <b>{f.asOf.slice(5).replace("-", "/")} 장 마감 기준</b>
+                <span> · 오늘은 아직 장 전이라 지난 거래일을 보여 줍니다</span>
+              </div>
+            )}
             <div className="data-table-wrap">
               <table className="data-table num rp-flowtbl">
                 <thead>
@@ -653,6 +667,51 @@ export function DailyReportPage({
                 </tbody>
               </table>
             </div>
+            {/*
+              **누적 추이** (2026-10-15 — 벤티지: "5일, 10일, 20일, 60일 이 추이도 보여주면
+              좋겠다").
+
+              하루치만 보면 「어제 외국인이 팔았다」까지다. 그게 **하루짜리 되돌림인지
+              석 달째 나가는 중인지**는 누적이 말한다 — 같은 −3천억이라도 60일 내내
+              파는 중의 −3천억과 20일 만에 처음 나온 −3천억은 다른 장이다.
+
+              코스피+코스닥 합계로 적는다. 시장별로 나누면 칸이 여덟이 되어 폰에서 못 읽는다.
+              막대 보기처럼 접지 않은 이유는, 이게 **하루치를 읽는 데 필요한 맥락**이라서다.
+            */}
+            {f.windows && f.windows.length > 0 && (
+              <div className="data-table-wrap rp-flow-win">
+                <table className="data-table num rp-flowtbl">
+                  <thead>
+                    <tr>
+                      <th className="sticky-col">누적</th>
+                      {f.windows.map((w) => (
+                        <th key={w.days}>{w.days}일</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(["foreign", "institution", "individual"] as const).map((k) => (
+                      <tr key={k}>
+                        <td className="sticky-col">
+                          {k === "foreign" ? "외국인" : k === "institution" ? "기관" : "개인"}
+                        </td>
+                        {(f.windows ?? []).map((w) => {
+                          const v = w.kospi[k] + w.kosdaq[k];
+                          return (
+                            <td key={w.days}>
+                              <span className={signClass(v)}>
+                                {v > 0 ? "+" : ""}
+                                {fmtNum(v)}
+                              </span>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
             <details className="rp-flowtbl-bars">
               <summary>막대로 보기</summary>
               <div className="report-two-col">
@@ -674,6 +733,13 @@ export function DailyReportPage({
           단위 <b>억원</b> · 양수가 순매수입니다. 셋을 더하면 대체로 0 근처인데,
           <b> 한쪽이 사면 다른 쪽이 판 것</b>이기 때문입니다 — 그래서 누가 누구에게
           넘겼는지를 보는 표입니다.
+          {f?.windows && f.windows.length > 0 && (
+            <>
+              {" "}
+              아래 누적은 <b>코스피+코스닥 합계</b>이고 마감된 거래일만 셉니다 — 오늘 장중 값은
+              안 섞습니다.
+            </>
+          )}
         </div>
         </>
       ),

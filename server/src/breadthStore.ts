@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { getSection, type HighLow, type IndexCard, type MarketFlow } from "./marketOverview.js";
+import { getSection, type HighLow, type IndexCard, type InvestorFlow, type MarketFlow } from "./marketOverview.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 
 /**
@@ -108,7 +108,8 @@ function pickIndex(cards: IndexCard[], name: string): IndexCard | undefined {
 
 function toMarketBreadth(
   card: IndexCard | undefined,
-  flow: MarketFlow[keyof MarketFlow] | undefined,
+  /* ⚠️ 예전엔 `MarketFlow[keyof MarketFlow]` 였다 — 2026-10-15 에 MarketFlow 에 날짜·누적 칸이 붙어 더는 통하지 않는다 */
+  flow: InvestorFlow | undefined,
 ): MarketBreadth {
   return {
     price: card?.price ?? 0,

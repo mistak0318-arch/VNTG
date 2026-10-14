@@ -6,6 +6,7 @@ import { recordFlow } from "./flowIntraday.js";
 import { kospi200Futures, type FuturesQuote } from "./kospiFutures.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { getSharesMap } from "./stockListCache.js";
+import { SUBJECTS, listMarketTotals } from "./sectorFlowStore.js";
 
 /**
  * 시황 탭용 데이터 캐시.
@@ -211,6 +212,97 @@ export interface InvestorFlow {
 export interface MarketFlow {
   kospi: InvestorFlow;
   kosdaq: InvestorFlow;
+  /**
+   * 이 숫자가 **어느 날 것인가** — 오늘이면 없다(undefined).
+   *
+   * 장 전에는 오늘이 전부 0 이라 **지난 장**을 대신 싣는데, 날짜를 안 적으면 화면이
+   * 그걸 오늘로 읽는다. 아침 브리핑에서 그건 그냥 틀린 숫자다.
+   */
+  asOf?: string;
+  /** 5·10·20·60 거래일 누적 — 창고에 쌓인 종합 행에서 (조회 없음) */
+  windows?: { days: number; kospi: InvestorFlow; kosdaq: InvestorFlow }[];
+}
+
+/** 창고의 `v[]`(SUBJECTS 순서) → 화면이 쓰는 모양 */
+function fromSubjects(v: number[]): InvestorFlow {
+  const at = (name: string): number => {
+    const i = SUBJECTS.indexOf(name as (typeof SUBJECTS)[number]);
+    /* 옛 행은 칸이 짧다 — 없는 칸은 0 으로 두되, 그건 「안 샀다」가 아니라 「모름」이다 */
+    return i >= 0 && i < v.length ? v[i] : 0;
+  };
+  return {
+    individual: at("individual"),
+    foreign: at("foreign"),
+    institution: at("institution"),
+    financialInvestment: at("securities"),
+    investmentTrust: at("trust"),
+    pensionFund: at("pension"),
+    privateFund: at("private"),
+    insurance: at("insurance"),
+    bank: at("bank"),
+    otherFinance: at("otherFinance"),
+    nation: at("nation"),
+    otherCorp: at("otherCorp"),
+  };
+}
+
+function sumFlows(list: InvestorFlow[]): InvestorFlow {
+  const out = fromSubjects([]);
+  for (const f of list) {
+    for (const k of Object.keys(out) as (keyof InvestorFlow)[]) out[k] += f[k];
+  }
+  return out;
+}
+
+const WINDOW_DAYS = [5, 10, 20, 60];
+
+/**
+ * **장 전에는 지난 장을, 그리고 늘 누적을** (2026-10-15).
+ *
+ * 벤티지(07:10): "이 수급 부분 왜 0으로 다 표시되지? 전일 기준으로 해야 될 것 같은데
+ * 이게 지금 아침 브리핑이거든. 그리고 5일·10일·20일·60일 추이도."
+ *
+ * 아침 7시에 `ka10051` 을 오늘로 물으면 전부 0 이다 — 장이 아직 안 섰으니 **사실**이지만,
+ * 「오늘 외국인 0억」은 아침 브리핑에서 **아무것도 안 알려 주는 참말**이다. 그 시간에
+ * 알고 싶은 것은 어제 누가 무엇을 했나다.
+ *
+ * 둘 다 **창고에 이미 있다**(`sectorFlowStore` 의 종합 행, 500일치). 조회는 한 건도 안 는다.
+ */
+/*
+ * ⚠️ **창고 파일을 분마다 통째로 읽지 않는다.**
+ *
+ * `sectorFlow.json` 은 500일치라 반 메가가 넘는다. 수급은 60초마다 갱신되는데 그때마다
+ * 파싱하면 그 크기가 매분 새로 올라온다 — 이 서버는 **메모리로 죽어 본 적이 있다**(10/07).
+ * 어차피 **하루에 한 번(마감 뒤) 바뀌는** 값이라 10분이면 충분하다.
+ */
+let totalsCache: { at: number; days: Awaited<ReturnType<typeof listMarketTotals>> } | null = null;
+const TOTALS_TTL_MS = 10 * 60_000;
+
+async function flowExtras(todayEmpty: boolean): Promise<{
+  prev: { date: string; kospi: InvestorFlow; kosdaq: InvestorFlow } | null;
+  windows: MarketFlow["windows"];
+}> {
+  try {
+    if (!totalsCache || Date.now() - totalsCache.at > TOTALS_TTL_MS) {
+      totalsCache = { at: Date.now(), days: await listMarketTotals(60) };
+    }
+    const days = totalsCache.days;
+    if (days.length === 0) return { prev: null, windows: undefined };
+    const ks = days.map((d) => fromSubjects(d.kospi));
+    const kq = days.map((d) => fromSubjects(d.kosdaq));
+    const last = days[days.length - 1];
+    return {
+      prev: todayEmpty ? { date: last.date, kospi: ks[ks.length - 1], kosdaq: kq[kq.length - 1] } : null,
+      windows: WINDOW_DAYS.filter((n) => days.length >= Math.min(n, 5)).map((n) => ({
+        days: Math.min(n, days.length),
+        kospi: sumFlows(ks.slice(-n)),
+        kosdaq: sumFlows(kq.slice(-n)),
+      })),
+    };
+  } catch {
+    /* 창고가 없어도 오늘 값은 그대로 나간다 */
+    return { prev: null, windows: undefined };
+  }
 }
 
 /** ka10051 응답에서 시장 전체(종합지수) 행만 골라낸다. inds_cd는 "001_AL" 형태로 올 수 있다. */
@@ -277,10 +369,21 @@ async function fetchFlow(client: KiwoomClient): Promise<MarketFlow> {
   /*
    * 장중 변화를 쌓는다. **추가 호출이 아니다** — 방금 받은 값을 시각과 함께 적어 둘 뿐이다.
    * ka10051 은 누적만 주므로 시계열은 이렇게밖에 못 만든다.
+   *
+   * ⚠️ **오늘 값으로만** 쌓는다 — 아래에서 지난 장으로 갈아 끼우기 전에 적는 이유다.
    */
   void recordFlow(flow.kospi, flow.kosdaq);
 
-  return flow;
+  /* 셋이 다 0 이면 아직 장이 안 선 것이다 — 세부 주체는 0 이어도 셋은 꼭 돈다 */
+  const empty = (f: InvestorFlow) => f.foreign === 0 && f.institution === 0 && f.individual === 0;
+  const todayEmpty = empty(flow.kospi) && empty(flow.kosdaq);
+  const extra = await flowExtras(todayEmpty);
+  return {
+    kospi: extra.prev ? extra.prev.kospi : flow.kospi,
+    kosdaq: extra.prev ? extra.prev.kosdaq : flow.kosdaq,
+    ...(extra.prev ? { asOf: extra.prev.date } : {}),
+    ...(extra.windows ? { windows: extra.windows } : {}),
+  };
 }
 
 // ---------------------------------------------------------------- 등락률 순위
