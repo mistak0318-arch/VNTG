@@ -20140,6 +20140,44 @@ a.watch-btn { text-decoration: none; }
 
 
 /*
+ * ── PC 에서는 **전체화면이 아니라 창** (2026-10-14) ──
+ *
+ * 벤티지: "엑셀 모드에서 PC 로 봤을 때 종목상세 새 모양 오른쪽 부분이 잘리네. 크기를 좀
+ * 줄여도 될 것 같아. PC 에서는 굳이 전체화면으로 안 나와도 되거든. 창 크기도 내가 조절할
+ * 수 있으면 좋겠다."
+ *
+ * 오늘 폭 울타리를 걷으면서 **PC 에서도 화면을 통째로 덮게** 됐다. 폰에서는 그게 맞다 —
+ * 화면이 그것뿐이니까. PC 는 아니다. 뒤에 깔린 시세분석·엑셀 리본을 같이 보려고 큰
+ * 화면을 쓰는 것인데, 덮어 버리면 큰 화면의 뜻이 없어진다.
+ *
+ * 900px 부터는 가운데 창으로 띄운다. **안쪽 구조는 그대로다** — 머리줄·위아래 탭 줄이
+ * 박히고 본문만 구르는 그 모양이 벤티지가 좋다고 한 것이고, 그건 폭과 상관없다.
+ *
+ * `resize: both` 는 브라우저가 공짜로 주는 손잡이다(오른쪽 아래 모서리). `overflow` 가
+ * visible 이 아니어야 먹는데 이 시트는 이미 `hidden` 이다.
+ * 끌어 놓은 크기는 `StockDetail` 이 기억한다 — 열 때마다 다시 끌면 손잡이가 없느니만 못하다.
+ */
+@media (min-width: 900px) {
+  html[data-widestock="1"] .overlay.sdw {
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  html[data-widestock="1"] .sheet.sdw {
+    width: min(1180px, 92vw);
+    max-width: none;
+    height: min(900px, 90dvh);
+    max-height: 90dvh;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    resize: both;
+    /* 끌어서 줄일 때 글자가 뭉개지지 않을 만큼은 남긴다 */
+    min-width: 420px;
+    min-height: 320px;
+  }
+}
+
+/*
  * 단추를 감싼 칸 — 평소 모양에서는 **투명**해야 한다. `display: contents` 가 바로 그
  * 뜻이다: 상자는 없고 아이들만 부모의 흐름에 그대로 선다. (앞서 이름·배지에는 이것이
  * 필요 없어 걷었는데, 여기서는 꼭 필요하다 — 단추들이 머리줄의 직계로 서야 예전 배치가

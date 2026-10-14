@@ -160,6 +160,52 @@ export function StockDetail({
     ro.observe(el);
     return () => ro.disconnect();
   }, [wide, code]);
+  /*
+   * **끌어 놓은 창 크기를 기억한다** (2026-10-14 — 벤티지: "창 크기도 내가 조절할 수
+   * 있으면 좋겠다").
+   *
+   * PC 에서 시트에 `resize: both` 를 줘서 모서리로 크기를 바꿀 수 있게 했는데, 열 때마다
+   * 되돌아가면 **손잡이가 없느니만 못하다** — 매번 다시 끌어야 하니까.
+   *
+   * 기기마다 화면이 다르니 로컬에 둔다(넓게 보기 스위치와 같은 층). 폰에서는 창이 아니라
+   * 전체화면이라 저장분을 **안 쓴다** — 썼다가는 PC 에서 줄여 놓은 크기가 폰에 와서
+   * 화면 한가운데 작은 상자로 뜬다.
+   */
+  useEffect(() => {
+    const el = sheetRef.current;
+    if (!el || !wide || typeof window === "undefined") return;
+    if (!window.matchMedia("(min-width: 900px)").matches) return;
+    try {
+      const raw = localStorage.getItem("vntg.sdSize");
+      if (raw) {
+        const { w, h } = JSON.parse(raw) as { w: number; h: number };
+        if (w > 300 && h > 240) {
+          el.style.width = `${Math.min(w, window.innerWidth - 24)}px`;
+          el.style.height = `${Math.min(h, window.innerHeight - 24)}px`;
+        }
+      }
+    } catch {
+      /* 못 읽으면 CSS 기본값 — 창이 안 뜨는 것보다 낫다 */
+    }
+    let t: ReturnType<typeof setTimeout> | null = null;
+    const ro = new ResizeObserver(() => {
+      if (t) clearTimeout(t);
+      /* 끄는 동안 매 프레임 쓰지 않는다 — 놓고 나서 한 번 */
+      t = setTimeout(() => {
+        try {
+          localStorage.setItem("vntg.sdSize", JSON.stringify({ w: Math.round(el.offsetWidth), h: Math.round(el.offsetHeight) }));
+        } catch {
+          /* 사생활 보호 창 — 이번 세션에만 */
+        }
+      }, 400);
+    });
+    ro.observe(el);
+    return () => {
+      if (t) clearTimeout(t);
+      ro.disconnect();
+    };
+  }, [wide]);
+
   useEffect(() => {
     sheetRef.current?.scrollTo({ top: 0 });
     /* 넓게 보기에서는 시트가 아니라 **본문 칸**이 구른다 — 거기도 맨 위로 (2026-10-13) */
