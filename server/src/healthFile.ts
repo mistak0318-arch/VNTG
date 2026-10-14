@@ -10,6 +10,7 @@ import os from "node:os";
 import v8 from "node:v8";
 import { lifeSummary, noteLife, selfHeal } from "./lifecycle.js";
 import { loadGateStats } from "./loadGate.js";
+import { loopLagStats } from "./loopLag.js";
 import { recoveryStats } from "./recovery.js";
 import { shareGetStats } from "./shareGet.js";
 import { dropSamplesCache } from "./signalSamples.js";
@@ -201,6 +202,8 @@ async function writeOnceInner(): Promise<void> {
      * ③큰 파일을 통째로 드는 것 — 셋 중 하나를 다시 봐야 한다.
      */
     과부하관문: loadGateStats(),
+    /* 서버가 실제로 멈추는지 — 「느리다」가 서버 탓인지 기기·네트워크 탓인지 가른다 (2026-10-14) */
+    루프지연: loopLagStats(),
     /*
      * 복구 루틴 (2026-10-07 밤) — 「지금 어떤 상태인가」와 「몇 번 복구했나」.
      * `상태` 가 자주 「복구」면 봉우리가 구조적으로 큰 것이고, `GC가능: false` 면

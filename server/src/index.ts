@@ -89,6 +89,7 @@ import { startThemeScheduler } from "./naverThemes.js";
 import { loadCloses, startClosesScheduler } from "./dailyCloses.js";
 /* 돋보기가 ETF 도 찾게 — 이름표를 기동 때 미리 받아 둔다 (2026-10-07) */
 import { warmEtfIndex } from "./stockListCache.js";
+import { startLoopLag } from "./loopLag.js";
 import { moneyNow } from "./moneyNow.js";
 /* 과부하 관문 — 죽는 대신 느려지게 (2026-10-07 밤) */
 import { loadGate } from "./loadGate.js";
@@ -666,6 +667,8 @@ app.listen(port, host, () => {
    * 그래도 안 내려오면 깨끗하게 내려간다(감시자가 다시 띄운다).
    * 막는 것(관문·상한)만으로는 나빠진 상태에 갇힌다 — 돌아오는 길이 있어야 한다.
    */
+  /* 루프가 실제로 멈추는지 재 둔다 — 재는 값이 거의 공짜다(네이티브 히스토그램) */
+  startLoopLag();
   startRecovery((why) => {
     noteLife("EXIT", why);
     /* 쓰던 응답이 마저 나가도록 한 박자 뒤에 — OOM 즉사와 다른 점이 이것이다 */
