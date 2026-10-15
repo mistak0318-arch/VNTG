@@ -65,6 +65,26 @@ let pendingBack: ReturnType<typeof setTimeout> | null = null;
  */
 let stack: symbol[] = [];
 
+/**
+ * **시트가 떠 있는 동안 위장 껍데기의 바닥 줄을 내린다** (2026-10-16 — 벤티지:
+ * "메모모드 종목 상세 밑에 바가 안 나와. 밑에 해놓은 거 지우고 서브메뉴 보이게 해줘").
+ *
+ * 메모·엑셀 위장은 바닥에 가짜 도구줄을 깐다(`.nt-foot`·`.xl-sheets`). 그런데 그것들이
+ * **z-index 30** 이고 시트 덮개는 **20** 이라, 종목상세의 **하단 탭 줄이 그 밑에 깔렸다.**
+ * 위 줄만 보이고 아래 줄이 사라진 것이 이것이다.
+ *
+ * 시트를 위로 올리는 대신 **바닥 줄을 내린다.** 시트가 화면을 덮고 있는 동안 그 가짜
+ * 도구줄은 어차피 아무 일도 안 하고, 위장은 **머리줄**(메모/완료·리본)이 이미 하고 있다.
+ * 시트를 올리면 머리줄까지 덮여 위장이 통째로 깨진다 — 그건 이 모드의 존재 이유다.
+ *
+ * 모든 시트가 이 훅을 지나므로 여기 한 곳이면 된다.
+ */
+function markSheets(): void {
+  const on = stack.length > 0;
+  if (on) document.documentElement.dataset.sheet = "1";
+  else delete document.documentElement.dataset.sheet;
+}
+
 export function useSheetBack(open: boolean, close: () => void): void {
   const closeRef = useRef(close);
   closeRef.current = close;
@@ -77,6 +97,7 @@ export function useSheetBack(open: boolean, close: () => void): void {
 
     const token = Symbol("sheet");
     stack.push(token);
+    markSheets();
 
     if (pendingBack !== null) {
       /* 방금 해제된 인스턴스의 칸이 아직 살아 있다 — 그걸 그대로 쓴다 */
@@ -96,6 +117,7 @@ export function useSheetBack(open: boolean, close: () => void): void {
       /* 겹쳐 있으면 **맨 위 한 겹만** 닫는다 — 밑에 깔린 시트는 제 차례를 기다린다 */
       if (stack[stack.length - 1] !== token) return;
       stack.pop();
+      markSheets();
       poppedRef.current = true;
       closeRef.current();
     };
@@ -104,6 +126,7 @@ export function useSheetBack(open: boolean, close: () => void): void {
     return () => {
       window.removeEventListener("popstate", onPop);
       stack = stack.filter((t) => t !== token);
+      markSheets();
       /* 뒤로가기로 닫혔으면 그 칸은 이미 빠졌다 */
       if (poppedRef.current) return;
       if (!window.history.state?.vntgSheet) return;

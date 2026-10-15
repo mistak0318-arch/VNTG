@@ -389,6 +389,12 @@
   border-bottom: 1px solid var(--xl-grid);
 }
 
+/*
+  시트가 떠 있으면 바닥 시트탭 줄을 내린다 (2026-10-16) — 메모 모드와 같은 까닭이다.
+  z30 이라 종목상세의 하단 탭 줄을 덮는다. 리본(머리)은 그대로 둬야 위장이 산다.
+*/
+:root[data-theme="excel"][data-sheet="1"] .xl-sheets { display: none; }
+
 /* ===== 시트 탭 ===== */
 :root[data-theme="excel"] .xl-sheets {
   position: fixed;
