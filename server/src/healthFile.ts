@@ -18,6 +18,7 @@ import { dropSamplesCache } from "./signalSamples.js";
 import { peekRealtime, realtimeFidSurvey, subscribedCount } from "./realtimeHub.js";
 import { nightFuturesSnapshot } from "./usMajor.js";
 import { fxFidSnapshot } from "./fxFidProbe.js";
+import { phaseTodaySummary } from "./marketPhase.js";
 import { hantooRealtimeStatus } from "./hantooRealtime.js";
 import { hantooQueueDepth } from "./hantooClient.js";
 import { afterCloseStatus, afterCloseStateSummary } from "./afterClose.js";
@@ -328,6 +329,11 @@ async function writeOnceInner(): Promise<void> {
      * 외국계 매도·매수와 **값을 맞춰 본다** — 맞은 칸과 횟수뿐이다(종목도 값도 안 싣는다).
      */
     외국계FID: fxFidSnapshot(),
+    /*
+     * 오늘 온 장운영구분(`0s` FID 215) — 사이드카·서킷브레이커가 여기로 오는지 가리려고
+     * (2026-10-15). 시각과 코드뿐이다. 자세한 까닭은 `marketPhase.phaseTodaySummary`.
+     */
+    장운영구분: await phaseTodaySummary().catch(() => null),
     /*
      * 야간선물을 **어느 판의 값으로** 들고 있나 (2026-10-15 — 벤티지: "야간선물 값을 왜
      * 못 받아오지"). 06:00~18:00 에 통째로 비던 자리라, 다음엔 추측 말고 여기를 본다.

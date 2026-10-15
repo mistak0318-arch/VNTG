@@ -142,6 +142,44 @@ export async function readPhaseLog(limit = 200): Promise<PhaseObservation[]> {
 }
 
 /**
+ * **오늘 온 장운영구분을 밖에서 본다** — health.json 「장운영구분」 (2026-10-15).
+ *
+ * 벤티지: "우리도 알람에 사이드카 써킷 이런거 표시했음 좋겠는데" (키움 앱의
+ * 「코스피 매도 사이드카 해제」 배너).
+ *
+ * 우리 앱에는 사이드카·서킷브레이커라는 말이 **한 글자도 없다.** 어디서 받을지부터
+ * 정해야 하는데, 가장 유망한 자리가 여기다 — `0s` 의 FID 215 는 **종목과 무관한
+ * 시장 전체 신호**이고, 9/04 부터 관측해 보니 코드가 스무 가지나 온다
+ * (0·2·3·4·8·9·P·Q·R·S·T·U·V·a·b·c·d·e·o·s). 시간대 구분만으로는 너무 많다 —
+ * 시장조치가 섞여 있을 가능성이 크다.
+ *
+ * **오늘(10/15) 09:15 에 실제로 코스피 매도 사이드카가 발동·해제됐다.** 그러니 오늘
+ * 줄에 그 시각 근처의 낯선 코드가 있으면 그게 답이고, 없으면 `0s` 로는 안 온다는
+ * 뜻이다 — 어느 쪽이든 **추측이 아니라 관측으로** 갈린다. 그래서 파일을 여는 대신
+ * 밖에서 읽을 수 있게 한 칸을 낸다(시각과 코드뿐, 종목·계좌는 없다).
+ */
+export async function phaseTodaySummary(): Promise<{ 오늘: string; 줄: string[] } | null> {
+  try {
+    const kst = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+    const lines = (await fs.readFile(FILE, "utf8")).split("\n").filter(Boolean);
+    const out: string[] = [];
+    for (const l of lines) {
+      try {
+        const r = JSON.parse(l) as PhaseObservation;
+        const k = new Date(new Date(r.at).getTime() + 9 * 3600_000).toISOString();
+        if (k.slice(0, 10) !== kst) continue;
+        out.push(`${k.slice(11, 19)} ${r.code}${r.time ? ` (키움 ${r.time})` : ""}`);
+      } catch {
+        /* 깨진 줄은 건너뛴다 */
+      }
+    }
+    return { 오늘: kst, 줄: out.slice(-60) };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * 지금 관측된 국면. **아직 아무도 이걸로 판단하지 않는다** — 화면에 보여 주기만 한다.
  *
  * 9/14 에 갈아탈 때 `isMarketHours` 류가 이 값을 먼저 보고, 없거나 오래됐으면 지금의
