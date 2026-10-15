@@ -1,4 +1,4 @@
-import { pushNotice } from "./notifyCenter.js";
+import { listNotices, pushNotice } from "./notifyCenter.js";
 import { sendTelegram } from "./telegram.js";
 import { probeHaltSources } from "./haltProbe.js";
 import { MIN } from "./marketHours.js";
@@ -95,6 +95,49 @@ interface Hit {
 const sent = new Set<string>();
 let sentDay = "";
 
+/**
+ * **기억을 알림함에서 되살린다** (2026-10-15 저녁 — 벤티지: "매도 사이드카 알림이
+ * 지금도 왔어. 오늘 이미 매도 사이드카는 발동이 되었는데도 말야").
+ *
+ * 앞선 고침에서 「열쇠를 못 박으면 알림함의 12시간 중복막이가 재시작까지 덮어 준다」고
+ * 적었는데, **덮어 주지 못하는 창이 하나 있었다** — 열쇠 모양을 바꾼 그 배포다.
+ * 09시에 나간 알림은 옛 열쇠(`…|코스피·코스닥|…`)로 적혀 있고 새 코드는 새 열쇠
+ * (`…|코스피|…`)로 물으니, 알림함이 **같은 사건인 줄 모른다.** 그래서 후속 기사
+ * 하나에 또 울렸다.
+ *
+ * 열쇠에 기대는 대신 **이미 알린 사건을 읽어 와서** 기억을 채운다. 옛 열쇠의 시장 칸은
+ * `·` 로 묶여 있으니 풀어서 각각 넣는다 — 그러면 모양이 달라도 같은 사건으로 알아본다.
+ * 서버가 뜨고 처음 한 번만 읽는다.
+ *
+ * 이 방식이 파일을 따로 만드는 것보다 나은 까닭: **알림함이 이미 그 기록을 들고 있다.**
+ * 같은 사실을 두 곳에 적으면 언젠가 서로 어긋난다.
+ */
+let revived = "";
+async function reviveSent(day: string): Promise<void> {
+  if (revived === day) return;
+  revived = day;
+  try {
+    const { items } = await listNotices({ limit: 300 });
+    for (const n of items) {
+      const k = String(n.dedupeKey ?? "");
+      const m = /^(\d{4}-\d{2}-\d{2})\|(사이드카|서킷브레이커)\|(.+)\|(발동|해제)$/.exec(k);
+      if (!m || m[1] !== day) continue;
+      /* 옛 열쇠는 「코스피·코스닥」처럼 묶여 있다 — 풀어서 각각 */
+      for (const market of m[3].split("·")) sent.add(`${day}|${m[2]}|${market}|${m[4]}`);
+    }
+  } catch {
+    /* 못 읽어도 아래 알림함 중복막이가 한 겹 더 있다 */
+  }
+}
+
+/** 기사 발행 시각 `HH:MM` (한국). 못 읽으면 빈 글자 */
+function hhmm(at?: string): string {
+  if (!at) return "";
+  const ms = Date.parse(at);
+  if (!Number.isFinite(ms)) return "";
+  return new Date(ms + 9 * 3600_000).toISOString().slice(11, 16);
+}
+
 function kstDay(): string {
   return new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 }
@@ -141,7 +184,7 @@ function parse(title: string): Hit | null {
  * 기사 한 줄을 본다. **새로 들어온 기사에만** 불린다(수집기가 이미 중복을 걸러 준다).
  * 터져도 뉴스 수집이 멈추면 안 되므로 부르는 쪽에서 감싼다.
  */
-export async function noteMarketHalt(title: string, link?: string, press?: string): Promise<void> {
+export async function noteMarketHalt(title: string, link?: string, press?: string, at?: string): Promise<void> {
   /* 장 밖에서 온 것은 전부 회고다 — 사이드카·CB 는 정규장에만 걸린다 */
   if (!inSession()) return;
   const hit = parse(title);
@@ -150,7 +193,10 @@ export async function noteMarketHalt(title: string, link?: string, press?: strin
   if (day !== sentDay) {
     sent.clear();
     sentDay = day;
+    revived = "";
   }
+  /* 서버가 방금 떴으면 오늘 이미 알린 것을 알림함에서 읽어 온다 */
+  await reviveSent(day);
   /* 아직 안 알린 시장만 — 「동반」 기사가 와도 이미 알린 쪽은 다시 안 울린다 */
   const fresh = hit.markets.filter((m) => !sent.has(`${day}|${hit.kind}|${m}|${hit.state}`));
   if (fresh.length === 0) return;
@@ -169,8 +215,12 @@ export async function noteMarketHalt(title: string, link?: string, press?: strin
       source: "halt",
       level: hit.state === "발동" ? "warn" : "info",
       title: head,
-      /* 제목을 그대로 싣는다 — 우리가 요약하면 「5.74% 하락」 같은 숫자가 사라진다 */
-      body: title,
+      /*
+       * 제목을 그대로 싣는다 — 우리가 요약하면 「5.74% 하락」 같은 숫자가 사라진다.
+       * **기사 시각을 앞에 적는다**(2026-10-15 저녁): 이 알림이 늦게 울린 적이 있어서,
+       * 사건 시각과 기사 시각이 다를 수 있다는 것을 읽는 사람이 바로 보게 한다.
+       */
+      body: `${hhmm(at)}${hhmm(at) ? " 기사 · " : ""}${title}`,
       /*
        * ⚠️ 기사 주소는 `link` 에 안 넣는다 — 그 칸은 **앱 안의 해시 경로**(`#/...`)
        * 전용이라 바깥 주소를 넣으면 눌렀을 때 엉뚱한 데로 간다. 주소는 텔레그램에 싣는다.
