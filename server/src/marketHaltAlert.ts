@@ -1,5 +1,6 @@
 import { pushNotice } from "./notifyCenter.js";
 import { sendTelegram } from "./telegram.js";
+import { probeHaltSources } from "./haltProbe.js";
 
 /**
  * **사이드카·서킷브레이커** (2026-10-15).
@@ -134,6 +135,12 @@ export async function noteMarketHalt(title: string, link?: string, press?: strin
    * 사람이 있을 만한 소식이고, 한쪽만 막으면 왜 오는지 못 찾는다.
    */
   if (!note) return;
+  /*
+   * **울린 김에 잰다** (2026-10-15) — 더 빠른 길이 있나는 다음 발동 때만 답할 수 있는데,
+   * 그때 사람이 깨어 있으리라 기대할 수 없다. 알림이 **나간 뒤에** 부르므로 네이버가
+   * 느려도 경보는 제때 울린다. 자세한 까닭은 `haltProbe`.
+   */
+  void probeHaltSources(key).catch(() => undefined);
   const press2 = press ? ` · ${press}` : "";
   await sendTelegram(
     `<b>⚠️ ${head}</b>\n${title}${press2}${link ? `\n${link}` : ""}`,

@@ -58,6 +58,8 @@ export function subCode(code: string): string {
 
 let client: RealtimeClient | null = null;
 let store: RealtimeStore | null = null;
+/** `0g`(시장조치) 를 걸어 둔 종목 — 관측용이라 다섯이면 된다 (2026-10-15) */
+const gWatch = new Set<string>();
 
 export async function getRealtime(
   kiwoom: KiwoomClient,
@@ -610,6 +612,25 @@ export function startRealtimeScheduler(kiwoom: KiwoomClient): void {
           */
           rt.subscribeKeep("0F", subCode(code));
           rt.subscribeKeep("0w", subCode(code));
+          /*
+           * **`0g`(주식종목정보) 관측** (2026-10-15) — 벤티지: "우리도 알람에 사이드카
+           * 써킷 이런거 표시했음 좋겠는데".
+           *
+           * 사이드카는 결국 **뉴스 속보**로 받기로 했다(`marketHaltAlert`) — 오늘 09:15
+           * 발동 때 `0s`(장운영구분)에는 줄이 한 개도 안 왔기 때문이다. 다만 뉴스는
+           * 1~3분 늦으므로, **더 빠른 길이 있나**는 아직 열어 둔 질문이다.
+           *
+           * `0g` 는 「관리종목·VI 등 시장조치」를 싣는다고 적혀 있다(`docs/키움_실시간_재설계`).
+           * 시장 전체가 멈추면 종목에도 무언가 찍힐 수 있다 — **있다/없다를 모르니 걸어
+           * 두고 다음 발동 때 본다.** 여기서 「아마 올 것」으로 코드를 짜지는 않는다.
+           *
+           * ⚠️ **맨 앞 다섯 종목에만** 건다. 시장 전체 사건이면 아무 종목에나 찍히므로
+           * 더 걸 이유가 없고, 자리(190)는 시세가 써야 한다.
+           */
+          if (gWatch.size < 5 && !gWatch.has(code)) {
+            gWatch.add(code);
+            rt.subscribeKeep("0g", subCode(code));
+          }
           /*
             체결도 상시로 건다 — 복기하려면 「그때 얼마에 얼마나」가 있어야 한다.
             프레임은 체결마다 오지만 30초에 한 점만 남기므로 쌓이는 양은 나머지와 같다.
