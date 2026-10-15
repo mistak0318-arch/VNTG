@@ -186,10 +186,16 @@
   ⚠️ 치우면 본문 여백도 같이 당겨야 한다 — 안 그러면 글자만 사라지고 **빈 띠**가 남아
   더 이상하다. 「숨긴다」와 「자리를 돌려준다」는 다른 일이다.
 
-  ⚠️ 머리줄(`.nt-top` — ‹폴더 · 메모 · 완료)은 **남긴다.** 거기 「완료」가 위장을 끄는
-  유일한 손잡이다. 장식은 걷고 **손잡이는 둔다.**
+  ⚠️ **머리줄도 같이 치운다** (2026-10-16 두 번째 — 벤티지: "맨 위에 저것도 치우자,
+  안 보인다"). 처음엔 「완료가 위장을 끄는 유일한 손잡이니 남긴다」고 적었는데, 그 줄이
+  종목 머리(정규장 종가·등락률)를 **그대로 덮고 있었다.** 손잡이를 지키려다 정작 보려던
+  숫자를 가린 셈이다.
+
+  **나갈 길은 안 막힌다** — 숨기는 것은 **시트가 떠 있는 동안뿐**이라, 시트를 닫으면
+  그 자리에 다시 선다. 「영영 못 나간다」와 「지금은 안 보인다」는 다른 말이다.
 */
-:root[data-theme="note"][data-sheet="1"] .nt-head { display: none; }
+:root[data-theme="note"][data-sheet="1"] .nt-head,
+:root[data-theme="note"][data-sheet="1"] .nt-top { display: none; }
 
 :root[data-theme="note"] .nt-tool {
   font-size: 1.15rem;
@@ -305,9 +311,9 @@
     padding: 6px 14px;
     border-bottom: 1px solid var(--border);
   }
-  /* 제목 줄을 치운 만큼 본문도 올라온다 (2026-10-16) — 위 `.nt-head` 주석 참조 */
-  :root[data-theme="note"][data-sheet="1"] .main { padding-top: var(--nt-top-h); }
-  :root[data-theme="note"][data-sheet="1"] .top-strip { top: var(--nt-top-h); }
+  /* 위 두 줄을 치운 만큼 본문도 올라온다 (2026-10-16) — 위 `.nt-head` 주석 참조 */
+  :root[data-theme="note"][data-sheet="1"] .main { padding-top: 0; }
+  :root[data-theme="note"][data-sheet="1"] .top-strip { top: 0; }
   :root[data-theme="note"] .top-strip .mobile-header {
     display: none;
   }

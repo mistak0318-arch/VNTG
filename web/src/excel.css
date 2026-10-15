@@ -394,6 +394,11 @@
   z30 이라 종목상세의 하단 탭 줄을 덮는다. 리본(머리)은 그대로 둬야 위장이 산다.
 */
 :root[data-theme="excel"][data-sheet="1"] .xl-sheets { display: none; }
+/*
+  리본(머리)도 같이 내린다 — 메모 모드와 같은 까닭이다(2026-10-16). 시트가 떠 있는
+  동안 리본은 종목 머리를 덮기만 한다. 시트를 닫으면 되돌아오므로 나갈 길은 안 막힌다.
+*/
+:root[data-theme="excel"][data-sheet="1"] .xl-ribbon { display: none; }
 
 /* ===== 시트 탭 ===== */
 :root[data-theme="excel"] .xl-sheets {
@@ -675,6 +680,9 @@
   :root[data-theme="excel"] .main-inner {
     padding: 10px 10px calc(var(--xl-foot-h) + 20px) calc(var(--xl-gutter) + 8px);
   }
+  /* 시트가 떠 있으면 리본을 내리므로 그만큼 본문도 올라온다 (2026-10-16) */
+  :root[data-theme="excel"][data-sheet="1"] .main { padding-top: 0; }
+  :root[data-theme="excel"][data-sheet="1"] .top-strip { top: 0; }
   :root[data-theme="excel"] .main {
     padding-top: var(--xl-head-h);
   }
