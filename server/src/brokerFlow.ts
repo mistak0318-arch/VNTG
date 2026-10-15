@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { noteFxFids } from "./fxFidProbe.js";
 import { alCode } from "./alCode.js";
 import { loadLedger } from "./dailyStore.js";
 
@@ -328,6 +329,15 @@ export async function brokerFlow(client: KiwoomClient, code: string): Promise<Br
     const foreignSell = num(data.frgn_sel_prsm_sum);
     const foreignBuy = num(data.frgn_buy_prsm_sum);
     const foreignNet = foreignBuy - foreignSell;
+    /*
+     * **번호의 뜻을 추측하지 않고 값을 맞춰 본다** (2026-10-15) — 같은 종목의 `0F` 프레임에
+     * 이 두 숫자와 같은 칸이 있나. 조회를 더 쓰지 않는다. 까닭은 `fxFidProbe` 머리에.
+     */
+    try {
+      noteFxFids(bare, foreignSell, foreignBuy);
+    } catch {
+      /* 재 보는 일 때문에 거래원 화면이 멈추면 안 된다 */
+    }
 
     /* ---------- 시계열에 한 점 찍는다 ---------- */
     const { date, hm } = kstNow();

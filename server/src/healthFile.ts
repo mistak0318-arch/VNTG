@@ -17,6 +17,7 @@ import { shareGetStats } from "./shareGet.js";
 import { dropSamplesCache } from "./signalSamples.js";
 import { peekRealtime, realtimeFidSurvey, subscribedCount } from "./realtimeHub.js";
 import { nightFuturesSnapshot } from "./usMajor.js";
+import { fxFidSnapshot } from "./fxFidProbe.js";
 import { hantooRealtimeStatus } from "./hantooRealtime.js";
 import { hantooQueueDepth } from "./hantooClient.js";
 import { afterCloseStatus, afterCloseStateSummary } from "./afterClose.js";
@@ -322,6 +323,11 @@ async function writeOnceInner(): Promise<void> {
      * 「모르는필드」에 새 번호가 뜨면 그게 더 받을 수 있는 것이다. 장중에만 숫자가 찬다.
      */
     거래원필드: realtimeFidSurvey("0F"),
+    /*
+     * 그 모르는 칸이 **무엇인가** (2026-10-15). 번호만으로는 모르니 거래원 조회가 준
+     * 외국계 매도·매수와 **값을 맞춰 본다** — 맞은 칸과 횟수뿐이다(종목도 값도 안 싣는다).
+     */
+    외국계FID: fxFidSnapshot(),
     /*
      * 야간선물을 **어느 판의 값으로** 들고 있나 (2026-10-15 — 벤티지: "야간선물 값을 왜
      * 못 받아오지"). 06:00~18:00 에 통째로 비던 자리라, 다음엔 추측 말고 여기를 본다.

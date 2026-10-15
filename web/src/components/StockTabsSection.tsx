@@ -262,7 +262,19 @@ export function StockTabsSection({
     return () => {
       cancelled = true;
     };
-  }, [code, reloadKey, investorDays]);
+    /*
+     * ⚠️ **`wantInvestor` 가 여기 있어야 한다** (2026-10-15 — 벤티지: "얜 또 이거 왜
+     * 못 불러와", 투자자 수급 탭이 「데이터 없음」).
+     *
+     * 10/14 에 「보일 때 받는다」로 바꾸면서 위에 `if (!wantInvestor) return;` 을 달아
+     * 놓고 **의존성에는 안 넣었다.** 그러면 꺼진 채로 한 번 돌고 끝이다 — 탭을 눌러
+     * 켜져도 이 효과가 다시 안 돌아서 **영영 안 받는다.** 종목을 열 때마다
+     * `setWantInvestor(false)` 로 시작하므로 거의 늘 그랬다.
+     *
+     * 이 자리가 조용히 틀리는 자리다. 빈 표는 「없는 값」처럼 보이지 「안 부른 값」처럼
+     * 안 보인다 — 그래서 하루를 몰랐다.
+     */
+  }, [code, reloadKey, investorDays, wantInvestor]);
 
   /*
    * 기간수익률용 일봉은 **기업·재무 탭에 들어갈 때만** 받는다.
