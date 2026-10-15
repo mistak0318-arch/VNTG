@@ -27,6 +27,8 @@ export function CardOrderPanel() {
 
 const SUB_LABEL: Record<OverviewSub, string> = {
   summary: "요약",
+  /* 2026-10-15 — 요약에서 「골라 보는 카드」를 옮겨 받은 탭 */
+  market: "시황",
   flow: "수급",
   rank: "순위",
 };

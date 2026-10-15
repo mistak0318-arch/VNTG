@@ -52,10 +52,16 @@ import { InquiryRankPanel } from "../components/overview/InquiryRankPanel";
 import { WatchStar } from "../useWatchedCodes";
 import { SuperMark } from "../useSuperMarks";
 
-type SubTab = "summary" | "flow" | "rank" | "us";
+type SubTab = "summary" | "market" | "flow" | "rank" | "us";
 
 const SUBTABS: { key: SubTab; label: string }[] = [
   { key: "summary", label: "요약" },
+  /*
+   * 「시황」 (2026-10-15) — 요약에서 **골라 보는 카드**를 옮겨 받은 자리.
+   * 요약은 한 화면에서 끝나야 하고, 주도주·화제·체온계·테마는 들여다보는 것이라
+   * 같은 탭에 두면 둘 다 제 일을 못 한다. 무엇이 어디로 갔는지는 `overviewCards.ts`.
+   */
+  { key: "market", label: "시황" },
   /*
    * 「수급」 탭은 숨겼다 (2026-08-26 사용자 요청) — 지수 카드의 수급·장중 수급
    * 변화(지수/선물 시트)로 요약 쪽에 내용이 다 들어가서 따로 갈 일이 없어졌다.
@@ -427,7 +433,8 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
           칸의 높이를 **첫 자식(신호등)으로만** 재서, 그 밑에 붙인 이 줄만큼 칸이 모자라 다음 카드가 위로
           덮었다. 폰은 한 열이라 잔줄을 안 써서 멀쩡했다 — PC 에서만 나는 병이었다.
         */}
-        {sub === "summary" && (
+        {/* 브리핑도 「골라 읽는 것」이라 시황으로 (2026-10-15) — 요약엔 숫자 다섯만 남긴다 */}
+        {sub === "market" && (
           <div className="ov-span-all">
             <NaverBriefingBlock />
           </div>
@@ -464,7 +471,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
           주도주·급소 (2026-09-10) — 종목등락현황의 「상한가 12개」 다음 물음은 「누구냐」다.
           상한가 얼굴(며칠째) → 거래가 붙는 곳(급증·1년 최대) → 큰돈의 방향(프로그램).
         */}
-        {show("summary") && (
+        {show("market") && (
           <OverviewCard order={cards.orderOf("pulse")} title="주도주·급소">
             <div className="ov-card-b">
               <PulsePanel onSelectStock={(code, name) => onSelectStock(normalizeStockCode(code), name)} />
@@ -472,13 +479,13 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
           </OverviewCard>
         )}
         {/* 돈의 방향 (2026-09-17) — 「어젯밤 미국 → 국내 테마」 자리. 미국 섹터 ETF ↔ 국내 대표 ETF, 심리 한 줄 */}
-        {show("summary") && (
+        {show("market") && (
           <OverviewCard order={cards.orderOf("moneyFlow")} title="돈의 방향 (한미 ETF)">
             <MoneyFlowPanel onSelectStock={(code, name) => onSelectStock(normalizeStockCode(code), name)} />
           </OverviewCard>
         )}
         {/* 실시간 조회순위 — 눈이 몰리는 종목 열 (2026-09-10 저녁). 시세분석 표와 같은 응답 */}
-        {show("summary") && (
+        {show("market") && (
           <OverviewCard order={cards.orderOf("inquiry")} title="실시간 조회순위">
             <div className="ov-card-b">
               <InquiryRankPanel onSelectStock={(code, name) => onSelectStock(normalizeStockCode(code), name)} />
@@ -661,7 +668,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
 
           둘이 같은 종목을 가리키면 그날의 중심이고, 토론만 뜨거우면 쏠림 쪽이다.
         */}
-        {show("summary") && (
+        {show("market") && (
           <OverviewCard title="지금의 화제" order={cards.orderOf("topicPulse")}>
             <div className="ov-card-b">
               <TopicPulseBlock window="now" onSelectStock={(code, name) => onSelectStock(normalizeStockCode(code), name)} />
@@ -670,7 +677,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
           </OverviewCard>
         )}
 
-        {show("summary") && (
+        {show("market") && (
           <OverviewCard title="시장 체온계" order={cards.orderOf("breadth")}>
             <div className="ov-card-b">
               <ThermoPanel lens={lens} />
@@ -697,7 +704,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
           대신 로테이션(주도/부상/휴식)이 「오늘 어느 판이 도는가」에 바로 답한다.
           key 는 "sectors" 그대로 — 저장된 배치가 자리를 기억한다.
         */}
-        {show("summary") && (
+        {show("market") && (
           <OverviewCard title="테마 흐름" order={cards.orderOf("sectors")}>
             <RotationStrip lens={lens} onSelectStock={onSelectStock} />
             {lens?.rotation.ready && (
@@ -749,7 +756,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
 
           겹치면 힘이 실리고, 대중 쪽에만 있으면 쏠림을 의심한다.
         */}
-        {show("summary") && (
+        {show("market") && (
           <OverviewCard
             order={cards.orderOf("topTraders")}
             title="수익률 상위 고객 · 네이버페이 랭킹"

@@ -547,7 +547,8 @@ async function buildVerdict(client: KiwoomClient, minute: number, errors: string
       ? `돈이 들어오는 장${idxTxt} — 사는 손이 이어진다. 주도·부상 테마의 대표 종목이 자리`
       : kind === "out"
         ? panic
-          ? `급락장${idxTxt} — 지수가 통째로 밀렸다. 종목을 고를 때가 아니라 **크기를 줄일** 때`
+          /* ⚠️ 별표를 쓰면 화면에 `**` 가 그대로 찍힌다 — 이 줄은 마크다운이 아니라 글자다 */
+          ? `급락장${idxTxt} — 지수가 통째로 밀렸다. 종목을 고를 때가 아니라 「크기를 줄일」 때`
           : `돈이 빠지는 장${idxTxt} — 파는 손이 우세. 새 진입보다 현금·포지션 축소`
         : kind === "rotate"
           ? `회전만 도는 장${idxTxt} — 지수는 조용하고 자리만 바뀐다. 부상 테마와 빠지는 테마를 갈라 보기`
