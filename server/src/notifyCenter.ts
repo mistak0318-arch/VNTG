@@ -111,7 +111,9 @@ export type NoticeSource =
   | "econ"
   | "research"
   /* 2026-09-17 저녁 — 돈의 흐름: 보유 종목이 들어옴↔빠짐으로 뒤집힐 때 */
-  | "moneyFlow";
+  | "moneyFlow"
+  /* 2026-10-15 — 사이드카·서킷브레이커. 시장 전체가 멈추는 소식이라 따로 끌 수 있어야 한다 */
+  | "halt";
 
 /**
  * 화면이 그리는 목록 — **하드코딩하면 서버와 갈린다.**
@@ -187,6 +189,13 @@ export const NOTICE_SOURCES: {
     def: true,
   },
   { key: "disclosure", group: "news", label: "관심종목 공시", hint: "DART 공시 — 뉴스보다 빠르다 (10분마다)", def: true },
+  {
+    key: "halt",
+    group: "market",
+    label: "사이드카·서킷브레이커",
+    hint: "시장 전체가 멈추거나 프로그램 호가가 정지될 때 — 속보 제목에서 잡습니다(발동·해제 각각 하루 한 번)",
+    def: true,
+  },
   { key: "calendar", group: "market", label: "캘린더 일정", hint: "전날 18시·당일 8시", def: true },
   { key: "report", group: "market", label: "리포트 발행", hint: "조간·장중·석간 데일리 리포트", def: true },
   { key: "regime", group: "signal", label: "장세 점검", hint: "시장 폭·신고가가 문턱에 걸렸을 때", def: true },

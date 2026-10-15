@@ -1,4 +1,5 @@
 import { mkdir, readFile, readdir, unlink, writeFile } from "node:fs/promises";
+import { noteMarketHalt } from "./marketHaltAlert.js";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { naverNews, type NaverCat } from "./naverMainNews.js";
@@ -296,6 +297,12 @@ export async function collectNewsKeywords(): Promise<{ articles: number; terms: 
         seen.add(titleKey);
         f.seen.push(it.link, titleKey);
         articles += 1;
+        /*
+         * **시장 경보는 여기서 잡는다** (2026-10-15). 새로 들어온 기사에만 닿는 자리라
+         * 같은 기사를 두 번 보지 않는다 — 사이드카 하나에 기사가 수십 개씩 달리므로
+         * 그 접기는 `marketHaltAlert` 가 사건 열쇠로 또 한 번 한다.
+         */
+        void noteMarketHalt(it.title, it.link, it.press).catch(() => undefined);
 
         const minute = minuteOf(it.at);
         f.articlesByMinute[minute] = (f.articlesByMinute[minute] ?? 0) + 1;

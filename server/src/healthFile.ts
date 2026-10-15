@@ -19,6 +19,7 @@ import { peekRealtime, realtimeFidSurvey, subscribedCount } from "./realtimeHub.
 import { nightFuturesSnapshot } from "./usMajor.js";
 import { fxFidSnapshot } from "./fxFidProbe.js";
 import { phaseTodaySummary } from "./marketPhase.js";
+import { marketHaltSnapshot } from "./marketHaltAlert.js";
 import { hantooRealtimeStatus } from "./hantooRealtime.js";
 import { hantooQueueDepth } from "./hantooClient.js";
 import { afterCloseStatus, afterCloseStateSummary } from "./afterClose.js";
@@ -334,6 +335,8 @@ async function writeOnceInner(): Promise<void> {
      * (2026-10-15). 시각과 코드뿐이다. 자세한 까닭은 `marketPhase.phaseTodaySummary`.
      */
     장운영구분: await phaseTodaySummary().catch(() => null),
+    /* 오늘 알린 사이드카·서킷브레이커 (2026-10-15) — 사건 열쇠뿐 */
+    시장경보: marketHaltSnapshot(),
     /*
      * 야간선물을 **어느 판의 값으로** 들고 있나 (2026-10-15 — 벤티지: "야간선물 값을 왜
      * 못 받아오지"). 06:00~18:00 에 통째로 비던 자리라, 다음엔 추측 말고 여기를 본다.
