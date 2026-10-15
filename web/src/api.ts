@@ -6572,7 +6572,8 @@ export interface UsRankRow {
 /* ── 돈의 흐름 「지금」 (2026-09-17) — server/src/moneyNow.ts 의 모양 그대로 ── */
 export type MoneySlotKey = "night" | "pre" | "open" | "morning" | "lunch" | "afternoon" | "closing" | "auction" | "gap" | "after";
 export interface MoneyVerdictPart {
-  key: "flow" | "program" | "sentiment" | "turnover" | "thermo";
+  /* `index`(지수 등락률) 는 2026-10-15 에 더했다 — 그전까지 판정이 지수를 안 봤다 */
+  key: "index" | "flow" | "program" | "sentiment" | "turnover" | "thermo";
   label: string;
   sign: 1 | -1 | 0 | null;
   text: string;

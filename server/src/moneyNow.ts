@@ -49,7 +49,8 @@ export interface Slot {
 }
 
 export interface VerdictPart {
-  key: "flow" | "program" | "sentiment" | "turnover" | "thermo";
+  /* `index`(지수 등락률) 는 2026-10-15 에 더했다 — 그전까지 판정이 지수를 안 봤다 */
+  key: "index" | "flow" | "program" | "sentiment" | "turnover" | "thermo";
   label: string;
   /** +1 들어옴 · −1 빠짐 · 0 중립 · null 모름 */
   sign: 1 | -1 | 0 | null;
@@ -382,6 +383,42 @@ async function buildVerdict(client: KiwoomClient, minute: number, errors: string
     parts.push({ key: "flow", label: "외인·기관 오늘", sign: null, text: "못 받음" });
   }
 
+  /*
+   * **지수 등락률** (2026-10-15 저녁 — 벤티지: "판정하는 로직이나 장세 판단 자체가
+   * 틀렸다는 거야. 오늘 완전 패닉장이었는데 무슨").
+   *
+   * 맞다. 오늘 코스피 −7.57%·코스닥 −7.65%, 서킷브레이커까지 걸린 날에 판정은
+   * **「회전만 도는 장 — 지수는 조용하고」**였다. 까닭이 어이없다 — **지수를 아예 안
+   * 보고 있었다.** 재료가 외인·기관·프로그램·심리·거래대금·상승비율 여섯인데
+   * 그중 **지수 등락률이 없다.** 「지수는 조용하다」고 말하면서 지수를 안 읽은 것이다.
+   *
+   * 이미 받아 둔 시황 카드(`indices`)에서 꺼낸다 — 조회가 안 는다.
+   * 코스피·코스닥 **둘 다** 본다. 한쪽만 보면 코스닥만 무너진 날을 놓친다.
+   */
+  let idxPct: number | null = null;
+  try {
+    const cards = (await inner("지수", getSection("indices", client))).data as { code: string; changeRate: number }[] | null;
+    const ks = cards?.find((c) => c.code === "001")?.changeRate;
+    const kq = cards?.find((c) => c.code === "101")?.changeRate;
+    const both = [ks, kq].filter((x): x is number => typeof x === "number" && Number.isFinite(x));
+    if (both.length > 0) {
+      /*
+       * 둘 중 **더 크게 움직인 쪽**으로 읽는다(부호는 그대로). 평균을 내면 한쪽만
+       * 무너진 날이 가려진다 — 코스피 −0.5% · 코스닥 −7% 는 「−3.7% 인 날」이 아니라
+       * **코스닥이 무너진 날**이다. 조용했는지 아닌지는 더 센 쪽이 정한다.
+       */
+      idxPct = both.reduce((a, b) => (Math.abs(b) > Math.abs(a) ? b : a));
+      parts.push({
+        key: "index",
+        label: "지수",
+        sign: preOpen ? null : idxPct >= 1 ? 1 : idxPct <= -1 ? -1 : 0,
+        text: `코스피 ${ks != null ? `${ks > 0 ? "+" : ""}${ks.toFixed(2)}%` : "–"} · 코스닥 ${kq != null ? `${kq > 0 ? "+" : ""}${kq.toFixed(2)}%` : "–"}`,
+      });
+    }
+  } catch {
+    errors.push("지수");
+  }
+
   /* 프로그램 30분 (코스피, 시간대별 누적의 차) */
   try {
     /* ka90005 는 최신이 앞이고 매수·매도가 **누적**(백만원)이다. allNet 칸은 0 으로 오니(실측 9/17) 매수−매도로 낸다 */
@@ -395,7 +432,13 @@ async function buildVerdict(client: KiwoomClient, minute: number, errors: string
       const d30 = base ? netOf(last) - netOf(base) : null;
       const toEok = (v: number) => v / 100; // 백만원 → 억
       if (d30 !== null) {
-        parts.push({ key: "program", label: "프로그램 30분", sign: preOpen ? null : d30 > 50 * 100 ? 1 : d30 < -50 * 100 ? -1 : 0, text: `${signed(toEok(d30))} (${base!.time.slice(0, 2)}:${base!.time.slice(2, 4)}~${last.time.slice(0, 2)}:${last.time.slice(2, 4)}) · 오늘 ${signed(toEok(netOf(last)))}` });
+        /*
+         * ⚠️ **장 밖에서는 판정에 안 넣는다** (2026-10-15). `preOpen` 만 막고 장 **뒤**는
+         * 안 막고 있었다 — 그래서 19:35 에 애프터 시간대 「+1,076억 ▲」이 붙어, 패닉장의
+         * 마이너스를 상쇄해 판정을 「회전」으로 끌어올렸다. 장이 닫힌 뒤의 프로그램은
+         * 오늘 장을 설명하는 값이 아니다.
+         */
+        parts.push({ key: "program", label: "프로그램 30분", sign: !inSession ? null : d30 > 50 * 100 ? 1 : d30 < -50 * 100 ? -1 : 0, text: `${signed(toEok(d30))} (${base!.time.slice(0, 2)}:${base!.time.slice(2, 4)}~${last.time.slice(0, 2)}:${last.time.slice(2, 4)}) · 오늘 ${signed(toEok(netOf(last)))}` });
       } else parts.push({ key: "program", label: "프로그램 30분", sign: null, text: `오늘 ${signed(toEok(netOf(last)))} · 30분 전 값 없음` });
     } else parts.push({ key: "program", label: "프로그램 30분", sign: null, text: inSession ? "아직 없음" : "장 밖" });
   } catch {
@@ -455,15 +498,47 @@ async function buildVerdict(client: KiwoomClient, minute: number, errors: string
   const known = parts.filter((p) => p.sign !== null);
   const score = known.reduce((s, p) => s + (p.sign ?? 0), 0);
   let kind: Verdict["kind"] = "unknown";
-  if (known.length >= 2) kind = score >= 2 ? "in" : score <= -2 ? "out" : "rotate";
+  /*
+   * **「회전」은 애매함의 쓰레기통이 아니다** (2026-10-15 저녁).
+   *
+   * 예전 규칙은 한 줄이었다 — `score >= 2 ? "in" : score <= -2 ? "out" : "rotate"`.
+   * 가운뎃값이 전부 회전으로 떨어진다. 그런데 **회전장은 적극적인 조건**이다:
+   * 「지수는 조용한데 안에서 자리만 바뀐다」. 지수가 7% 빠진 날은 점수가 몇이든
+   * 회전이 아니다 — 오늘 그 한 줄이 패닉장을 회전장이라고 불렀다.
+   *
+   * 셋으로 가른다.
+   *
+   *   ① **극단은 상쇄시키지 않는다.** 지수가 ±2% 를 넘으면 그 방향으로 **확정**한다.
+   *      합산은 서로 다른 재료를 견주는 장치인데, 패닉과 폭등은 견줄 대상이 아니다.
+   *      프로그램 한 칸(+1)이 −7% 를 지우는 일이 바로 그래서 났다.
+   *   ② 그 밖에는 예전처럼 합산(±2)으로 들어옴·빠짐을 가른다.
+   *   ③ 남은 가운뎃값은 **지수가 실제로 조용할 때만**(±1% 안) 회전이다.
+   *      1~2% 쏠린 날은 애매해도 그 방향으로 읽는다 — 조용하지 않았으니까.
+   */
+  if (known.length >= 2) {
+    if (idxPct !== null && !preOpen && Math.abs(idxPct) >= 2) kind = idxPct > 0 ? "in" : "out";
+    else if (score >= 2) kind = "in";
+    else if (score <= -2) kind = "out";
+    else if (idxPct === null || Math.abs(idxPct) <= 1) kind = "rotate";
+    else kind = idxPct > 0 ? "in" : "out";
+  }
   lastScore = score;
+  /*
+   * **문구에 오늘 숫자를 넣는다.** 예전 문구는 셋 다 「늘 같은 문장」이라, 지수가 −7%
+   * 인 날에도 「지수는 조용하고」라고 적혀 있었다 — 화면을 보는 사람이 **그 자리에서
+   * 틀렸음을 알 수 있는** 문장을 우리가 매일 내보내고 있었던 셈이다.
+   */
+  const idxTxt = idxPct === null ? "" : ` (지수 ${idxPct > 0 ? "+" : ""}${idxPct.toFixed(2)}%)`;
+  const panic = idxPct !== null && idxPct <= -2;
   const line =
     kind === "in"
-      ? "돈이 들어오는 장 — 사는 손이 이어진다. 주도·부상 테마의 대표 종목이 자리"
+      ? `돈이 들어오는 장${idxTxt} — 사는 손이 이어진다. 주도·부상 테마의 대표 종목이 자리`
       : kind === "out"
-        ? "돈이 빠지는 장 — 파는 손이 우세. 새 진입보다 현금·포지션 축소"
+        ? panic
+          ? `급락장${idxTxt} — 지수가 통째로 밀렸다. 종목을 고를 때가 아니라 **크기를 줄일** 때`
+          : `돈이 빠지는 장${idxTxt} — 파는 손이 우세. 새 진입보다 현금·포지션 축소`
         : kind === "rotate"
-          ? "회전만 도는 장 — 지수는 조용하고 자리만 바뀐다. 부상 테마와 빠지는 테마를 갈라 보기"
+          ? `회전만 도는 장${idxTxt} — 지수는 조용하고 자리만 바뀐다. 부상 테마와 빠지는 테마를 갈라 보기`
           : "판정 재료가 모자란다 — 장이 열리면 채워진다";
   return { kind, line, parts };
 }
