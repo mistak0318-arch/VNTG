@@ -600,6 +600,57 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
   });
 
   /**
+   * **여러 종목의 장중 선을 한 번에** (2026-10-15 — 벤티지: "시세분석 리스트에서 봉 옆에
+   * 미니스파크, 장중 흐름 그거 붙일 수 있겠어?").
+   *
+   * 표 한 쪽이 100줄이다. 종목마다 분봉을 받으면 조회 100번이라 말이 안 되고,
+   * `/series` 를 100번 부르는 것도 요청이 100개다.
+   *
+   * **이미 쌓인 것을 읽기만 한다.** 서버는 거래대금 상위·관심종목을 체결(`0B`)로 물고
+   * 30초에 한 점씩 하루치를 남긴다 — 그 창고에서 꺼내는 것이라 **키움 조회가 0**이고
+   * 요청도 **한 번**이다.
+   *
+   * ⚠️ **여기서는 구독을 걸지 않는다.** `/series` 는 「사람이 그 종목을 보고 있다」는
+   * 뜻이라 그 자리에서 구독하지만, 목록 100줄은 **훑고 지나가는 것**이다. 100종목을
+   * 걸면 정원(190)이 한 번에 차서 정작 보고 있는 종목이 밀려난다.
+   * 그래서 **안 쌓인 종목은 빈 배열**로 준다 — 화면은 그 칸을 비운다. 없는 것을
+   * 있는 척하는 것보다 낫다.
+   *
+   * 점은 최대 `MAX_PTS` 개로 **고르게 솎는다.** 하루치 30초 간격이면 700점이 넘는데,
+   * 48×18 픽셀 그림에 그만큼은 바이트만 먹고 모양은 같다.
+   */
+  router.get("/sparks", (req, res, next) => {
+    try {
+      const MAX_ITEMS = 220;
+      const MAX_PTS = 40;
+      const items = String(req.query.items ?? "")
+        .split(",")
+        .map((x) => x.trim().replace(/_(AL|NX)$/i, ""))
+        .filter(Boolean)
+        .slice(0, MAX_ITEMS);
+      const { store } = hub();
+      const out: Record<string, number[]> = {};
+      for (const code of items) {
+        const pts = store?.getSeries("0B", code) ?? [];
+        if (pts.length < 2) continue;
+        const step = Math.max(1, Math.ceil(pts.length / MAX_PTS));
+        const line: number[] = [];
+        for (let i = 0; i < pts.length; i += step) {
+          const v = Math.abs(Number(pts[i].v?.["10"]));
+          if (Number.isFinite(v) && v > 0) line.push(v);
+        }
+        /* 마지막 점은 꼭 넣는다 — 솎다가 지금 값을 떨어뜨리면 선 끝이 과거가 된다 */
+        const last = Math.abs(Number(pts[pts.length - 1].v?.["10"]));
+        if (Number.isFinite(last) && last > 0 && line[line.length - 1] !== last) line.push(last);
+        if (line.length >= 2) out[code] = line;
+      }
+      res.json({ lines: out, live: shouldRun() });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
    * 오늘 걸린 VI — **종목과 무관한 시장 전체 정보**다.
    *
    * `1h` 는 한 번만 걸면 전체 종목이 오므로, 화면은 이걸 읽기만 하면 된다.

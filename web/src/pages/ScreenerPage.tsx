@@ -1,5 +1,6 @@
 ﻿import { PAGE_SIZES, PAGE_SIZE_DEFAULT } from "../components/Pager";
 import { diffFromRate } from "../krxTick";
+import { MiniSpark } from "../components/MiniSpark";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { removePref, setPref } from "../prefs";
 import { api, fmtNum, type FlowSum, type RankResult, type RankSpecGroup } from "../api";
@@ -219,6 +220,9 @@ function eok(v: number | null): string {
   }
   return `${fmtNum(v)}억`;
 }
+
+/** 숨긴 탭 — 전역(기기를 넘나든다). 순서와 같은 층이라 같이 다녀야 한다 */
+const TAB_HIDE_KEY = "vntg.screener.tabHide";
 
 function cell(value: unknown, type?: string): { text: string; cls: string } {
   if (type === "text") return { text: String(value ?? ""), cls: "" };
@@ -456,6 +460,64 @@ export function ScreenerPage({
    * 기본은 켜짐. 끄면 조회도 같이 멎는다.
    */
   const [candleOn, setCandleOn] = useState(() => localStorage.getItem("vntg.screener.candle") !== "0");
+  /*
+   * **장중 선** (2026-10-15 — 벤티지: "봉 옆에 미니스파크, 장중 흐름 그거 붙일 수
+   * 있겠어?"). 봉은 네 숫자라 「어디까지 갔나」만 말하고 **순서를 못 말한다**.
+   *
+   * ⚠️ 이 칸은 **키움 조회를 한 건도 안 쓴다.** 서버가 거래대금 상위·관심종목을
+   * 체결(`0B`)로 물고 30초에 한 점씩 이미 쌓고 있어서, 그 창고를 한 번에 읽어 온다
+   * (`/api/realtime/sparks`). 그래서 봉과 달리 켜 둬도 조회가 안 는다.
+   */
+  const [sparkOn, setSparkOn] = useState(() => localStorage.getItem("vntg.screener.spark") !== "0");
+  /*
+   * **보일 탭 고르기** (2026-10-15 — 벤티지: "탭 순서 그 옆에 탭 구성 해가지고 내가
+   * 선택해서 볼 수 있게끔. 지금 하나하나 더 붙이면 계속 늘어나니까… 탭 순서 및 구성,
+   * 그러니까 하나로 해도 되겠다").
+   *
+   * 조회가 열넷이다. 쓰는 것은 사람마다 서넛인데 나머지가 늘 자리를 먹고, 폰에서는
+   * 그 줄이 세 줄까지 간다. 순서만으로는 **안 쓰는 것이 사라지지 않는다.**
+   *
+   * 자리는 「탭 순서」 단추 **그 자리**다 — 벤티지 말대로 하나로 묶는다. 같은 것을
+   * 만지는 두 단추를 나란히 두면 어느 쪽을 눌러야 할지 매번 고르게 된다.
+   *
+   * ⚠️ `setPref` 로 저장한다(`vntg.` 로 시작하므로 **전역**) — 순서가 이미 기기를
+   * 넘나드는데 구성만 기기별이면, 폰에서 숨긴 탭이 PC 에서 튀어나와 순서가 어긋나 보인다.
+   */
+  const [hidden, setHidden] = useState<string[]>(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(TAB_HIDE_KEY) ?? "[]") as unknown;
+      return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === "string") : [];
+    } catch {
+      return [];
+    }
+  });
+  const hideSet = new Set(hidden);
+  /*
+   * ⚠️ **지금 보고 있는 탭을 숨기면 갈 데가 없어진다.** 단추는 사라지는데 표는 그대로
+   * 남아, 다시 그 탭으로 돌아올 길이 없는 화면이 된다. 숨겨진 순간 보이는 것 중
+   * **맨 앞**으로 옮긴다(사람이 정한 순서의 맨 앞이다).
+   */
+  useEffect(() => {
+    if (!hideSet.has(tab)) return;
+    const first = [...SCREENER_TABS]
+      .filter((t) => !hideSet.has(t.key))
+      .sort((a, b) => tabOrder.orderOf(a.key) - tabOrder.orderOf(b.key))[0];
+    if (first) setTab(first.key);
+  }, [hidden, tab]);
+  const toggleHidden = (key: string) => {
+    setHidden((prev) => {
+      const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
+      /* ⚠️ 전부 숨기면 들어갈 자리가 없어진다 — 마지막 하나는 못 숨긴다 */
+      if (next.length >= SCREENER_TABS.length) return prev;
+      try {
+        setPref(TAB_HIDE_KEY, JSON.stringify(next));
+      } catch {
+        /* 저장 못 해도 이번 세션에는 먹는다 */
+      }
+      return next;
+    });
+  };
+  const [sparks, setSparks] = useState<Record<string, number[]>>({});
   const [editTabs, setEditTabs] = useState(false);
   /** 열 순서 편집 중 — 켜면 머리 칸에 ◀▶ 가 붙는다 */
   const [editCols, setEditCols] = useState(false);
@@ -642,8 +704,30 @@ export function ScreenerPage({
    * 표 아래 「어림값」 줄이 그걸 말한다.
    */
   const hasTvExtra = hasTvCol && !cols.some((c) => c.key === "trde_prica");
+  /*
+   * 장중 선을 **한 번에** 받는다 — 줄마다 부르면 요청이 100개다. 안 쌓인 종목은
+   * 서버가 빼고 주므로 그 줄은 빈칸이 된다. 표가 새로 오면 같이 새로 받는다.
+   */
+  const sparkCodes = sparkOn ? all.map((r) => r.code).filter(Boolean).slice(0, 220).join(",") : "";
+  useEffect(() => {
+    if (!sparkCodes) {
+      setSparks({});
+      return;
+    }
+    let dead = false;
+    fetch(`/api/realtime/sparks?items=${encodeURIComponent(sparkCodes)}`)
+      .then((r) => r.json() as Promise<{ lines?: Record<string, number[]> }>)
+      .then((j) => !dead && setSparks(j.lines ?? {}))
+      .catch(() => undefined);
+    return () => {
+      dead = true;
+    };
+  }, [sparkCodes]);
+
   /* 봉 칸 — 켜 뒀고 실제로 값이 온 줄이 있을 때만 (2026-09-22) */
   const hasCandle = candleOn && all.some((r) => r.cd != null);
+  /* 선 칸 — 켜 뒀고 **한 줄이라도** 쌓인 것이 있을 때만. 다 비면 칸 자체를 안 만든다 */
+  const hasSpark = sparkOn && all.some((r) => (sparks[r.code]?.length ?? 0) >= 2);
   /* 원장이 있는 줄이 하나라도 있어야 수급 칸을 그린다 — 전부 null 이면 빈 칸만 늘어난다 */
   const hasFlow = all.some((r) => Object.values(r.flow ?? {}).some((f) => (f?.days ?? 0) > 0));
   /** 수급 주체 — 접힘이면 외국인·주포 둘, 펼치면 사이에 투신·연기금·사모 */
@@ -708,6 +792,7 @@ export function ScreenerPage({
     (sigOn ? 40 : 0) +
     cols.filter((c) => c.key !== "stk_nm").length * 84 +
     (hasCandle ? 34 : 0) +
+    (hasSpark ? 50 : 0) +
     (hasTvExtra ? 84 : 0) +
     (hasTurn ? 60 : 0) +
     (hasCap ? 84 : 0) +
@@ -920,14 +1005,20 @@ export function ScreenerPage({
           JSX 를 재배열하지 않고 CSS `order` 만 준다 — 배열을 흔들면 리액트가 칸을
           다시 만든다.
         */}
-        {SCREENER_TABS.map((t) => (
+        {SCREENER_TABS.map((t) => {
+          const off = hideSet.has(t.key);
+          /* 숨긴 탭은 평소엔 아예 없다. 편집 중에만 흐리게 보여 줘야 되살릴 수 있다 */
+          if (off && !editTabs) return null;
+          return (
           <button
             key={t.key}
-            className={`filter-btn ${tab === t.key ? "active" : ""}${tabOrder.drag.cls(t.key)}`}
+            className={`filter-btn ${tab === t.key ? "active" : ""}${off ? " tab-off" : ""}${tabOrder.drag.cls(t.key)}`}
             style={{ order: tabOrder.orderOf(t.key) }}
-            onClick={() => setTab(t.key)}
+            onClick={() => (editTabs ? toggleHidden(t.key) : setTab(t.key))}
+            title={editTabs ? (off ? "눌러서 다시 보이기" : "눌러서 숨기기") : undefined}
             {...tabOrder.drag.props(t.key)}
           >
+            {editTabs && <span className="tab-eye">{off ? "✕" : "👁"}</span>}
             {t.label}
             {editTabs && (
               <>
@@ -956,7 +1047,8 @@ export function ScreenerPage({
               </>
             )}
           </button>
-        ))}
+          );
+        })}
         {/* 뉴스·텔레 며칠 안 — 시세분석·현미경의 모든 표에 한 값 (2026-09-10) */}
         <span style={{ order: 997, display: "inline-flex" }}>
           <BuzzDaysButtons />
@@ -969,14 +1061,16 @@ export function ScreenerPage({
           className={`filter-btn dt-edit${editTabs ? " active" : ""}`}
           style={{ order: 999 }}
           onClick={() => setEditTabs((v) => !v)}
-          title="자주 보는 조회를 앞으로 옮깁니다"
+          title="자주 보는 조회를 앞으로 옮기고, 안 쓰는 것은 숨깁니다"
         >
-          {editTabs ? "순서 끝" : "탭 순서"}
+          {editTabs ? "끝" : "탭 순서·구성"}
         </button>
       </div>
       {editTabs && (
         <div className="table-note">
-          <b>길게 눌러 끌거나</b> 이름 옆 <b>◀ ▶</b> 로 옮깁니다. 서버에 저장되어 <b>다른 기기에서도 같은 순서</b>입니다.
+          <b>길게 눌러 끌거나</b> 이름 옆 <b>◀ ▶</b> 로 옮깁니다. <b>탭을 누르면 숨겨집니다</b>
+          (숨긴 것은 여기서만 흐리게 보이고, 다시 누르면 돌아옵니다 — 마지막 하나는 못 숨깁니다).
+          순서와 구성 모두 서버에 저장되어 <b>다른 기기에서도 같습니다</b>.
           {tabOrder.customized && (
             <button className="filter-btn dt-reset" onClick={tabOrder.reset}>
               원래대로
@@ -1141,6 +1235,26 @@ export function ScreenerPage({
           >
             {/* 켰는데 칸이 안 보이면 이유를 단추가 말한다 — 전엔 칸만 조용히 사라졌다 (2026-09-23 전수검토 (나)) */}
             📊 봉 {candleOn ? (!hasCandle && all.length > 0 && !loading ? "끄기 · 아직" : "끄기") : "켜기"}
+          </button>
+          {/*
+            장중 흐름 선 (2026-10-15) — **조회를 안 쓴다.** 서버가 이미 쌓아 둔 체결
+            시계열을 한 번에 읽을 뿐이라, 봉과 달리 켜 둬도 키움 조회가 안 는다.
+          */}
+          <button
+            className={`filter-btn ${sparkOn ? "active" : ""}`}
+            onClick={() =>
+              setSparkOn((v) => {
+                localStorage.setItem("vntg.screener.spark", v ? "0" : "1");
+                return !v;
+              })
+            }
+            title={
+              sparkOn && !hasSpark && all.length > 0 && !loading
+                ? "선을 켰지만 이 목록엔 쌓인 종목이 없습니다 — 서버는 거래대금 상위·관심종목만 체결로 물고 있습니다(장 시작 뒤 30초부터 쌓입니다)"
+                : "봉 옆에 장중 흐름 선. 서버가 쌓아 둔 것을 읽기만 해서 **조회를 안 씁니다** — 안 쌓인 종목은 빈칸"
+            }
+          >
+            〰️ 흐름 {sparkOn ? (!hasSpark && all.length > 0 && !loading ? "끄기 · 아직" : "끄기") : "켜기"}
           </button>
           {/*
             받을 건수. 늘리면 연속조회가 그만큼 더 나가므로 **기본은 예전과 같은 100** 이다.
@@ -1514,9 +1628,26 @@ export function ScreenerPage({
                   thProps={{ title: `당일 봉 · ${candleVenue} 기준 — 세로는 오늘 고가~저가, 색은 시가 대비` }}
                 />
               );
+              const sparkTh = (
+                <SortableTh
+                  key="sp"
+                  columnKey="sp"
+                  label="흐름"
+                  /* 정렬은 **지금이 오늘 고가~저가 중 어디쯤인가** — 고점 부근이 위로 */
+                  accessor={(r: (typeof rows)[number]) => {
+                    const l = sparks[r.code];
+                    if (!l || l.length < 2) return -Infinity;
+                    const lo = Math.min(...l), hi = Math.max(...l);
+                    return hi > lo ? ((l[l.length - 1] - lo) / (hi - lo)) * 100 : 50;
+                  }}
+                  sort={sort}
+                  className="num-narrow"
+                  thProps={{ title: "장중 흐름 — 서버가 체결로 쌓아 둔 선(30초 간격). 점선은 전일 종가. 안 쌓인 종목은 빈칸입니다" }}
+                />
+              );
               /** 셀 배열에 봉 칸을 끼워 넣는다 — 안쪽 `return` 들을 안 건드리려고 뒤에서 자른다 */
               const spliceCandle = (cells: React.ReactNode[], r: (typeof rows)[number]): React.ReactNode[] => {
-                if (!hasCandle) return cells;
+                if (!hasCandle && !hasSpark) return cells;
                 /*
                  * **봉의 종가도 실시간으로** (2026-09-22). `cd` 는 `ka10095` 값이라 최대 20초 늦다 —
                  * 옆 칸 등락률은 1.5초 실시간인데 봉만 늦으면 또 둘이 다른 얘기를 한다.
@@ -1528,14 +1659,28 @@ export function ScreenerPage({
                   r.cd && lv && lv.price > 0
                     ? { ...r.cd, c: lv.price, h: Math.max(r.cd.h, lv.price), l: Math.min(r.cd.l, lv.price) }
                     : r.cd;
-                const td = (
-                  <td key="cd" className="dcd-cell">
-                    <MiniCandle d={d} />
-                  </td>
-                );
+                const extras: React.ReactNode[] = [];
+                if (hasCandle) {
+                  extras.push(
+                    <td key="cd" className="dcd-cell">
+                      <MiniCandle d={d} />
+                    </td>,
+                  );
+                }
+                if (hasSpark) {
+                  /* 기준선은 등락률로 되돌린 전일 종가 — 표의 % 와 같은 자리에서 나온 값이다 */
+                  const rate = rateOf(r);
+                  const px = lv?.price ?? Math.abs(Number(r.cur_prc));
+                  const base = rate != null && rate > -100 && px > 0 ? px / (1 + rate / 100) : null;
+                  extras.push(
+                    <td key="sp" className="dcd-cell">
+                      <MiniSpark line={sparks[r.code]} base={base} />
+                    </td>,
+                  );
+                }
                 const i = candleAfter === null ? -1 : shownCols.findIndex((c) => c.key === candleAfter);
-                if (i < 0) return [...cells, td];
-                return [...cells.slice(0, i + 1), td, ...cells.slice(i + 1)];
+                if (i < 0) return [...cells, ...extras];
+                return [...cells.slice(0, i + 1), ...extras, ...cells.slice(i + 1)];
               };
               const tableOf = (part: typeof drawn, rankOff = 0) => (
               <>
@@ -1571,9 +1716,11 @@ export function ScreenerPage({
                     />
                     {/* 봉은 **등락률 바로 옆**에 (2026-09-22 벤티지 지시) — 칸 순서를 바꿔도 따라다닌다 */}
                     {hasCandle && c.key === candleAfter && <col style={{ width: 34 }} />}
+                    {hasSpark && c.key === candleAfter && <col style={{ width: 50 }} />}
                     </Fragment>
                   ))}
                   {hasCandle && candleAfter === null && <col style={{ width: 34 }} />}
+                  {hasSpark && candleAfter === null && <col style={{ width: 50 }} />}
                   {hasTvExtra && <col style={cw.styleOf("tv")} />}
                   {hasTurn && <col style={cw.styleOf("turn")} />}
                   {hasCap && <col style={cw.styleOf("cap")} />}
@@ -1663,9 +1810,11 @@ export function ScreenerPage({
                       />
                       {/* 봉은 **등락률 바로 옆** (2026-09-22 벤티지 지시) — 칸 순서를 바꿔도 따라다닌다 */}
                       {hasCandle && c.key === candleAfter && candleTh}
+                      {hasSpark && c.key === candleAfter && sparkTh}
                       </Fragment>
                     ))}
                     {hasCandle && candleAfter === null && candleTh}
+                    {hasSpark && candleAfter === null && sparkTh}
                     {/* 걸러 보는 기준이면 표에도 있어야 한다 */}
                     {hasTvExtra && (
                       <SortableTh

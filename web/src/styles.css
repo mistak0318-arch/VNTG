@@ -10965,6 +10965,24 @@ svg path:not([fill]) { fill: none; }
   들고 있는 사람에게 전혀 다른 일이다. 다만 **주인공은 여전히 % 다** — 한 단 작게,
   굵기를 빼고, 색은 같은 부호로 옅게. 위 `.scr-split`(NXT 줄)과 같은 문법이다.
 */
+/*
+  표 한 줄짜리 장중 선 (2026-10-15) — 봉 옆. 48×18 이라 눈금도 숫자도 없다.
+  ⚠️ 봉 칸(`.dcd-cell`)과 나란히 서는 자리라 높이를 맞춘다 — 다르면 줄이 들쭉날쭉해진다.
+*/
+/*
+  탭 구성 — 편집 중에만 보이는 숨김 상태 (2026-10-15).
+  숨긴 탭은 **평소엔 아예 없고** 편집 중에만 흐리게 선다. 흐리게 두는 이유는
+  되살릴 길이 그것뿐이기 때문이다 — 안 보이면 숨겼다는 사실조차 잊는다.
+*/
+.filter-btn.tab-off { opacity: 0.4; text-decoration: line-through; }
+.tab-eye { font-size: 0.72em; margin-right: 3px; opacity: 0.8; }
+
+.msp { width: 46px; height: 18px; display: block; margin: 0 auto; }
+.msp-base { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 2; opacity: 0.5; vector-effect: non-scaling-stroke; }
+.msp-line { fill: none; stroke-width: 1.3; vector-effect: non-scaling-stroke; }
+.msp-line.up { stroke: var(--red); }
+.msp-line.down { stroke: var(--blue); }
+
 .scr-diff {
   display: block;
   font-style: normal;
