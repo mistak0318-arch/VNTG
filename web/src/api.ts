@@ -6574,6 +6574,17 @@ export type MoneySlotKey = "night" | "pre" | "open" | "morning" | "lunch" | "aft
 export interface MoneyVerdictPart {
   /* `index`(지수 등락률) 는 2026-10-15 에 더했다 — 그전까지 판정이 지수를 안 봤다 */
   key: "index" | "flow" | "program" | "sentiment" | "turnover" | "thermo";
+  /**
+   * **판정에 안 쓴 까닭** (2026-10-15 밤 — 벤티지: "여기 물음표는 왜 나오는 거야?").
+   *
+   * `sign: null` 한 가지에 **전혀 다른 두 가지**가 섞여 있었다:
+   *   · 값은 멀쩡한데 **일부러 안 쓴 것** — 장 밖의 프로그램·거래대금
+   *   · 값을 **못 받은 것** — 조회 실패
+   *
+   * 화면은 둘 다 `?` 로 그렸다. 그래서 멀쩡한 숫자 옆에 물음표가 붙어 **고장처럼**
+   * 보인다. 앞의 것은 「참고」고 뒤의 것만 「모름」이다.
+   */
+  note?: "참고" | "모름";
   label: string;
   sign: 1 | -1 | 0 | null;
   text: string;

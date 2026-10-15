@@ -174,8 +174,25 @@ export function MoneyNowPanel({ onSelectStock }: { onSelectStock?: (code: string
         <div className="mnw-line">{data.verdict.line}</div>
         <div className="mnw-parts">
           {data.verdict.parts.map((p) => (
-            <span key={p.key} className={`mnw-part ${p.sign === 1 ? "up" : p.sign === -1 ? "down" : p.sign === 0 ? "flat" : "na"}`} title={p.text}>
-              <i>{p.sign === 1 ? "▲" : p.sign === -1 ? "▼" : p.sign === 0 ? "–" : "?"}</i> {p.label}
+            <span
+              key={p.key}
+              className={`mnw-part ${p.sign === 1 ? "up" : p.sign === -1 ? "down" : p.sign === 0 ? "flat" : "na"}`}
+              title={
+                p.sign === null
+                  ? p.note === "참고"
+                    ? `${p.text} — 값은 있지만 지금은 판정에 안 넣습니다(장 밖 등)`
+                    : `${p.text} — 값을 못 받아 판정에서 뺐습니다`
+                  : p.text
+              }
+            >
+              {/*
+                **물음표는 「모른다」일 때만** (2026-10-15 밤 — 벤티지: "여기 물음표는 왜
+                나오는 거야?"). 장이 닫힌 뒤의 프로그램·거래대금은 **값이 멀쩡히 있는데**
+                판정에만 안 넣는 칸이다. 그걸 `?` 로 그리니 숫자 옆에 물음표가 붙어
+                **고장처럼** 보였다. 그건 「참고」고, `?` 는 정말 못 받은 칸에만 남긴다.
+              */}
+              <i>{p.sign === 1 ? "▲" : p.sign === -1 ? "▼" : p.sign === 0 ? "–" : p.note === "참고" ? "·" : "?"}</i> {p.label}
+              {p.sign === null && p.note === "참고" && <em className="mnw-ref">참고</em>}
               <small>{p.text}</small>
             </span>
           ))}

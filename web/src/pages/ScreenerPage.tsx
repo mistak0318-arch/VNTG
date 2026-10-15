@@ -902,8 +902,13 @@ export function ScreenerPage({
    * 적으면 KRX 애프터 값을 NXT 라고 부르는 셈이다. 아침 프리(08:00~09:00)는 여전히 NXT 뿐이다.
    */
   const evening = afterMarketEra() && krPhase() !== "pre";
-  const subLabel = evening ? "장외" : "NXT";
-  const subTitle = evening ? "장외 최종가 — KRX 애프터·NXT 중 마지막 체결" : "NXT 최종가 — 프리장 포함";
+  /*
+   * **이름은 「애프터」다** (2026-10-15 밤 — 벤티지: "이제 시간외가 아니라 애프터겠지?").
+   * 맞다. 9/14 부터 16:00~20:00 은 KRX 애프터마켓이라 「장외」·「시간외」는 옛 제도의 말이다.
+   * 아침 프리(08:00~09:00)는 여전히 NXT 뿐이라 그때는 NXT 로 둔다.
+   */
+  const subLabel = evening ? "애프터" : "NXT";
+  const subTitle = evening ? "애프터 최종가 — KRX 애프터·NXT 중 마지막 체결" : "NXT 최종가 — 프리장 포함";
   /*
    * **지금 VI 걸린 종목** (2026-09-14 — 벤티지: "전체를 나타내는 표 … 거기서도 VI 기간 동안
    * VI 다라고 표시를 좀 해 놨으면"). 종목과 무관한 시장 전체 정보라 훅 하나가 받아 나눠 준다
@@ -2095,15 +2100,37 @@ export function ScreenerPage({
                                     {fmtNum(Math.abs(diff))}
                                   </i>
                                 )}
-                                {showNxtSub && r.nxtRate != null && lv?.rate == null && (
-                                  <i
-                                    className={`scr-split ${Number(r.nxtRate) > 0 ? "positive" : Number(r.nxtRate) < 0 ? "negative" : ""}`}
-                                    title={subTitle.replace("최종가", "최종 등락률")}
-                                  >
-                                    {subLabel} {Number(r.nxtRate) > 0 ? "+" : ""}
-                                    {Number(r.nxtRate).toFixed(2)}%
-                                  </i>
-                                )}
+                                {/*
+                                  **애프터 줄은 「애프터에서 움직인 폭」이다** (2026-10-15 밤 —
+                                  벤티지: "장외는 시간외에서 등락률을 표시하는 게 맞을 듯").
+
+                                  여태 `nxtRate` 를 그대로 적었는데 그건 **전일 대비**라,
+                                  애프터에 한 틱도 안 움직인 종목이 위 등락률과 **똑같은 숫자**를
+                                  한 번 더 보여 줬다(SK하이닉스 −12.76% / 장외 −12.76%).
+                                  같은 수를 두 번 적는 칸은 자리만 먹는다.
+
+                                  알고 싶은 것은 **정규장이 끝난 뒤에 무슨 일이 있었나**다.
+                                  그건 「애프터 최종가 ÷ 정규장 종가」로 바로 나온다 — 서버에
+                                  둘 다 와 있으므로 조회도 안 는다. 안 움직였으면 0.00% 가
+                                  뜨는데, 그것도 **정보**다(「애프터에 아무 일 없었다」).
+                                */}
+                                {showNxtSub && r.nxtPrice != null && lv?.rate == null && (() => {
+                                  const krx = Math.abs(Number(r.cur_prc));
+                                  const after = Math.abs(Number(r.nxtPrice));
+                                  /* 정규장 값이 없으면(프리 등) 예전처럼 전일 대비로 — 지어내지 않는다 */
+                                  const pct = krx > 0 && after > 0 ? ((after - krx) / krx) * 100 : r.nxtRate != null ? Number(r.nxtRate) : null;
+                                  if (pct === null || !Number.isFinite(pct)) return null;
+                                  const basis = krx > 0 && after > 0 ? "정규장 종가 대비" : "전일 대비";
+                                  return (
+                                    <i
+                                      className={`scr-split ${pct > 0 ? "positive" : pct < 0 ? "negative" : ""}`}
+                                      title={`${subLabel} ${basis} — ${subTitle}`}
+                                    >
+                                      {subLabel} {pct > 0 ? "+" : ""}
+                                      {pct.toFixed(2)}%
+                                    </i>
+                                  );
+                                })()}
                               </td>
                             );
                           }

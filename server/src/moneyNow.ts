@@ -51,6 +51,17 @@ export interface Slot {
 export interface VerdictPart {
   /* `index`(지수 등락률) 는 2026-10-15 에 더했다 — 그전까지 판정이 지수를 안 봤다 */
   key: "index" | "flow" | "program" | "sentiment" | "turnover" | "thermo";
+  /**
+   * **판정에 안 쓴 까닭** (2026-10-15 밤 — 벤티지: "여기 물음표는 왜 나오는 거야?").
+   *
+   * `sign: null` 한 가지에 **전혀 다른 두 가지**가 섞여 있었다:
+   *   · 값은 멀쩡한데 **일부러 안 쓴 것** — 장 밖의 프로그램·거래대금
+   *   · 값을 **못 받은 것** — 조회 실패
+   *
+   * 화면은 둘 다 `?` 로 그렸다. 그래서 멀쩡한 숫자 옆에 물음표가 붙어 **고장처럼**
+   * 보인다. 앞의 것은 「참고」고 뒤의 것만 「모름」이다.
+   */
+  note?: "참고" | "모름";
   label: string;
   /** +1 들어옴 · −1 빠짐 · 0 중립 · null 모름 */
   sign: 1 | -1 | 0 | null;
@@ -377,10 +388,10 @@ async function buildVerdict(client: KiwoomClient, minute: number, errors: string
       const i = flow.kospi.institution + flow.kosdaq.institution;
       const sign: 1 | -1 | 0 = f > 0 && i > 0 ? 1 : f < 0 && i < 0 ? -1 : 0;
       parts.push({ key: "flow", label: "외인·기관 오늘", sign: preOpen ? null : sign, text: `외인 ${signed(f)} · 기관 ${signed(i)} (코스피+코스닥)${preOpen ? " · 장 전 값이라 판정엔 안 넣음" : ""}` });
-    } else parts.push({ key: "flow", label: "외인·기관 오늘", sign: null, text: "아직 없음" });
+    } else parts.push({ key: "flow", label: "외인·기관 오늘", sign: null, note: "참고", text: "아직 없음" });
   } catch (e) {
     errors.push("수급");
-    parts.push({ key: "flow", label: "외인·기관 오늘", sign: null, text: "못 받음" });
+    parts.push({ key: "flow", label: "외인·기관 오늘", sign: null, note: "모름", text: "못 받음" });
   }
 
   /*
@@ -412,6 +423,7 @@ async function buildVerdict(client: KiwoomClient, minute: number, errors: string
         key: "index",
         label: "지수",
         sign: preOpen ? null : idxPct >= 1 ? 1 : idxPct <= -1 ? -1 : 0,
+        note: preOpen ? "참고" : undefined,
         text: `코스피 ${ks != null ? `${ks > 0 ? "+" : ""}${ks.toFixed(2)}%` : "–"} · 코스닥 ${kq != null ? `${kq > 0 ? "+" : ""}${kq.toFixed(2)}%` : "–"}`,
       });
     }
@@ -438,12 +450,12 @@ async function buildVerdict(client: KiwoomClient, minute: number, errors: string
          * 마이너스를 상쇄해 판정을 「회전」으로 끌어올렸다. 장이 닫힌 뒤의 프로그램은
          * 오늘 장을 설명하는 값이 아니다.
          */
-        parts.push({ key: "program", label: "프로그램 30분", sign: !inSession ? null : d30 > 50 * 100 ? 1 : d30 < -50 * 100 ? -1 : 0, text: `${signed(toEok(d30))} (${base!.time.slice(0, 2)}:${base!.time.slice(2, 4)}~${last.time.slice(0, 2)}:${last.time.slice(2, 4)}) · 오늘 ${signed(toEok(netOf(last)))}` });
-      } else parts.push({ key: "program", label: "프로그램 30분", sign: null, text: `오늘 ${signed(toEok(netOf(last)))} · 30분 전 값 없음` });
-    } else parts.push({ key: "program", label: "프로그램 30분", sign: null, text: inSession ? "아직 없음" : "장 밖" });
+        parts.push({ key: "program", label: "프로그램 30분", sign: !inSession ? null : d30 > 50 * 100 ? 1 : d30 < -50 * 100 ? -1 : 0, note: !inSession ? "참고" : undefined, text: `${signed(toEok(d30))} (${base!.time.slice(0, 2)}:${base!.time.slice(2, 4)}~${last.time.slice(0, 2)}:${last.time.slice(2, 4)}) · 오늘 ${signed(toEok(netOf(last)))}` });
+      } else parts.push({ key: "program", label: "프로그램 30분", sign: null, note: "참고", text: `오늘 ${signed(toEok(netOf(last)))} · 30분 전 값 없음` });
+    } else parts.push({ key: "program", label: "프로그램 30분", sign: null, note: "참고", text: inSession ? "아직 없음" : "장 밖" });
   } catch {
     errors.push("프로그램");
-    parts.push({ key: "program", label: "프로그램 30분", sign: null, text: "못 받음" });
+    parts.push({ key: "program", label: "프로그램 30분", sign: null, note: "모름", text: "못 받음" });
   }
 
   /* 레버리지·인버스 심리 */
@@ -456,10 +468,10 @@ async function buildVerdict(client: KiwoomClient, minute: number, errors: string
       /* 하락 베팅 과열은 역발상 재료(+), 상승 추격 과열은 (−) */
       const sign: 1 | -1 | 0 = x >= 1.4 ? 1 : x <= 0.65 ? -1 : 0;
       parts.push({ key: "sentiment", label: "인버스÷레버리지", sign, text: `${cur.ratio.toFixed(2)} (20일 ${k.avg20.toFixed(2)}) — ${x >= 1.4 ? "하락 베팅 과열, 역발상 자리" : x <= 0.65 ? "상승 추격 과열" : "평소 범위"}` });
-    } else parts.push({ key: "sentiment", label: "인버스÷레버리지", sign: null, text: "값 없음" });
+    } else parts.push({ key: "sentiment", label: "인버스÷레버리지", sign: null, note: "모름", text: "값 없음" });
   } catch {
     errors.push("심리");
-    parts.push({ key: "sentiment", label: "인버스÷레버리지", sign: null, text: "못 받음" });
+    parts.push({ key: "sentiment", label: "인버스÷레버리지", sign: null, note: "모름", text: "못 받음" });
   }
 
   /* 거래대금 진행률 — 오늘 누적 ÷ (20일 평균 × 시각별 진행 비율) */
@@ -480,7 +492,7 @@ async function buildVerdict(client: KiwoomClient, minute: number, errors: string
         text: ratio === null ? `오늘 ${eok(last.tradeValue)}` : `평소 같은 시각의 ${Math.round(ratio * 100)}% (오늘 ${eok(last.tradeValue)} · 20일 평균 ${eok(avg20)})`,
       });
     } else if (last) {
-      parts.push({ key: "turnover", label: "거래대금", sign: null, text: `${last.dt.slice(4, 6)}/${last.dt.slice(6, 8)} ${eok(last.tradeValue)} (장 밖)` });
+      parts.push({ key: "turnover", label: "거래대금", sign: null, note: "참고", text: `${last.dt.slice(4, 6)}/${last.dt.slice(6, 8)} ${eok(last.tradeValue)} (장 밖)` });
     }
   } catch {
     errors.push("거래대금");

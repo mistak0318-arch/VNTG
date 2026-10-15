@@ -21091,6 +21091,8 @@ tr.gv-strong td:first-child { color: var(--text); }
 .mnw-part.up i { color: var(--red); }
 .mnw-part.down i { color: var(--blue); }
 .mnw-part.na { opacity: 0.55; }
+/* 「참고」 — 값은 있으나 판정에 안 넣은 칸. 물음표 대신 이 꼬리표가 까닭을 말한다 */
+.mnw-ref { font-style: normal; font-size: 0.6rem; margin-left: 4px; padding: 0 4px; border-radius: 999px; background: var(--border); color: var(--muted); vertical-align: 1px; }
 .mnw-part small { font-size: 0.64rem; color: var(--muted); white-space: normal; overflow-wrap: anywhere; }
 .mnw-advice { margin-top: 6px; font-size: 0.76rem; line-height: 1.35; color: var(--text); padding: 5px 7px; border-radius: 7px; background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .mnw-card h3 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
