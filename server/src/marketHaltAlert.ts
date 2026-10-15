@@ -1,6 +1,8 @@
 import { pushNotice } from "./notifyCenter.js";
 import { sendTelegram } from "./telegram.js";
 import { probeHaltSources } from "./haltProbe.js";
+import { MIN } from "./marketHours.js";
+import { isTradingDay } from "./tradingDay.js";
 
 /**
  * **사이드카·서킷브레이커** (2026-10-15).
@@ -46,6 +48,29 @@ import { probeHaltSources } from "./haltProbe.js";
  * 먼저 본다** — 해제 기사는 발동을 전제하므로, 발동을 못 잡았더라도 해제가 그 사실을
  * 같이 알린다. 거꾸로 하면 해제 소식이 「발동!」으로 울린다.
  *
+ * ## ⚠️ 후속 기사를 새 사건으로 읽으면 안 된다 (2026-10-15 저녁 보강)
+ *
+ * 벤티지: "이게 속보로 사이드카 잡으니깐 후속기사 날때마다 사이드카라고 인식할 수
+ * 있는 오류가 있더."
+ *
+ * 맞다. 처음 판에는 두 군데가 샜다.
+ *
+ * **① 열쇠가 흔들렸다.** 「코스피」로 한 번 보낸 뒤 「코스피·코스닥 동반」 기사가 오면
+ * 알림함에 넘기는 열쇠가 `…|코스피|…` 에서 `…|코스피·코스닥|…` 으로 **달라져** 다시
+ * 울린다. 게다가 우리 기억은 메모리에만 있어서 **서버가 뜰 때마다 비는데**, 오늘만
+ * 여덟 번 재시작했다. 그래서 **시장마다 따로 알린다** — 열쇠가 `날짜|종류|한 시장|상태`
+ * 로 못 박히면 알림함의 12시간 중복막이가 재시작까지 덮어 준다. 코스피와 코스닥은
+ * 어차피 **별개 사건**이라 따로 울리는 편이 맞기도 하다.
+ *
+ * **② 회고 기사를 못 갈랐다.** 몇 시간 뒤·며칠 뒤 「당시 사이드카가…」 기사를 새
+ * 발동으로 읽는다. 둘로 막는다:
+ *
+ *   · **장중에만** 받는다 — 사이드카·CB 는 정규장 사건이다. 장 밖 기사는 전부 회고다
+ *   · 제목에 **과거를 가리키는 말**(지난·어제·당시·했던·여파…)이 있으면 거른다
+ *
+ * 오늘치 제목 35개로 재 보니 과거 표현에 걸린 것이 **0개**였다 — 당일 속보는 안 죽이고
+ * 회고만 거른다는 뜻이다.
+ *
  * ## 못 잡는 것
  *
  * 제목에 시장 이름이 없으면(「양대시장」·「동반」) 시장을 `양시장`으로 적는다.
@@ -74,8 +99,24 @@ function kstDay(): string {
   return new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 }
 
+/** 지나간 일을 적은 제목인가 — 새 발동으로 읽으면 안 된다 */
+const PAST = /지난|어제|전날|당시|그날|여파|했던|였던|됐던|복기|돌아보|回顧/;
+
+/**
+ * 지금이 사이드카가 걸릴 수 있는 시간인가 — **평일 정규장**(09:00~15:50).
+ * 15:30 마감 직후에 오는 해제 기사까지 받으려고 20분 여유를 둔다.
+ */
+function inSession(): boolean {
+  const now = new Date();
+  const kst = new Date(now.getTime() + (9 * 60 + now.getTimezoneOffset()) * 60_000);
+  if (!isTradingDay(kst)) return false;
+  const m = kst.getHours() * 60 + kst.getMinutes();
+  return m >= MIN.regularOpen && m <= MIN.regularClose + 20;
+}
+
 function parse(title: string): Hit | null {
   const t = title.replace(/\s+/g, " ");
+  if (PAST.test(t)) return null;
   const kind: HaltKind | null = /사이드카/.test(t)
     ? "사이드카"
     : /서킷브레이커|서킷 브레이커|CB 발동|거래중단/.test(t)
@@ -101,6 +142,8 @@ function parse(title: string): Hit | null {
  * 터져도 뉴스 수집이 멈추면 안 되므로 부르는 쪽에서 감싼다.
  */
 export async function noteMarketHalt(title: string, link?: string, press?: string): Promise<void> {
+  /* 장 밖에서 온 것은 전부 회고다 — 사이드카·CB 는 정규장에만 걸린다 */
+  if (!inSession()) return;
   const hit = parse(title);
   if (!hit) return;
   const day = kstDay();
@@ -108,44 +151,50 @@ export async function noteMarketHalt(title: string, link?: string, press?: strin
     sent.clear();
     sentDay = day;
   }
-  /* 아직 안 알린 시장만 남긴다 — 「동반」 기사가 와도 이미 알린 쪽은 다시 안 울린다 */
+  /* 아직 안 알린 시장만 — 「동반」 기사가 와도 이미 알린 쪽은 다시 안 울린다 */
   const fresh = hit.markets.filter((m) => !sent.has(`${day}|${hit.kind}|${m}|${hit.state}`));
   if (fresh.length === 0) return;
-  for (const m of fresh) sent.add(`${day}|${hit.kind}|${m}|${hit.state}`);
-  const key = `${day}|${hit.kind}|${fresh.join("·")}|${hit.state}`;
 
-  const what = [fresh.join("·"), hit.side, hit.kind].filter(Boolean).join(" ");
-  const head = `${what} ${hit.state}`;
-  const note = await pushNotice({
-    kind: "market",
-    source: "halt",
-    level: hit.state === "발동" ? "warn" : "info",
-    title: head,
-    /* 제목을 그대로 싣는다 — 우리가 요약하면 「5.74% 하락」 같은 숫자가 사라진다 */
-    body: title,
+  /*
+   * **시장마다 따로** 알린다. 열쇠를 `날짜|종류|한 시장|상태` 로 못 박아야 알림함의
+   * 12시간 중복막이가 **재시작 뒤에도** 같은 사건을 알아본다 — 우리 기억은 메모리라
+   * 서버가 뜨면 비기 때문이다(위 ① 참조).
+   */
+  for (const market of fresh) {
+    const key = `${day}|${hit.kind}|${market}|${hit.state}`;
+    sent.add(key);
+    const head = `${[market, hit.side, hit.kind].filter(Boolean).join(" ")} ${hit.state}`;
+    const note = await pushNotice({
+      kind: "market",
+      source: "halt",
+      level: hit.state === "발동" ? "warn" : "info",
+      title: head,
+      /* 제목을 그대로 싣는다 — 우리가 요약하면 「5.74% 하락」 같은 숫자가 사라진다 */
+      body: title,
+      /*
+       * ⚠️ 기사 주소는 `link` 에 안 넣는다 — 그 칸은 **앱 안의 해시 경로**(`#/...`)
+       * 전용이라 바깥 주소를 넣으면 눌렀을 때 엉뚱한 데로 간다. 주소는 텔레그램에 싣는다.
+       */
+      dedupeKey: key,
+      dedupeHours: 12,
+    });
     /*
-     * ⚠️ 기사 주소는 `link` 에 안 넣는다 — 그 칸은 **앱 안의 해시 경로**(`#/...`)
-     * 전용이라 바깥 주소를 넣으면 눌렀을 때 엉뚱한 데로 간다. 주소는 텔레그램에 싣는다.
+     * 알림함에 안 담겼으면(출처를 꺼 뒀거나 이미 알린 사건이면) 텔레그램도 안 보낸다.
+     * 한쪽만 막으면 왜 오는지 못 찾는다.
      */
-    dedupeKey: key,
-    dedupeHours: 12,
-  });
-  /*
-   * 알림함에 안 담겼으면(출처를 꺼 뒀으면) 텔레그램도 안 보낸다. 사이드카는 끄고 싶은
-   * 사람이 있을 만한 소식이고, 한쪽만 막으면 왜 오는지 못 찾는다.
-   */
-  if (!note) return;
-  /*
-   * **울린 김에 잰다** (2026-10-15) — 더 빠른 길이 있나는 다음 발동 때만 답할 수 있는데,
-   * 그때 사람이 깨어 있으리라 기대할 수 없다. 알림이 **나간 뒤에** 부르므로 네이버가
-   * 느려도 경보는 제때 울린다. 자세한 까닭은 `haltProbe`.
-   */
-  void probeHaltSources(key).catch(() => undefined);
-  const press2 = press ? ` · ${press}` : "";
-  await sendTelegram(
-    `<b>⚠️ ${head}</b>\n${title}${press2}${link ? `\n${link}` : ""}`,
-    "signal",
-  ).catch(() => undefined);
+    if (!note) continue;
+    /*
+     * **울린 김에 잰다** — 더 빠른 길이 있나는 다음 발동 때만 답할 수 있는데, 그때 사람이
+     * 깨어 있으리라 기대할 수 없다. 알림이 **나간 뒤에** 부르므로 네이버가 느려도 경보는
+     * 제때 울린다. 자세한 까닭은 `haltProbe`.
+     */
+    void probeHaltSources(key).catch(() => undefined);
+    const press2 = press ? ` · ${press}` : "";
+    await sendTelegram(
+      `<b>⚠️ ${head}</b>\n${title}${press2}${link ? `\n${link}` : ""}`,
+      "signal",
+    ).catch(() => undefined);
+  }
 }
 
 /** health.json 「시장경보」 — 오늘 무엇을 알렸나 */
