@@ -2,6 +2,7 @@ import { listNotices, pushNotice } from "./notifyCenter.js";
 import { sendTelegram } from "./telegram.js";
 import { probeHaltSources } from "./haltProbe.js";
 import { MIN } from "./marketHours.js";
+import { naverNews } from "./naverMainNews.js";
 import { isTradingDay } from "./tradingDay.js";
 
 /**
@@ -250,4 +251,44 @@ export async function noteMarketHalt(title: string, link?: string, press?: strin
 /** health.json 「시장경보」 — 오늘 무엇을 알렸나 */
 export function marketHaltSnapshot(): { 오늘: string; 알림: string[] } {
   return { 오늘: sentDay, 알림: [...sent] };
+}
+
+/**
+ * **경보만 1분마다 따로 본다** (2026-10-15 낮 — 벤티지: "방금 코스닥 서킷브레이커였는데
+ * 별다른 신호 온 거 없었어?").
+ *
+ * 왔다. 다만 **7분 늦었다** — 기사 12:24, 알림 12:31. 이유는 둘이 겹쳐서다:
+ * 뉴스 수집기가 장중 **3분**마다 돌고, 그 안의 네이버 호출이 **5분 캐시**를 본다.
+ * 그 모듈 주석은 「뉴스가 5분 늦는 건 문제가 아니다」라고 적어 두었는데 맞는 말이다 —
+ * **다만 시장 경보에는 아니다.** 사이드카는 효력이 5분이라, 5분 늦으면 끝난 뒤에 울린다.
+ *
+ * 그래서 경보만 **속보 한 쪽을 1분마다 캐시 없이** 본다. 요청은 1분에 하나뿐이고
+ * 제목 스무 줄만 훑는다 — 수집기는 그대로 두고 **빠른 귀 하나**를 옆에 단다.
+ *
+ * ⚠️ 장중에만 돈다(`noteMarketHalt` 가 다시 한번 가린다). 사이드카·CB 는 정규장 사건이고,
+ * 장 밖에 1분마다 긁는 것은 네이버에 대한 예의가 아니다.
+ */
+let watchTimer: ReturnType<typeof setInterval> | null = null;
+
+export function startHaltWatch(): void {
+  if (watchTimer) return;
+  let running = false;
+  const tick = async () => {
+    if (running || !inSession()) return;
+    running = true;
+    try {
+      const got = await naverNews("flash", 1, true);
+      for (const it of got.items) {
+        if (!it.title) continue;
+        await noteMarketHalt(it.title, it.link, it.press, it.at).catch(() => undefined);
+      }
+    } catch {
+      /* 한 회차 놓쳐도 다음 분에 다시 — 수집기 쪽 길도 살아 있다 */
+    } finally {
+      running = false;
+    }
+  };
+  void tick();
+  watchTimer = setInterval(() => void tick(), 60_000);
+  watchTimer.unref?.();
 }

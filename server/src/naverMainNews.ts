@@ -253,14 +253,20 @@ async function fetchMApi(category: string, page: number): Promise<{ items: MainN
 /**
  * 네이버 뉴스 — 카테고리·페이지 단위. 5분 캐시(카테고리+페이지별).
  * 실패하면 지난 캐시라도 — 뉴스가 5분 늦는 건 문제가 아니다.
+ *
+ * ⚠️ **그 전제가 안 맞는 자리가 하나 있다** (2026-10-15). 시장 경보(사이드카·서킷브레이커)는
+ * 사이드카 효력이 **5분**이라 5분 늦으면 끝난 뒤에 울린다. 실제로 오늘 서킷브레이커가
+ * 12:24 기사였는데 알림이 12:31 에 나갔다 — 3분 주기 × 5분 캐시가 겹친 값이다.
+ * 그 길만 `fresh` 로 캐시를 건너뛴다(`haltWatch`, 속보 한 쪽·1분). 나머지는 그대로다.
  */
 export async function naverNews(
   cat: NaverCat,
   page = 1,
+  fresh = false,
 ): Promise<{ items: MainNewsItem[]; hasMore: boolean }> {
   const key = `${cat}:${page}`;
   const hit = cacheMap.get(key);
-  if (hit && Date.now() - hit.at < TTL) return { items: hit.items, hasMore: hit.hasMore };
+  if (!fresh && hit && Date.now() - hit.at < TTL) return { items: hit.items, hasMore: hit.hasMore };
   try {
     const got = M_API[cat]
       ? await fetchMApi(M_API[cat]!, page)

@@ -17,6 +17,7 @@ process.env.TZ = "Asia/Seoul";
  * 배포 폴더(공유돼 있어 밖에서 읽힌다)의 `lifecycle.log` 에 **동기로** 한 줄씩 적는다.
  */
 import { installLifecycleHooks, noteLife } from "./lifecycle.js";
+import { startHaltWatch } from "./marketHaltAlert.js";
 installLifecycleHooks();
 process.on("unhandledRejection", (reason) => {
   const s = reason instanceof Error ? (reason.stack ?? reason.message) : String(reason);
@@ -426,6 +427,8 @@ startInquirySampler(client);
 startKrxNoticeCollector(client);
 /* 뉴스 키워드 흐름 (2026-08-30) — 버즈 레이더의 「뉴스판 귀」. 사전을 공유한다 */
 startNewsKeywordScheduler();
+/* 시장 경보 — 속보 한 쪽만 1분마다 캐시 없이 (2026-10-15). 수집기(3분·5분캐시)로는 7분 늦었다 */
+startHaltWatch();
 /* 구독 캘린더 자동 동기화 (2026-08-30) — 예전엔 단추를 눌러야만 들어왔다 */
 startCalendarSyncScheduler();
 startHantooScheduleSync();
