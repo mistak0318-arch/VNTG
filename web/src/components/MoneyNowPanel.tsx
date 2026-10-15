@@ -183,12 +183,22 @@ export function MoneyNowPanel({ onSelectStock }: { onSelectStock?: (code: string
         {/* 추세 + 성적표 (2026-09-17 저녁 — "판정을 믿을 근거가 없다") */}
         {(data.trend.length > 1 || data.record.days > 0) && (
           <div className="mnw-trend">
+            {/*
+              **이름은 바뀔 때만 적는다** (2026-10-15 — 벤티지: "차지하는 영역도 너무 커").
+              여섯 칸이 거의 늘 같은 판정이라 「회전 → 회전 → 회전 → …」이 두 줄을 먹었다.
+              같은 말을 여섯 번 되풀이하면 **정작 바뀐 자리가 안 보인다** — 달라진 곳에만
+              이름을 붙이면 한 줄로 줄고 변곡이 눈에 띈다.
+              ⚠️ JSX 주석은 `&&` 바로 뒤에 못 온다(그 자리는 식이지 자식이 아니다). 여기 둔다.
+            */}
             {data.trend.length > 1 && (
-              <span className="mnw-trend-line" title="오늘 판정이 10분마다 어떻게 바뀌었나">
-                {data.trend.slice(-6).map((t, i) => (
+              <span className="mnw-trend-line" title="오늘 판정이 10분마다 어떻게 바뀌었나 — 이름은 바뀐 자리에만">
+                {data.trend.slice(-6).map((t, i, arr) => (
                   <em key={t.hhmm} className={`k-${t.kind}`}>
                     {i > 0 && <i>→</i>}
-                    {t.hhmm} {t.kind === "in" ? "들어옴" : t.kind === "out" ? "빠짐" : t.kind === "rotate" ? "회전" : "?"}
+                    {t.hhmm}
+                    {(i === 0 || t.kind !== arr[i - 1].kind) && (
+                      <b> {t.kind === "in" ? "들어옴" : t.kind === "out" ? "빠짐" : t.kind === "rotate" ? "회전" : "?"}</b>
+                    )}
                   </em>
                 ))}
               </span>
