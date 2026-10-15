@@ -87,6 +87,35 @@ function fmtHm(hhmm: string): string {
  * ⚠️ 데이터는 **받아서 쓴다.** 제가 또 불러오면 같은 분봉을 한 종목에 두 번 받는다 —
  * 그림 하나 더 그리자고 조회를 늘리지 않는다.
  */
+/**
+ * **장전·장중·장마감 뒤를 갈라 보인다** (2026-10-15 — 벤티지: "미니스파크 표시할 때
+ * 장전 장중 장마감후 표시를 좀 할 수 있나?").
+ *
+ * 이 선은 `_AL`(통합) 분봉이라 **NXT 프리마켓(08:00~)과 애프터(~20:00)가 같이 들어 있다.**
+ * 그래서 아침에 보면 왼쪽 끝이 이미 출렁이고, 저녁에 보면 오른쪽 끝이 더 붙는다 —
+ * 그 구간이 정규장과 똑같이 생겨서 **어디부터가 오늘 본장인지**가 안 보였다.
+ *
+ * 88×34 짜리 그림이다. 세로선과 글자를 넣으면 선 자체를 덮어 버리므로 **옅은 음영**으로
+ * 가른다 — 음영이 깔린 쪽이 정규장 **밖**이다. 모양을 읽는 데는 그 한 겹이면 된다.
+ *
+ * ⚠️ x 는 **봉 번호**로 잡는다(시간 비례가 아니다). 거래가 없어 빠진 분이 있으면 그만큼
+ * 폭이 줄지만, 선 자체가 이미 그 규칙으로 그려져 있어 **음영과 선이 어긋나지 않는다.**
+ * 여기서 시간 비례로 바꾸면 둘이 따로 논다.
+ */
+function sessionBands(points: Point[], W: number): { pre: number; post: number } {
+  const n = points.length;
+  const at = (i: number) => (i / (n - 1)) * W;
+  /* 09:00 보다 앞 = 프리마켓 */
+  const firstReg = points.findIndex((p) => p.time >= "0900");
+  /* 15:30 을 넘어선 첫 봉 = 애프터 (정규장 마지막 봉까지는 본장이다) */
+  const firstPost = points.findIndex((p) => p.time > "1530");
+  return {
+    /* 아직 09시 전이면(프리마켓만 있는 아침) **전부** 장전이다 — 못 찾은 것과 없는 것은 다르다 */
+    pre: firstReg === -1 ? W : firstReg > 0 ? at(firstReg) : 0,
+    post: firstPost === 0 ? W : firstPost > 0 ? W - at(firstPost) : 0,
+  };
+}
+
 export function IntradaySpark({ chart, basePrice }: { chart: RawRecord | null; basePrice: number }) {
   const points = todayPoints(chart);
   if (points.length < 2) return null;
@@ -102,8 +131,20 @@ export function IntradaySpark({ chart, basePrice }: { chart: RawRecord | null; b
     .map((p, i) => `${((i / (points.length - 1)) * W).toFixed(2)},${(H - ((p.price - bottom) / range) * H).toFixed(2)}`)
     .join(" ");
   const up = last >= base;
+  const band = sessionBands(points, W);
+  const title = [
+    band.pre > 0 ? "장전(NXT 프리)" : null,
+    "정규장",
+    band.post > 0 ? "장마감 뒤(애프터)" : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   return (
-    <svg className="sd-spark" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="당일 흐름">
+    <svg className="sd-spark" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label={`당일 흐름 — ${title}`}>
+      <title>{`${title} · 음영은 정규장 밖`}</title>
+      {/* 음영 = 정규장 밖. 선보다 **먼저** 그려야 선을 안 덮는다 */}
+      {band.pre > 0 && <rect x="0" y="0" width={band.pre} height={H} className="sd-spark-off" />}
+      {band.post > 0 && <rect x={W - band.post} y="0" width={band.post} height={H} className="sd-spark-off" />}
       {/* 기준선(전일 종가) — 이 선 위냐 아래냐가 당일 흐름의 전부다 */}
       <line x1="0" x2={W} y1={H - ((base - bottom) / range) * H} y2={H - ((base - bottom) / range) * H} className="sd-spark-base" />
       <polyline points={line} className={`sd-spark-line ${up ? "up" : "down"}`} />

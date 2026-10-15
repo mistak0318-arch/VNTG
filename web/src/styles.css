@@ -20364,6 +20364,11 @@ html[data-widestock="1"] .sdw .sd-spark-wrap {
 }
 /* 값 칸은 글자만큼만 — 남는 자리를 선에게 넘긴다 */
 .sd-spark { width: 100%; height: 100%; display: block; }
+/*
+  장전·장마감 뒤 음영 (2026-10-15) — 깔린 쪽이 정규장 **밖**이다.
+  88×34 짜리 그림이라 세로선·글자는 선을 덮는다. 한 겹 옅게만.
+*/
+.sd-spark-off { fill: var(--text); opacity: 0.07; }
 .sd-spark-line { fill: none; stroke-width: 1.4; vector-effect: non-scaling-stroke; }
 .sd-spark-line.up { stroke: var(--red); }
 .sd-spark-line.down { stroke: var(--blue); }
