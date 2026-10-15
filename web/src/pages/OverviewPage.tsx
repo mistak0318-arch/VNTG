@@ -370,6 +370,22 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
             {status?.label ?? "-"} · {now.toLocaleTimeString("ko-KR", { hour12: false })}
           </span>
         </span>
+        {/*
+          **카드 순서로 가는 길 — 탭 줄에서 빼서 여기로** (2026-10-16 — 벤티지: "이거
+          빼자, 슬라이드로 메뉴 왔다 갔다 하는데 걸리적거려").
+          맞다. 탭 줄은 **손가락이 지나가는 길**이라 거기 단추를 세우면 스와이프에 걸린다.
+          그렇다고 없애면 「기능은 있는데 길이 없다」로 되돌아간다 — 스와이프와 무관한
+          머리줄(새로고침 옆)로 옮긴다. 여기는 누르러 오는 자리지 지나가는 자리가 아니다.
+        */}
+        <button
+          className="ov-order"
+          onClick={() => {
+            window.location.hash = "#/settings?open=cardOrder";
+          }}
+          title="설정에서 이 대시보드의 카드 차례를 탭별로 바꿉니다"
+        >
+          ⋮⋮ 카드 순서
+        </button>
       </RefreshBar>
 
       {/*
@@ -389,28 +405,6 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
             {t.label}
           </button>
         ))}
-        {/*
-          **차례를 바꾸러 가는 길** (2026-10-16 — 벤티지: "설정에 순서 변경할 수 있는
-          기능 좀 넣어줘, 각 탭별로").
-          그 기능은 **이미 있었다**(설정 → 화면 → 시황 카드 순서, 탭별 목록). 없던 것은
-          **거기로 가는 길**이다 — 카드를 보고 있는 자리는 여기인데 손잡이는 설정 서랍
-          안에 접혀 있었다. **있는 기능을 못 찾으면 없는 것과 같다.**
-
-          ⚠️ 그렇다고 예전처럼 「배치」 단추를 맨 윗줄에 크게 두지는 않는다 — 한 번 정하면
-          끝나는 값이 매일 보는 줄을 차지할 이유가 없다(그래서 설정으로 옮겼던 것이다).
-          맨 끝에 작게, 눌러야 보이는 자리에 둔다.
-        */}
-        {sub !== "us" && (
-          <button
-            className="ov-subtab ov-order"
-            onClick={() => {
-              window.location.hash = "#/settings?open=cardOrder";
-            }}
-            title="설정에서 이 대시보드의 카드 차례를 탭별로 바꿉니다"
-          >
-            ⋮⋮ 카드 순서
-          </button>
-        )}
       </div>
 
       {/*
