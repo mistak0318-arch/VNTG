@@ -1936,7 +1936,7 @@ export function ScreenerPage({
                              * (`diffFromRate` — 호가 단위로 반올림해야 키움과 맞는다).
                              * 실시간이 덮은 줄은 그 값으로 — 위 % 와 같은 자리에서 꺼낸다.
                              */
-                            const diff = diffFromRate(lv?.price ?? Number(r.cur_prc), rate);
+                            const diff = diffFromRate(lv?.price ?? Number(r.cur_prc), rate, { etf: !!r.etf });
                             return (
                               <td key={c.key} className={`num scr-rate ${rc}`}>
                                 {rate === null ? "-" : `${rate > 0 ? "+" : ""}${rate.toFixed(2)}%`}
