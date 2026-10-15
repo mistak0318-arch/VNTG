@@ -18,12 +18,20 @@ export function CardOrderPanel() {
         시황 대시보드의 카드 순서입니다. 위에 있을수록 화면에서도 앞에 옵니다.
         <b> 서버에 저장</b>되어 미니PC·휴대폰 어디서 열어도 같은 배치입니다.
       </p>
-      {(Object.keys(OVERVIEW_CARDS) as OverviewSub[]).map((sub) => (
+      {/*
+        ⚠️ **화면에 있는 탭만 보인다** (2026-10-16). 「수급」·「순위」는 2026-08 에 대시보드에서
+        숨겼는데(카드 구성은 되살릴 수 있게 남겨 뒀다) 설정에는 그대로 떠 있었다 —
+        **갈 수 없는 탭의 차례를 정하는 칸**이라, 바꿔 봐야 아무 일도 안 일어난다.
+      */}
+      {VISIBLE.map((sub) => (
         <SubList key={sub} sub={sub} />
       ))}
     </div>
   );
 }
+
+/** 지금 대시보드에 실제로 떠 있는 탭 (`OverviewPage.SUBTABS` 와 맞춘다) */
+const VISIBLE: OverviewSub[] = ["summary", "market"];
 
 const SUB_LABEL: Record<OverviewSub, string> = {
   summary: "요약",

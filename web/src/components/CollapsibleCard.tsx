@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { removePref, setPref } from "../prefs";
 
 /**
@@ -67,11 +67,31 @@ export function CollapsibleCard({
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  const ref = useRef<HTMLElement>(null);
 
   // 첫 렌더에서 localStorage를 읽는다 (SSR이 아니므로 effect로 충분)
   useEffect(() => {
     const saved = readOpenMap()[id];
     if (typeof saved === "boolean") setOpen(saved);
+  }, [id]);
+
+  /*
+   * **밖에서 이 카드를 지목해 열 수 있다** (2026-10-16 — 벤티지: "애매하면 설정에 순서
+   * 변경할 수 있는 기능 좀 넣어줘, 각 탭별로").
+   *
+   * 그 기능은 **이미 있었다**(설정 → 화면 → 시황 카드 순서). 없던 것은 **거기로 가는
+   * 길**이다 — 카드를 보고 있는 자리는 대시보드인데, 차례를 바꾸는 손잡이는 설정
+   * 서랍 안에 접혀 있었다. 있는 기능을 못 찾으면 없는 것과 같다.
+   *
+   * 주소에 `?open=<id>` 가 있으면 그 카드를 펴고 그 자리로 굴린다. 접힘 상태를
+   * 저장하지는 않는다 — **이번에 보러 온 것**이지 늘 펴 두겠다는 뜻은 아니다.
+   */
+  useEffect(() => {
+    const want = new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("open");
+    if (want !== id) return;
+    setOpen(true);
+    const t = setTimeout(() => ref.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+    return () => clearTimeout(t);
   }, [id]);
 
   function toggle() {
@@ -82,7 +102,7 @@ export function CollapsibleCard({
   }
 
   return (
-    <section className={`card collapsible${open ? " open" : ""}`}>
+    <section ref={ref} id={`cc-${id}`} className={`card collapsible${open ? " open" : ""}`}>
       <button className="collapsible-head" onClick={toggle} aria-expanded={open}>
         <span className={`collapsible-caret${open ? " open" : ""}`}>▸</span>
         <h2>{title}</h2>

@@ -73,6 +73,23 @@
   background: none;
   border-bottom: 2px solid transparent;
 }
+
+/*
+  탭 줄 맨 끝의 **「카드 순서」 손잡이** (2026-10-16 — 벤티지: "설정에 순서 변경할 수 있는
+  기능 좀 넣어줘, 각 탭별로"). 기능은 이미 설정에 있었고, 없던 것은 **거기로 가는 길**이다.
+
+  ⚠️ 탭이 아니라 손잡이다. 형제들이 `flex: 1` 이라 그대로 두면 **탭 하나만큼 자리를 먹어**
+  진짜 탭 셋이 좁아진다 — 글자만큼만 차지하게 두고 흐리게 민다.
+  ⚠️ 이 규칙은 `.ov-subtab` 과 **같은 파일**에 둔다. 굵기가 같아 나중 자리가 이기는데,
+  다른 파일에 적으면 어느 쪽이 나중인지가 파일 로드 순서에 달린다(10/15 에 한 번 당했다).
+*/
+.ov-subtab.ov-order {
+  flex: 0 0 auto;
+  padding: 11px 10px;
+  font-size: 0.8rem;
+  opacity: 0.6;
+}
+.ov-subtab.ov-order:hover { opacity: 1; }
 .ov-subtab.on {
   color: var(--ov-txt);
   font-weight: 600;
