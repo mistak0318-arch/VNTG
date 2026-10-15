@@ -1,4 +1,5 @@
 ﻿import { PAGE_SIZES, PAGE_SIZE_DEFAULT } from "../components/Pager";
+import { diffFromRate } from "../krxTick";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { removePref, setPref } from "../prefs";
 import { api, fmtNum, type FlowSum, type RankResult, type RankSpecGroup } from "../api";
@@ -1925,9 +1926,26 @@ export function ScreenerPage({
                             const lv = liveOf(r.code);
                             const rate = rateOf(r); /* 요약과 **같은 자리**에서 꺼낸다 */
                             const rc = rate === null ? "" : rate > 0 ? "positive" : rate < 0 ? "negative" : "";
+                            /*
+                             * **등락률 밑에 대비(원)** (2026-10-15 — 벤티지: "키움처럼 밑에
+                             * 등락률 밑에 얼마 빠진 건지 금액 좀 조그만 글씨로").
+                             *
+                             * % 만 보면 **싼 주식과 비싼 주식이 같은 크기로 보인다** — −5% 가
+                             * 900원인지 21,500원인지는 들고 있는 사람에게 전혀 다른 일이다.
+                             * 조회 응답에 대비 칸이 없어 현재가와 등락률에서 되돌려 낸다
+                             * (`diffFromRate` — 호가 단위로 반올림해야 키움과 맞는다).
+                             * 실시간이 덮은 줄은 그 값으로 — 위 % 와 같은 자리에서 꺼낸다.
+                             */
+                            const diff = diffFromRate(lv?.price ?? Number(r.cur_prc), rate);
                             return (
                               <td key={c.key} className={`num scr-rate ${rc}`}>
                                 {rate === null ? "-" : `${rate > 0 ? "+" : ""}${rate.toFixed(2)}%`}
+                                {diff !== null && diff !== 0 && (
+                                  <i className={`scr-diff ${rc}`} title="전일 대비 (현재가와 등락률로 낸 값 — 호가 단위에 맞춤)">
+                                    {diff > 0 ? "▲" : "▼"}
+                                    {fmtNum(Math.abs(diff))}
+                                  </i>
+                                )}
                                 {showNxtSub && r.nxtRate != null && lv?.rate == null && (
                                   <i
                                     className={`scr-split ${Number(r.nxtRate) > 0 ? "positive" : Number(r.nxtRate) < 0 ? "negative" : ""}`}

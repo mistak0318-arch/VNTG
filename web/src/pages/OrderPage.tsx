@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { tickOf } from "../krxTick";
 import { useTabTitle } from "../tabTitle";
 import { setPref } from "../prefs";
 import { NotifySoundPanel } from "../components/NotifySoundPanel";
@@ -504,16 +505,7 @@ function localTs(iso: string): string {
   return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-/** 호가 단위 (KRX 2023-01 개편) — 손절 % 를 발동가로 바꿀 때 호가에 맞춘다 */
-function tickOf(p: number): number {
-  if (p < 2_000) return 1;
-  if (p < 5_000) return 5;
-  if (p < 20_000) return 10;
-  if (p < 50_000) return 50;
-  if (p < 200_000) return 100;
-  if (p < 500_000) return 500;
-  return 1_000;
-}
+/* 호가 단위는 `krxTick.ts` 로 옮겼다 (2026-10-15) — 시세분석 표도 같은 표를 쓴다 */
 const toTick = (p: number) => Math.floor(p / tickOf(p)) * tickOf(p);
 
 /** 잔고 줄 → 주문 폼으로 가는 주소 — 잔고 탭·「잔고에서 고르기」가 같은 길을 쓴다 */

@@ -177,7 +177,25 @@ export function SameNetTradeRankingPage({
                       {buzz.badge(code, name)}
                     </td>
                     <td className={signClass(r.pred_pre)}>{fmtAbsNum(r.cur_prc)}</td>
-                    <td className={signClass(r.flu_rt)}>{fmtNum(r.flu_rt)}%</td>
+                    {/*
+                      등락률 밑에 **대비(원)** (2026-10-15 — 벤티지: "키움처럼 등락률 밑에
+                      얼마 빠진 건지"). 여기는 조회가 `pred_pre`(전일 대비)를 **직접 주므로**
+                      시세분석 표처럼 되돌려 계산하지 않는다 — 있는 값을 두고 만들면
+                      언젠가 둘이 어긋난다.
+                    */}
+                    <td className={signClass(r.flu_rt)}>
+                      {fmtNum(r.flu_rt)}%
+                      {(() => {
+                        const d = Number(String(r.pred_pre ?? "").replace(/[+,\s]/g, ""));
+                        if (!Number.isFinite(d) || d === 0) return null;
+                        return (
+                          <i className={`scr-diff ${signClass(r.pred_pre)}`} title="전일 대비">
+                            {d > 0 ? "▲" : "▼"}
+                            {fmtNum(Math.abs(d))}
+                          </i>
+                        );
+                      })()}
+                    </td>
                     <td className={signClass(r.orgn_nettrde_amt)}>{fmtNum(r.orgn_nettrde_amt)}</td>
                     <td className={signClass(r.for_nettrde_amt)}>{fmtNum(r.for_nettrde_amt)}</td>
                     <td className={signClass(r.nettrde_amt)}>{fmtNum(r.nettrde_amt)}</td>

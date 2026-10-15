@@ -10959,6 +10959,22 @@ svg path:not([fill]) { fill: none; }
 /* NXT 괄호 줄이 색을 가질 땐 흐림을 살짝 푼다 — muted 만으로는 부호색이 안 산다 */
 .scr-split.positive { color: var(--red); opacity: 0.75; }
 .scr-split.negative { color: var(--blue); opacity: 0.75; }
+/*
+  등락률 밑의 대비(원) (2026-10-15 — 벤티지: "키움처럼 등락률 밑에 얼마 빠진 건지").
+  % 만 보면 싼 주식과 비싼 주식이 같은 크기로 보인다 — −5% 가 900원인지 21,500원인지는
+  들고 있는 사람에게 전혀 다른 일이다. 다만 **주인공은 여전히 % 다** — 한 단 작게,
+  굵기를 빼고, 색은 같은 부호로 옅게. 위 `.scr-split`(NXT 줄)과 같은 문법이다.
+*/
+.scr-diff {
+  display: block;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 0.66rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.scr-diff.positive { color: var(--red); opacity: 0.7; }
+.scr-diff.negative { color: var(--blue); opacity: 0.7; }
 /* 등락률 — 이 표의 주인공. 온 표가 빨갛던 시절엔 이게 파묻혔다 */
 .scr-rate { font-weight: 700; }
 
@@ -19391,6 +19407,7 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .tbl-font-root .data-table { font-size: var(--tbl-font); }
 .tbl-font-root .data-table th { font-size: calc(var(--tbl-font) - 0.06rem); }
 .tbl-font-root .data-table .scr-split,
+.tbl-font-root .data-table .scr-diff,
 .tbl-font-root .data-table .scr-mkt,
 .tbl-font-root .data-table .uw-sub { font-size: calc(var(--tbl-font) - 0.14rem); }
 .scr-font { display: inline-flex; gap: 2px; }
