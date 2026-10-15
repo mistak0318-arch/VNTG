@@ -124,6 +124,73 @@ function useBrokerSeries(code: string, broker: string | null): FlowSeriesData {
 }
 
 /**
+ * **외국계 합계 시계열 — 서버가 쌓아 둔 것** (2026-10-15).
+ *
+ * 벤티지: "프로그램은 화면 안 열어놔도 쌓고 있잖아 얘는 왜?"
+ *
+ * 그때 「외국계는 조회(`ka10040`)에만 있다」고 답했는데 **문서를 보고 한 말**이었다.
+ * 실제로 세어 보니 거래원 실시간(`0F`) 프레임에 우리가 안 쓰는 칸이 스물일곱 개 오고
+ * 있었고, 그 번호의 뜻은 **값을 맞춰서** 알아냈다 — 거래원 조회가 준 외국계 매도·매수와
+ * 같은 값을 가진 칸을 센 것이다(59표본 전부 딱 맞음):
+ *
+ *   261 = 매도 · 263 = 매수 · 267 = 순매수 (주)
+ *
+ * 그래서 이제 **프로그램과 같은 자리**에 선다 — 서버가 그 종목을 물고 있으면 화면을
+ * 안 봐도 하루 종일 쌓인다. 안 물고 있으면(관심종목도 초록도 아닌 종목) 예전처럼
+ * 화면이 찍은 성근 점으로 그린다 — 아래 `special` 이 그 순서로 고른다.
+ */
+function useForeignSeries(code: string, enabled: boolean): FlowSeriesData {
+  const [s, setS] = useState<FlowSeriesData>({ pts: [], day: "", stale: false });
+  const lockPaused = useLockPaused();
+  const tabActive = useTabActive();
+
+  useEffect(() => {
+    if (!code || !enabled || lockPaused || !tabActive) {
+      setS({ pts: [], day: "", stale: false });
+      return;
+    }
+    let alive = true;
+    const load = async () => {
+      try {
+        const r = await fetch(`/api/realtime/series?type=0F&item=${encodeURIComponent(code)}`);
+        const j = (await r.json()) as {
+          points: { t: string; v: Record<string, string> }[];
+          day?: string;
+          stale?: boolean;
+          live?: boolean;
+        };
+        if (!alive) return;
+        /*
+         * ⚠️ 세 칸이 **다 있는 점만** 쓴다. 오늘 일찍 쌓인 점에는 이 칸이 없다(그때는
+         * 저장 목록에 없었다) — 없는 것을 0 으로 읽으면 그래프가 바닥으로 뚝 떨어진다.
+         */
+        const pts = (j.points ?? [])
+          .filter((p) => p.v["261"] !== undefined || p.v["263"] !== undefined)
+          .map((p) => {
+            const sell = Math.abs(Number(p.v["261"]) || 0);
+            const buy = Math.abs(Number(p.v["263"]) || 0);
+            /* 순매수는 키움이 직접 준다 — 빼서 만들면 어긋난다(`FlowSample` 주석) */
+            const net = p.v["267"] !== undefined ? Number(p.v["267"]) || 0 : buy - sell;
+            return { t: p.t, buy, sell, net };
+          })
+          .filter((p) => p.buy !== 0 || p.sell !== 0);
+        setS({ pts, day: j.day ?? "", stale: Boolean(j.stale), live: Boolean(j.live) });
+      } catch {
+        /* 못 받으면 아래가 화면이 찍은 점으로 그린다 */
+      }
+    };
+    void load();
+    const t = setInterval(() => void load(), 15_000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [code, enabled, lockPaused, tabActive]);
+
+  return s;
+}
+
+/**
  * 창구 하나의 **일별 매매** (ka10043, 2026-09-10) — 며칠째 사고 있나. 창구를 골랐을 때만 묻는다.
  */
 function useBrokerDays(code: string, broker: string | null): { rows: BrokerDayRow[]; loading: boolean } {
@@ -245,6 +312,8 @@ export function BrokerFlowPanel({ code }: { code: string }) {
    * 프로그램 탭이 쓰는 훅을 그대로 가져다 쓴다.
    */
   const progSeries = useProgramSeries(code, picked === "__prog");
+  /* 외국계도 같은 자리 — 서버가 쌓아 둔 것이 있으면 그것이 먼저다 (2026-10-15) */
+  const fxSeries = useForeignSeries(code, picked === "__fx");
   const special: FlowSeriesData | null = (() => {
     if (picked === "__prog") {
       /* 서버가 쌓아 둔 것이 먼저. 그 종목을 아직 안 물었으면 예전처럼 우리가 찍은 성근 점으로 */
@@ -275,6 +344,8 @@ export function BrokerFlowPanel({ code }: { code: string }) {
       };
     }
     if (picked === "__fx") {
+      /* 서버가 쌓아 둔 것이 먼저 — 그 종목을 아직 안 물었으면 화면이 찍은 성근 점으로 */
+      if (fxSeries.pts.length >= 2) return fxSeries;
       return {
         pts: (data?.series ?? [])
           .map((p): FlowSample | null =>
@@ -290,6 +361,8 @@ export function BrokerFlowPanel({ code }: { code: string }) {
   })();
   /* 프로그램이 서버 시계열로 그려지는가 — 밑에 적는 말이 달라진다 */
   const progFromServer = picked === "__prog" && progSeries.pts.length >= 2;
+  /* 외국계도 마찬가지 — 서버 것이면 「안 봐도 쌓인다」가 참이다 */
+  const fxFromServer = picked === "__fx" && fxSeries.pts.length >= 2;
 
   if (loading && !data) return <div className="empty">거래원 불러오는 중…</div>;
   if (error && !data) return <div className="error-banner">{error}</div>;
@@ -453,6 +526,12 @@ export function BrokerFlowPanel({ code }: { code: string }) {
                       <b> 이 종목을 아직 안 물고 있다</b>는 뜻입니다. 화면을 연 종목은 그 자리에서
                       구독하므로 30초쯤 뒤부터 채워집니다.
                     </>
+                  ) : isSpecial && picked === "__fx" ? (
+                    <>
+                      외국계는 서버가 거래원 실시간(<code>0F</code>)으로 쌓습니다 — 여기가 비었다는 건
+                      <b> 이 종목을 아직 안 물고 있다</b>는 뜻입니다. 화면을 연 종목은 그 자리에서
+                      구독하므로 30초쯤 뒤부터 채워집니다.
+                    </>
                   ) : isSpecial ? (
                     data.auto ? (
                       <>
@@ -499,7 +578,13 @@ export function BrokerFlowPanel({ code }: { code: string }) {
                           </>
                         )
                       ) : (
-                        data.auto ? (
+                        fxFromServer ? (
+                          <>
+                            <b>거래원 실시간이 외국계 합계를 같이 보내고 있었습니다</b> (2026-10-15에
+                            찾았습니다) — 이제 프로그램과 똑같이 서버가 30초마다 쌓으므로
+                            <b> 화면을 안 보고 있어도</b> 늘어납니다.
+                          </>
+                        ) : data.auto ? (
                           <>
                             외국계는 조회에만 있어 <b>부를 때마다 한 점</b>입니다 — 이 종목은 서버가
                             따라가므로 화면을 안 봐도 쌓이지만, 한 바퀴가 2~3분이라 점이 성깁니다.
