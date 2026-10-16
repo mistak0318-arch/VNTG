@@ -19,8 +19,6 @@ import { peekRealtime, realtimeFidSurvey, subscribedCount } from "./realtimeHub.
 import { nightFuturesSnapshot } from "./usMajor.js";
 import { fxFidSnapshot } from "./fxFidProbe.js";
 import { phaseTodaySummary } from "./marketPhase.js";
-import { marketHaltSnapshot } from "./marketHaltAlert.js";
-import { haltProbeSnapshot } from "./haltProbe.js";
 import { hantooRealtimeStatus } from "./hantooRealtime.js";
 import { hantooQueueDepth } from "./hantooClient.js";
 import { afterCloseStatus, afterCloseStateSummary } from "./afterClose.js";
@@ -336,10 +334,6 @@ async function writeOnceInner(): Promise<void> {
      * (2026-10-15). 시각과 코드뿐이다. 자세한 까닭은 `marketPhase.phaseTodaySummary`.
      */
     장운영구분: await phaseTodaySummary().catch(() => null),
-    /* 오늘 알린 사이드카·서킷브레이커 (2026-10-15) — 사건 열쇠뿐 */
-    시장경보: marketHaltSnapshot(),
-    /* 경보가 울린 순간의 0g·네이버 — 더 빠른 길이 있나 (2026-10-15, 다음 발동 때 읽는다) */
-    경보관측: await haltProbeSnapshot().catch(() => null),
     /* `0g` 에 무엇이 오고는 있나 — 번호만 */
     시장조치필드: realtimeFidSurvey("0g"),
     /*

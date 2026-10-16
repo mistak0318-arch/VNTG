@@ -1,5 +1,4 @@
 import { mkdir, readFile, readdir, unlink, writeFile } from "node:fs/promises";
-import { noteMarketHalt } from "./marketHaltAlert.js";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { naverNews, type NaverCat } from "./naverMainNews.js";
@@ -298,11 +297,19 @@ export async function collectNewsKeywords(): Promise<{ articles: number; terms: 
         f.seen.push(it.link, titleKey);
         articles += 1;
         /*
-         * **시장 경보는 여기서 잡는다** (2026-10-15). 새로 들어온 기사에만 닿는 자리라
-         * 같은 기사를 두 번 보지 않는다 — 사이드카 하나에 기사가 수십 개씩 달리므로
-         * 그 접기는 `marketHaltAlert` 가 사건 열쇠로 또 한 번 한다.
+         * ⚠️ **여기서 시장 경보(사이드카·서킷)를 잡던 것을 걷어냈다** (2026-10-16).
+         *
+         * 제목을 **낱말 자루**로 읽은 것이 끝내 틀렸다 — 「외인 매도 주춤, 코스피 3.9%↑
+         * …코스닥 사이드카 800선 회복」에서 방향은 **외인 수급**의 「매도」를, 시장은
+         * **지수 상승** 얘기인 「코스피」를 집어다 썼다. 실제로는 **코스닥 매수** 사이드카였다.
+         * 한 제목 안에서 그 낱말들이 **무엇에 걸리는지**를 모르면, 가까이 있다는 이유로
+         * 엉뚱한 것을 붙인다. 벤티지: "기사에서 사이드카 잡는 로직 빼버리자."
+         *
+         * 더 똑똑하게 고치는 길(낱말 거리 재기 등)도 있지만, 이틀 동안 **늦게 울리고
+         * 틀리게 울렸다.** 시장 경보는 틀리면 안 되는 종류라 **없는 편이 낫다.**
+         * 0g 프레임 관측(health 「시장조치필드」)은 그대로 둔다 — 제대로 된 출처가
+         * 나오면 그때 다시 만든다.
          */
-        void noteMarketHalt(it.title, it.link, it.press, it.at).catch(() => undefined);
 
         const minute = minuteOf(it.at);
         f.articlesByMinute[minute] = (f.articlesByMinute[minute] ?? 0) + 1;
