@@ -243,9 +243,21 @@ export function createMarketRouter(client: KiwoomClient): Router {
         rc && session !== "정규장" && !(trading && minute >= 930 && rc.date !== today)
           ? {
               ...rc,
-              /* 지금 값이 어느 장의 것인가 — 머리에 붙일 짧은 이름 */
+              /*
+               * 지금 값이 어느 장의 것인가 — 머리에 붙일 짧은 이름.
+               *
+               * ⚠️ **15:30~16:00(공백)도 「애프터」다** (2026-10-16 — 벤티지: "이거 NXT 가
+               * 아니라 애프터 아냐 이제?").
+               *
+               * 맞다. 9/14 개편 뒤 그 30분은 **NXT 가 애프터 단일가를 돌리는 시간**이다 —
+               * 본문은 같은 값을 「NXT 애프터 · 애프터 단일가」라고 부르면서 머리줄만
+               * 「NXT」라고 적고 있었다. **한 화면이 같은 값을 두 이름으로 불렀다.**
+               *
+               * 거래소 이름이 아니라 **지금이 어느 장인가**를 적는 자리다. KRX 가 아직
+               * 안 도는 것(16:00 부터)은 본문이 이미 말한다.
+               */
               liveLabel:
-                session === "애프터" ? (krxAfterMarket(today, minute) ? "애프터" : "NXT") : session === "공백" ? "NXT" : session === "프리" ? "프리" : "장외 마감",
+                session === "애프터" ? (krxAfterMarket(today, minute) ? "애프터" : "NXT") : session === "공백" ? "애프터" : session === "프리" ? "프리" : "장외 마감",
             }
           : null;
       /* KRX 애프터에 들어가는 종목인가 — ETF·ETN 은 16:00~20:00 에도 KRX 값이 15:30 에 멈춰 있다 */
