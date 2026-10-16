@@ -1175,6 +1175,21 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
        */
       const index = await getStockIndex(client).catch(() => new Map());
       /*
+       * **정규장 종가** (2026-10-16 — 벤티지: "SK스퀘어 봐봐, 애프터 표시가 뭐가 맞는 거여").
+       *
+       * 10/15 에 애프터 줄을 「정규장 종가 대비」로 바꾸면서 **분모를 `cur_prc` 로 썼다.**
+       * 그게 틀렸다 — `cur_prc` 는 「KRX 의 지금 값」이고, **16:00 뒤에는 그것도 애프터
+       * 체결가**다. 그래서 애프터에 실제로 움직인 종목조차 늘 **0.00%** 로 찍혔다
+       * (SK스퀘어: 시세분석 0.00% · 종목상세 −0.51%. 종목상세가 맞다).
+       *
+       * 정규장 종가는 15:40 에 KRX 로 찍어 둔 파일에 있다. 맵 하나를 메모리에 들고
+       * 있으므로 100줄에 붙여도 **조회가 0**이다 — 종목상세가 이미 쓰는 그 값이라
+       * 두 화면이 같은 수를 보게 된다.
+       */
+      const regMap = await latestRegularCloses(new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10))
+        .then((r) => r?.closes ?? null)
+        .catch(() => null);
+      /*
        * 거래량도 안 주는 조회(조회순위)는 거래대금을 못 낸다 — 시황 스냅샷의 어림값
        * (거래량 × 현재가, 40초 캐시)으로 메운다. 어림값이므로 `tvEst` 그대로 참이다.
        */
@@ -1294,6 +1309,8 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
             tvKrx: k?.tv ?? null,
             nxtPrice,
             nxtRate,
+            /* 15:40 에 찍은 오늘 정규장 종가 — 애프터 줄의 **분모**. 없으면 화면이 그 줄을 안 그린다 */
+            regClose: regMap?.get(code) ?? null,
           };
         })
         /* 시장을 안 받는 조회는 여기서 시장을 거른다 — 종목 목록이 말하는 시장으로 */

@@ -2115,12 +2115,21 @@ export function ScreenerPage({
                                   뜨는데, 그것도 **정보**다(「애프터에 아무 일 없었다」).
                                 */}
                                 {showNxtSub && r.nxtPrice != null && lv?.rate == null && (() => {
-                                  const krx = Math.abs(Number(r.cur_prc));
+                                  /*
+                                   * ⚠️ **분모는 `cur_prc` 가 아니라 정규장 종가다** (2026-10-16 고침).
+                                   *
+                                   * 10/15 에 「정규장 종가 대비」로 바꾸면서 분모를 `cur_prc` 로 썼는데,
+                                   * 그건 **「KRX 의 지금 값」**이고 16:00 뒤에는 그것도 애프터 체결가다.
+                                   * 그래서 애프터에 실제로 움직인 종목도 늘 **0.00%** 로 찍혔다 —
+                                   * SK스퀘어가 시세분석 0.00% · 종목상세 −0.51% 로 갈린 것이 그것이다.
+                                   * 이제 서버가 15:40 에 찍은 **정규장 종가**(`regClose`)를 같이 준다.
+                                   */
+                                  const reg = Math.abs(Number(r.regClose));
                                   const after = Math.abs(Number(r.nxtPrice));
-                                  /* 정규장 값이 없으면(프리 등) 예전처럼 전일 대비로 — 지어내지 않는다 */
-                                  const pct = krx > 0 && after > 0 ? ((after - krx) / krx) * 100 : r.nxtRate != null ? Number(r.nxtRate) : null;
+                                  /* 기준이 없으면(프리 등) 예전처럼 전일 대비로 — 지어내지 않는다 */
+                                  const pct = reg > 0 && after > 0 ? ((after - reg) / reg) * 100 : r.nxtRate != null ? Number(r.nxtRate) : null;
                                   if (pct === null || !Number.isFinite(pct)) return null;
-                                  const basis = krx > 0 && after > 0 ? "정규장 종가 대비" : "전일 대비";
+                                  const basis = reg > 0 && after > 0 ? "정규장 종가 대비" : "전일 대비";
                                   return (
                                     <i
                                       className={`scr-split ${pct > 0 ? "positive" : pct < 0 ? "negative" : ""}`}

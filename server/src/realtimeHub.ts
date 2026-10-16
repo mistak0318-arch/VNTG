@@ -455,11 +455,29 @@ async function refreshRank(kiwoom: KiwoomClient): Promise<void> {
  *
  * 관심종목을 앞에 두는 이유는 한도에 걸렸을 때 **잘려 나가면 안 되는 쪽**이기 때문이다.
  */
+/**
+ * **무엇이 자리를 먹었나** — health.json 「실시간대상」 (2026-10-16).
+ *
+ * 벤티지: "SK스퀘어 쟨 왜 소켓 안 붙지?" — 거래대금 상위권인데 장중 선도 실시간 점도
+ * 없었다. 구성이 「관심종목 + 조회순위 20 + 시장별 상위」이고 정원에서 **잘리는데**,
+ * 밖에서는 **몇 개가 잘렸는지조차 볼 수 없었다.** 그래서 매번 짐작으로 답하게 된다.
+ *
+ * 개수만 남긴다 — 종목코드는 한 줄도 안 싣는다.
+ */
+let pickStat: { 관심종목: number; 조회순위: number; 시장별: number; 합계: number; 잘림: number; 시장별상한: number } | null = null;
+export function realtimePickSnapshot() {
+  return pickStat;
+}
+
 async function targets(kiwoom: KiwoomClient, perMarket: number, max: number): Promise<string[]> {
   const codes: string[] = [];
+  let nWatch = 0;
+  let nInquiry = 0;
   try {
     const items = await listWatchlist();
-    codes.push(...items.map((w) => w.code).filter(Boolean));
+    const w = items.map((x) => x.code).filter(Boolean);
+    nWatch = w.length;
+    codes.push(...w);
   } catch {
     /* 관심종목을 못 읽어도 순위는 걸린다 */
   }
@@ -474,12 +492,25 @@ async function targets(kiwoom: KiwoomClient, perMarket: number, max: number): Pr
    * 거래대금보다 앞에 둔다 — 스무 개뿐이라 거래대금 쪽은 양끝 10위씩만 양보한다.
    */
   try {
-    codes.push(...latestInquiryCodes(20));
+    const q = latestInquiryCodes(20);
+    nInquiry = q.length;
+    codes.push(...q);
   } catch {
     /* 표본이 아직 없으면(아침) 거래대금만으로 간다 */
   }
-  codes.push(...(await hotCodes(kiwoom, perMarket)));
-  return [...new Set(codes)].slice(0, max);
+  const hot = await hotCodes(kiwoom, perMarket);
+  codes.push(...hot);
+  const uniq = [...new Set(codes)];
+  pickStat = {
+    관심종목: nWatch,
+    조회순위: nInquiry,
+    시장별: hot.length,
+    합계: uniq.length,
+    /* 정원에 걸려 버린 수 — 0 이 아니면 누군가는 늘 빠진다 */
+    잘림: Math.max(0, uniq.length - max),
+    시장별상한: perMarket,
+  };
+  return uniq.slice(0, max);
 }
 
 /**
