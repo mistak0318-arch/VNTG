@@ -5,6 +5,7 @@ import { notePhaseFrame } from "./marketPhase.js";
 import { tradeValueTop } from "./signalScreen.js";
 import { startHantooRealtime } from "./hantooRealtime.js";
 import { listWatchlist } from "./watchlist.js";
+import { latestInquiryCodes } from "./inquirySampler.js";
 
 /**
  * 실시간 구독에 쓸 종목 코드 — **통합(`_AL`)** (2026-08-31 요청 「실시간도 NXT 도 동일하게」).
@@ -461,6 +462,21 @@ async function targets(kiwoom: KiwoomClient, perMarket: number, max: number): Pr
     codes.push(...items.map((w) => w.code).filter(Boolean));
   } catch {
     /* 관심종목을 못 읽어도 순위는 걸린다 */
+  }
+  /*
+   * **조회순위 상위 20** (2026-10-16 — 벤티지가 조회순위 탭에서 장중 선이 빈 것을 보고).
+   *
+   * 여태 자리를 거래대금 하나로만 골랐다. 그런데 185 자리를 **무엇으로 채우나**는 우리가
+   * 정하는 것이고, 「지금 사람들이 들여다보는 종목」은 거래대금과 다른 축이다 —
+   * 거래대금은 적어도 조회가 몰리면 곧 움직일 자리다.
+   *
+   * 조회순위는 **이미 1분마다 받고 있어** 조회가 한 건도 안 는다. 관심종목 바로 뒤,
+   * 거래대금보다 앞에 둔다 — 스무 개뿐이라 거래대금 쪽은 양끝 10위씩만 양보한다.
+   */
+  try {
+    codes.push(...latestInquiryCodes(20));
+  } catch {
+    /* 표본이 아직 없으면(아침) 거래대금만으로 간다 */
   }
   codes.push(...(await hotCodes(kiwoom, perMarket)));
   return [...new Set(codes)].slice(0, max);

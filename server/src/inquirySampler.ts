@@ -129,6 +129,31 @@ export function cumulative(minutes: number): { rows: CumRow[]; samples: number; 
   return { rows, samples: win.length, oldestAt: win[0]?.at ?? null };
 }
 
+/**
+ * **지금 사람들이 보고 있는 종목** — 가장 최근 표본의 상위 `n` (2026-10-16).
+ *
+ * 벤티지: "미니스파크 왜 빠지는 종목들이 있는 거야?" → 그 화면이 **조회순위**였다.
+ * 장중 선은 서버가 체결로 **물고 있는 종목**에만 쌓이는데, 무는 목록은 관심종목 +
+ * 거래대금 상위다. 조회순위는 그 집합과 **애초에 다르다** — 거래대금이 적어도 사람들이
+ * 많이 들여다보면 올라온다.
+ *
+ * 그런데 조회순위는 **이미 1분마다 받고 있다.** 그러니 구독 목록에 상위 몇을 끼워 넣는
+ * 것은 **조회를 한 건도 안 늘린다** — 이미 손에 있는 것을 쓰는 것뿐이다.
+ *
+ * ⚠️ 누적(`cumulative`)이 아니라 **마지막 표본**이다. 「지금 보고 있는 것」이 알고 싶은
+ * 것이지 「오늘 많이 본 것」이 아니다 — 후자는 이미 지나간 종목을 물게 만든다.
+ */
+export function latestInquiryCodes(n: number): string[] {
+  const last = samples[samples.length - 1];
+  if (!last) return [];
+  return last.rows
+    .slice()
+    .sort((a, b) => a.rank - b.rank)
+    .slice(0, Math.max(0, n))
+    .map((r) => r.code)
+    .filter(Boolean);
+}
+
 export function samplerStatus(): { samples: number; lastAt: number | null; lastError: string | null } {
   return { samples: samples.length, lastAt: samples[samples.length - 1]?.at ?? null, lastError };
 }
