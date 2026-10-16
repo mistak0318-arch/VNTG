@@ -86,6 +86,30 @@ export function IntradayFlowChart({
     }
   });
 
+  /*
+   * **한 줄로 먼저 말한다** (2026-10-16 — 벤티지: "그래프 상단에 외국인 매수세 증가중,
+   * 기관 매수세 증가중 이런 식으로 간략하게 좀 써줘, 텍스트로 바로 볼 수 있게").
+   *
+   * 범례는 **누적**을 말한다(외국인 −2,661). 그런데 이 곡선을 보는 까닭은 누적이 아니라
+   * **지금 어느 쪽으로 가고 있나**다 — 하루 종일 판 날과 아침에 팔다 지금 사는 날이
+   * 같은 −2,661 로 보이기 때문이다. 그 차이를 읽으라고 그림을 그려 놓고, 정작 읽는 일은
+   * 사람에게 맡겨 두고 있었다.
+   *
+   * **최근 20분의 변화**로 가른다(2분 간격이라 10칸). 누적의 부호가 아니라 **그 창에서
+   * 늘었나 줄었나**다 — 누적이 −2,661 이어도 그 사이에 샀으면 「매수 ↑」가 맞다.
+   *
+   * ⚠️ 문턱은 **비율**로 잡는다. 고정 숫자를 쓰면 코스닥에서 늘 「주춤」이 되고, 선물은
+   * 단위가 계약이라 아예 뜻이 달라진다. 오늘 곡선이 닿은 최대폭의 3% 면 어느 시장에서든
+   * 「움직였다」고 할 만하다.
+   */
+  const back = Math.min(pts.length - 1, 10); // 2분 간격 → 10칸 ≈ 20분
+  const prev = pts[pts.length - 1 - back];
+  const th = Math.max(1, max * 0.03);
+  const moves = SERIES.map((sr) => {
+    const d = last[sr.key] - prev[sr.key];
+    return { label: sr.label, color: sr.color, dir: d >= th ? 1 : d <= -th ? -1 : 0, delta: d };
+  });
+
   return (
     <div className="ff-wrap">
       <div className="ff-head">
@@ -103,6 +127,21 @@ export function IntradayFlowChart({
           ))}
         </span>
       </div>
+      {back >= 3 && (
+        <div className="fi-now">
+          {moves.map((m) => (
+            <span key={m.label} className={m.dir > 0 ? "positive" : m.dir < 0 ? "negative" : "pt-n"}>
+              <i style={{ background: m.color }} />
+              {m.label} {m.dir > 0 ? "매수 ↑" : m.dir < 0 ? "매도 ↑" : "주춤"}
+              <em>
+                {m.delta > 0 ? "+" : ""}
+                {Math.round(m.delta).toLocaleString("ko-KR")}
+              </em>
+            </span>
+          ))}
+          <span className="pt-n fi-now-note">최근 {back * 2}분 변화</span>
+        </div>
+      )}
       <div className="fi-scroll">
         <svg
           viewBox={`0 0 ${W} ${H}`}
