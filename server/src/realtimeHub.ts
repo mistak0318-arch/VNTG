@@ -341,7 +341,12 @@ const PER_MARKET_EVENING = 50;
  * **자동감시 15 + 화면 10** 을 남긴다. 시세를 볼 종목이 15 줄지만, 그건 순위 하위권이고
  * 「눌렀는데 안 뜨는」 쪽이 훨씬 나쁘다.
  */
-const MAX_CODES = 175;
+/*
+ * 정원 (2026-10-16: 175 → 185). 키움 한 연결이 200 이고 화면이 종목을 열 때 쓰는
+ * 임시 자리(transient)가 몇 개 필요하다 — 실측(10/16 10:09) keep 175 · transient 1 로
+ * **24 자리가 놀고 있었다.** 열 자리는 화면 몫으로 남기고 나머지를 쓴다.
+ */
+const MAX_CODES = 185;
 /** 순위를 몇 분마다 다시 볼지 — 거래대금 상위는 이보다 빨리 안 뒤집힌다 */
 const RANK_REFRESH_MS = 5 * 60 * 1000;
 
@@ -355,11 +360,31 @@ let rankCache: { at: number; kospi: string[]; kosdaq: string[] } = { at: 0, kosp
  * 새 종목을 발견하는 일이 오히려 잦다. 코스피 상위 N, 코스닥 상위 N 을 따로 잡는다.
  */
 async function hotCodes(kiwoom: KiwoomClient, perMarket: number): Promise<string[]> {
-  // 시장별로 따로 들고 있다가 국면에 맞게 자른다 — 저녁엔 50/50, 낮엔 95/95
-  const cut = () => [
-    ...rankCache.kospi.slice(0, perMarket),
-    ...rankCache.kosdaq.slice(0, perMarket),
-  ];
+  /*
+   * 시장별로 따로 들고 있다가 국면에 맞게 자른다 — 저녁엔 50/50, 낮엔 90/90.
+   *
+   * ⚠️ **번갈아 담는다** (2026-10-16 — 벤티지: "미니스파크 왜 빠지는 종목들이 있는 거야?").
+   *
+   * 예전에는 코스피를 다 담고 그 뒤에 코스닥을 이어 붙였다. 그런데 이 목록은 위에서
+   * `MAX_CODES`(정원)로 **잘린다** — 90+90=180 을 175 로 자르면 **잘리는 쪽은 늘 코스닥**이고,
+   * 관심종목이 앞에 더 붙는 만큼 코스닥은 더 깊이 잘린다.
+   *
+   * 실제로 그게 보였다: 시세분석 거래대금 상위에서 장중 선이 빈 종목이 원익IPS·하나마이크론·
+   * 라온시큐어·제주반도체 — **전부 코스닥**이었다. 코스피 90위(거래대금 수백억)는 들어가는데
+   * 코스닥 15위(수천억)가 빠지는, 거꾸로 된 자리였다.
+   *
+   * 번갈아 담으면 잘리는 것이 **양쪽의 하위**가 된다. 시장 하나가 통째로 희생되지 않는다.
+   */
+  const cut = () => {
+    const ks = rankCache.kospi.slice(0, perMarket);
+    const kq = rankCache.kosdaq.slice(0, perMarket);
+    const out: string[] = [];
+    for (let i = 0; i < Math.max(ks.length, kq.length); i += 1) {
+      if (i < ks.length) out.push(ks[i]);
+      if (i < kq.length) out.push(kq[i]);
+    }
+    return out;
+  };
   if (Date.now() - rankCache.at < RANK_REFRESH_MS) return cut();
   return refreshRank(kiwoom).then(cut);
 }
