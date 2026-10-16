@@ -295,27 +295,28 @@ export function phaseOf(now = new Date()): Phase {
  * 반씩 채운다. **200 은 적지만 0 보다는 훨씬 낫다** — 지금까지는 사실상 0 이었다.
  */
 /*
- * ⚠️ 95 였다가 90 으로 (2026-08-26 아침 실측).
- * 95×2=190 + VI + **화면 몫(transient)** 이 겹치니 200 을 넘겨 105118
- * (허용 개수 초과)이 3초마다 반복됐다 — 화면이 미국탭(FE 10)이나 보드를 열면
- * 여유 10 이 바로 바닥난다. 180 + VI + 화면 19 까지 안전.
+ * **순위를 시장마다 몇 위까지 받아 둘지** — 구독 수가 아니다 (2026-10-16 이름값 정정).
+ *
+ * 예전엔 이 수가 곧 「시장당 구독 수」였다. 그런데 관심종목이 앞에 붙고 정원에서 잘리니
+ * **90 이라 적어 놓고 실제로는 51 만 들어갔다** — 실측에서 낮에 78개가 잘리고 있었다.
+ * 이제 구독 수는 **남는 자리**가 정하고(`targets`), 이 수는 **받아 둘 깊이**만 뜻한다.
  */
-const PER_MARKET = 90;
+const RANK_PER_MARKET = 90;
 /**
  * 2번 연결의 시장당 몫 — 1번이 못 담은 **다음 구간**(91~185위)을 가져간다.
  * 0B 하나만 걸므로 190종목이어도 연결 정원(200) 안이다.
  */
 const DUAL_PER_MARKET = 95;
-/** 순위 캐시를 몇 위까지 받아 둘지 — 1번(95) + 2번(95) 몫 */
-const RANK_DEPTH = PER_MARKET + DUAL_PER_MARKET;
-/**
- * 저녁(국내 애프터 15:40~20:00)의 시장당 몫.
+/** 순위 캐시를 몇 위까지 받아 둘지 — 1번 몫 + 2번 연결 몫 */
+const RANK_DEPTH = RANK_PER_MARKET + DUAL_PER_MARKET;
+/*
+ * ⚠️ **저녁 몫(50)은 걷어냈다** (2026-10-16).
  *
- * 예전 주석은 「미국에 60 을 내준다」였는데, 그 60 은 **값이 안 오는 해외 구독**이었다
- * (2026-09-08 실측으로 걷어냈다). 몫 자체는 그대로 두고 상한만 190 으로 되돌렸다 —
- * 저녁의 관심종목이 130 에 걸려 잘리던 것이 풀린다.
+ * 저녁에 시장당 50 으로 줄이던 값인데, 실측해 보니 그 시간에 **자리가 37개 남아 있었다**
+ * (관심종목 63 + 거래대금 100 = 148 / 정원 185). 남는 자리를 두고 스스로를 묶은 셈이라,
+ * 거래대금 상위권인 SK스퀘어가 「코스피 51위 밖」이라는 이유로 빠졌다.
+ * 이제 저녁에도 **남는 자리만큼 채운다** — 국면으로 줄일 이유가 없다.
  */
-const PER_MARKET_EVENING = 50;
 /**
  * 스케줄러가 채우는 몫.
  *
@@ -351,7 +352,19 @@ const MAX_CODES = 185;
 /** 순위를 몇 분마다 다시 볼지 — 거래대금 상위는 이보다 빨리 안 뒤집힌다 */
 const RANK_REFRESH_MS = 5 * 60 * 1000;
 
-let rankCache: { at: number; kospi: string[]; kosdaq: string[] } = { at: 0, kospi: [], kosdaq: [] };
+/**
+ * **자리는 돈이 도는 순서로 채운다** (2026-10-16 — 벤티지: "가장 좋은 방법으로 구현해야지").
+ *
+ * 여태 코스피 N · 코스닥 N 으로 **반반** 나눴다. 그런데 두 시장은 날마다 크기가 다르다 —
+ * 반반으로 묶으면 **코스피 51위(수백억)가 들어가고 코스닥 52위(수천억)가 빠지는** 일이
+ * 생긴다. 10/15 에 「번갈아 담기」로 고친 것도 반반이라는 전제는 그대로 둔 채 **잘리는
+ * 쪽만** 바꾼 것이었다.
+ *
+ * 애초에 나눌 이유가 없다. `tradeValueTop` 이 **거래대금**을 같이 주므로, 두 시장을
+ * **한 줄로 세워 위에서부터** 채우면 된다. 그러면 「무엇을 물고 있나」가 곧
+ * 「오늘 돈이 가장 많이 도는 곳」이 된다.
+ */
+let rankCache: { at: number; merged: string[] } = { at: 0, merged: [] };
 
 /**
  * 거래대금 상위 — 돈이 몰린 곳이 곧 오늘 볼 종목이다.
@@ -360,32 +373,8 @@ let rankCache: { at: number; kospi: string[]; kosdaq: string[] } = { at: 0, kosp
  * **코스닥이 거의 안 들어온다** — 거래대금 절대액이 다르기 때문이다. 그런데 코스닥에서
  * 새 종목을 발견하는 일이 오히려 잦다. 코스피 상위 N, 코스닥 상위 N 을 따로 잡는다.
  */
-async function hotCodes(kiwoom: KiwoomClient, perMarket: number): Promise<string[]> {
-  /*
-   * 시장별로 따로 들고 있다가 국면에 맞게 자른다 — 저녁엔 50/50, 낮엔 90/90.
-   *
-   * ⚠️ **번갈아 담는다** (2026-10-16 — 벤티지: "미니스파크 왜 빠지는 종목들이 있는 거야?").
-   *
-   * 예전에는 코스피를 다 담고 그 뒤에 코스닥을 이어 붙였다. 그런데 이 목록은 위에서
-   * `MAX_CODES`(정원)로 **잘린다** — 90+90=180 을 175 로 자르면 **잘리는 쪽은 늘 코스닥**이고,
-   * 관심종목이 앞에 더 붙는 만큼 코스닥은 더 깊이 잘린다.
-   *
-   * 실제로 그게 보였다: 시세분석 거래대금 상위에서 장중 선이 빈 종목이 원익IPS·하나마이크론·
-   * 라온시큐어·제주반도체 — **전부 코스닥**이었다. 코스피 90위(거래대금 수백억)는 들어가는데
-   * 코스닥 15위(수천억)가 빠지는, 거꾸로 된 자리였다.
-   *
-   * 번갈아 담으면 잘리는 것이 **양쪽의 하위**가 된다. 시장 하나가 통째로 희생되지 않는다.
-   */
-  const cut = () => {
-    const ks = rankCache.kospi.slice(0, perMarket);
-    const kq = rankCache.kosdaq.slice(0, perMarket);
-    const out: string[] = [];
-    for (let i = 0; i < Math.max(ks.length, kq.length); i += 1) {
-      if (i < ks.length) out.push(ks[i]);
-      if (i < kq.length) out.push(kq[i]);
-    }
-    return out;
-  };
+async function hotCodes(kiwoom: KiwoomClient, want: number): Promise<string[]> {
+  const cut = () => rankCache.merged.slice(0, Math.max(0, want));
   if (Date.now() - rankCache.at < RANK_REFRESH_MS) return cut();
   return refreshRank(kiwoom).then(cut);
 }
@@ -393,7 +382,7 @@ async function hotCodes(kiwoom: KiwoomClient, perMarket: number): Promise<string
 /** 2번 연결 몫 — 순위 캐시의 **다음 구간**(from~to위). 캐시가 식었으면 새로 받는다 */
 async function hotCodesSlice(kiwoom: KiwoomClient, from: number, to: number): Promise<string[]> {
   if (Date.now() - rankCache.at >= RANK_REFRESH_MS) await refreshRank(kiwoom);
-  return [...rankCache.kospi.slice(from, to), ...rankCache.kosdaq.slice(from, to)];
+  return rankCache.merged.slice(from, to);
 }
 
 async function refreshRank(kiwoom: KiwoomClient): Promise<void> {
@@ -432,16 +421,24 @@ async function refreshRank(kiwoom: KiwoomClient): Promise<void> {
         console.log(`실시간: ${name} 거래대금 상위 실패 —`, r.reason instanceof Error ? r.reason.message : r.reason);
       }
     }
-    const pick = (r: PromiseSettledResult<{ code: string }[]>) =>
-      r.status === "fulfilled" ? r.value.map((t) => t.code).filter(Boolean) : [];
-    const ks = pick(kospi);
-    const kq = pick(kosdaq);
-    if (ks.length === 0 && kq.length === 0) {
+    const pick = (r: PromiseSettledResult<{ code: string; tradeValue: number }[]>) =>
+      r.status === "fulfilled" ? r.value.filter((t) => t.code) : [];
+    /*
+     * **두 시장을 한 줄로 세운다** — 거래대금 내림차순. 시장을 안 가리므로 「오늘 코스닥이
+     * 더 뜨거운 날」엔 코스닥이 더 많이 들어오고, 그 반대면 그 반대다. 반반으로 묶어 두면
+     * 그 날의 사정을 못 따라간다.
+     *
+     * ⚠️ 거래대금을 못 받은 줄(0)은 **뒤로 간다** — 앞에 세우면 빈 값이 좋은 자리를 먹는다.
+     */
+    const merged = [...pick(kospi), ...pick(kosdaq)]
+      .sort((a, b) => (b.tradeValue || 0) - (a.tradeValue || 0))
+      .map((t) => t.code);
+    if (merged.length === 0) {
       // 빈 목록으로 덮으면 구독이 통째로 풀린다. 지난 값을 쓰되 곧바로 다시 해 본다
       console.log("실시간: 거래대금 상위가 비었다 — 관심종목만 걸린다");
       rankCache = { ...rankCache, at: 0 };
     } else {
-      rankCache = { at: Date.now(), kospi: ks, kosdaq: kq };
+      rankCache = { at: Date.now(), merged };
     }
   } catch (e) {
     console.log("실시간: 순위 조회 실패 —", e instanceof Error ? e.message : e);
@@ -464,12 +461,12 @@ async function refreshRank(kiwoom: KiwoomClient): Promise<void> {
  *
  * 개수만 남긴다 — 종목코드는 한 줄도 안 싣는다.
  */
-let pickStat: { 관심종목: number; 조회순위: number; 시장별: number; 합계: number; 잘림: number; 시장별상한: number } | null = null;
+let pickStat: { 관심종목: number; 조회순위: number; 거래대금: number; 합계: number; 정원: number; 남은자리: number } | null = null;
 export function realtimePickSnapshot() {
   return pickStat;
 }
 
-async function targets(kiwoom: KiwoomClient, perMarket: number, max: number): Promise<string[]> {
+async function targets(kiwoom: KiwoomClient, max: number): Promise<string[]> {
   const codes: string[] = [];
   let nWatch = 0;
   let nInquiry = 0;
@@ -498,19 +495,30 @@ async function targets(kiwoom: KiwoomClient, perMarket: number, max: number): Pr
   } catch {
     /* 표본이 아직 없으면(아침) 거래대금만으로 간다 */
   }
-  const hot = await hotCodes(kiwoom, perMarket);
-  codes.push(...hot);
-  const uniq = [...new Set(codes)];
+  /*
+   * **남는 자리를 세어 그만큼만 받는다** (2026-10-16).
+   *
+   * 예전엔 국면별 상수(낮 90·저녁 50)로 시장마다 끊고 **그 뒤에 잘랐다.** 그러면
+   * 「90 을 본다」고 적어 놓고 실제로는 51 만 들어가는 일이 생긴다 — 실측에서 낮에
+   * **78개가 잘리고** 있었다. 코드가 말하는 수와 실제가 다르면 그 수는 거짓말이다.
+   *
+   * 관심종목과 조회순위를 먼저 담고 **남은 만큼** 거래대금 상위에서 가져온다.
+   * 그러면 잘림이 구조적으로 0 이 되고, 「몇 종목을 무나」가 곧 정원이 된다.
+   */
+  const head = [...new Set(codes)];
+  const room = Math.max(0, max - head.length);
+  const hot = await hotCodes(kiwoom, room + 20); // 겹침을 감안해 조금 더 받아 둔다
+  const uniq = [...new Set([...head, ...hot])].slice(0, max);
   pickStat = {
     관심종목: nWatch,
     조회순위: nInquiry,
-    시장별: hot.length,
+    거래대금: uniq.length - head.length,
     합계: uniq.length,
-    /* 정원에 걸려 버린 수 — 0 이 아니면 누군가는 늘 빠진다 */
-    잘림: Math.max(0, uniq.length - max),
-    시장별상한: perMarket,
+    정원: max,
+    /* 자리를 다 쓰고도 남은 후보 — 0 이면 더 받을 수 있다는 뜻이다 */
+    남은자리: Math.max(0, max - uniq.length),
   };
-  return uniq.slice(0, max);
+  return uniq;
 }
 
 /**
@@ -662,8 +670,7 @@ export function startRealtimeScheduler(kiwoom: KiwoomClient): void {
       let added = 0;
 
       if (phase !== "밤") {
-        const perMarket = phase === "저녁" ? PER_MARKET_EVENING : PER_MARKET;
-        const codes = await targets(kiwoom, perMarket, MAX_CODES);
+        const codes = await targets(kiwoom, MAX_CODES);
         for (const code of codes) {
           if (subscribed.has(code)) continue;
           /*
@@ -739,8 +746,8 @@ export function startRealtimeScheduler(kiwoom: KiwoomClient): void {
           /* (2026-09-10 전수 점검) 1번과 같은 좀비 감시 */
           if (rt2.state === "연결됨" && !rt2.healthy && rt2.lastSeen) rt2.close();
           await rt2.connect();
-          const perMarket = phase === "저녁" ? PER_MARKET_EVENING : PER_MARKET;
-          const slice = await hotCodesSlice(kiwoom, perMarket, perMarket + DUAL_PER_MARKET);
+          /* 2번 연결은 1번이 가져간 다음 구간을 맡는다 — 통합 정렬본에서 이어서 */
+          const slice = await hotCodesSlice(kiwoom, MAX_CODES, MAX_CODES + DUAL_PER_MARKET);
           let added2 = 0;
           for (const code of slice) {
             if (subscribed.has(code) || subscribed2.has(code)) continue;
