@@ -184,15 +184,30 @@ function nightOpen(kst: Date): boolean {
 }
 
 /**
- * 그 세션이 **닫히는 시각**(ms) — 시작일 다음 날 05:00 KST.
+ * 그 세션의 **값이 굳는 시각**(ms) — 시작일 다음 날 05:00 KST **+ 여유 10분**.
  *
- * 「마감 뒤에 받은 값인가」를 가리는 데 쓴다. 자세한 까닭은 `nightFutures` 안.
+ * 「마감 뒤에 받은 값인가」를 가리는 데 쓴다. 05:00 **정각 직후**에 받은 값을 최종값으로
+ * 믿으면 안 된다 — 거래소·한투가 마지막 체결을 정리하는 데 시간이 걸린다. 그 몇 초 차이로
+ * 또 굳어 버리면 고친 뜻이 없다. 10분을 주고, 그 안에는 10분 간격으로 한두 번 더 묻는다.
  */
-function sessionCloseMs(session: string): number {
+function sessionSettleMs(session: string): number {
   if (!/^\d{8}$/.test(session)) return 0;
   const start = Date.parse(`${session.slice(0, 4)}-${session.slice(4, 6)}-${session.slice(6, 8)}T05:00:00+09:00`);
-  return start + 86400_000;
+  return start + 86400_000 + 10 * 60_000;
 }
+
+/**
+ * **열려 있어도 이 간격보다 자주는 안 묻는다** (2026-10-18).
+ *
+ * 글로벌 카드의 「빠른 층」이 **10초마다** 이 함수를 부른다. 그런데 한 번 받는 데
+ * 전광판 둘 + 월물 현재가까지 **한투 조회 서넛**이 든다 — 분당 스무 번 가까이다.
+ * 한투는 초당 2.5건짜리 **한 줄**이라, 그 줄이 밀리면 **정작 값이 늦게 도착한다.**
+ * 자주 묻는 것과 빨리 받는 것은 다른 일이다.
+ *
+ * 야간선물은 20초면 충분하다 — 그동안 바뀌어 봐야 한 틱이고, 줄이 비면 그 한 틱이
+ * 오히려 제때 온다.
+ */
+const NIGHT_LIVE_MS = 20_000;
 
 /**
  * `길` 이 왜 필요한가 (2026-10-15 아침에 배운 것).
@@ -260,12 +275,14 @@ export async function nightFutures(): Promise<UsMajorRow | null> {
      * 마감 시각보다 **나중에 받은 값**이면 그게 최종값이다 — 그때부터 캐시를 쓴다.
      * 그 전이면 닫혀 있어도 **한 번 더 받는다**(받고 나면 다시 안 묻는다).
      */
-    const settled = nightCache.at >= sessionCloseMs(session);
+    const settled = nightCache.at >= sessionSettleMs(session);
     if (!open && nightCache.row && settled) return nightCache.row;
     /* 못 받았으면 매분 열한 번씩 되묻지 않는다 */
     if (!nightCache.row && Date.now() - nightCache.at < NIGHT_RETRY_MS) return null;
-    /* 마감값을 아직 못 박았으면 너무 자주 묻지 않게 같은 간격을 둔다 */
+    /* 마감값을 아직 못 박았으면 10분 간격으로만 — 05:00~05:10 에 한두 번이면 된다 */
     if (!open && nightCache.row && Date.now() - nightCache.at < NIGHT_RETRY_MS) return nightCache.row;
+    /* 열려 있어도 20초보다 자주는 안 묻는다 — 위 `NIGHT_LIVE_MS` */
+    if (open && nightCache.row && Date.now() - nightCache.at < NIGHT_LIVE_MS) return nightCache.row;
   }
   const got = await fetchNight(dates);
   nightCache = { session, row: got.row, at: Date.now(), 길: got.길 };
