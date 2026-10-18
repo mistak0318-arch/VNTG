@@ -8301,8 +8301,27 @@ button.nav-group-toggle {
 .ov-g-sec-h { display: flex; align-items: center; gap: 6px; }
 .ov-g-sec-h .sess { margin-left: auto; }
 
-/* 글로벌 — 섹터별 묶음 */
+/*
+  글로벌 — 섹터별 묶음을 **여러 열로 흘린다** (2026-10-18 — 벤티지: "글로벌이 너무
+  길게 뻗쳐 있어서 보기가 안 이쁘거든").
+
+  묶음이 여섯이라 세로로만 쌓으면 카드 하나가 화면 두 개 높이가 되고, 옆 칸은 비는데
+  이쪽만 길어져 **벽돌쌓기 격자가 한쪽으로 쏠린다.** 묶음 하나는 서너 줄짜리 작은
+  덩어리라 옆으로 세워도 읽기가 안 깨진다.
+
+  ⚠️ **단 줄(column-count)이 아니라 격자**다. 단으로 흘리면 「원자재」 제목과 WTI 가
+  다른 열로 갈라진다 — 격자는 묶음 하나가 칸 하나라 그 일이 없다.
+  ⚠️ `align-items: start` — 안 주면 짧은 묶음이 긴 쪽 높이로 늘어나 제목 밑이 휑해진다.
+*/
+.ov-g-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 2px 14px;
+  align-items: start;
+}
+/* 격자 안에서는 세로 간격을 칸이 맡는다 — 옛 규칙은 한 열일 때만 뜻이 있다 */
 .ov-g-sec + .ov-g-sec { margin-top: 8px; }
+.ov-g-grid > .ov-g-sec { margin-top: 8px; }
 .ov-g-sec-h { font-size: 0.72rem; color: var(--muted); font-weight: 600;
   padding: 4px 0 2px; border-bottom: 1px solid var(--border); margin-bottom: 2px; }
 /* 리포트 표 안의 섹터 구분줄 */

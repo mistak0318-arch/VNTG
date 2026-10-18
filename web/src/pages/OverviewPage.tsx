@@ -566,6 +566,20 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                 어디부터가 아시아 지수인지** 알 수 없다 — 서버는 이미 group 을 주는데
                 화면이 그걸 버리고 있었다.
               */}
+              {/*
+                **묶음을 여러 열로 흘린다** (2026-10-18 — 벤티지: "글로벌이 너무 길게 뻗쳐
+                있어서 보기가 안 이쁘거든").
+
+                묶음이 여섯(야간선물·환율·미국지수선물·금리·아시아·원자재)인데 세로로만
+                쌓으니 카드 하나가 화면 두 개 높이가 됐다. 옆 칸은 비어 있는데 이쪽만
+                길어지니 **벽돌쌓기 격자가 한쪽으로 쏠린다.**
+
+                묶음 하나하나는 서너 줄짜리 작은 덩어리라 옆으로 세워도 읽기가 안 깨진다.
+                칸 폭이 되는 만큼 2열·3열로 흐르고, 폰에서는 저절로 1열이 된다.
+                ⚠️ 묶음은 **쪼개지지 않는다** — 격자 칸 하나가 묶음 하나다. 단 줄로 흘리면
+                「원자재」 제목과 WTI 가 다른 열로 갈라질 수 있다.
+              */}
+              <div className="ov-g-grid">
               {[...new Set(gVisible.map((g) => g.group))].map((grp) => {
                 // 색은 서버가 정한다 — 리포트도 같은 색을 쓴다
                 const color = gVisible.find((g) => g.group === grp)?.color ?? "#8b98a5";
@@ -650,6 +664,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                 </div>
                 );
               })}
+              </div>
             </div>
           </OverviewCard>
         )}
