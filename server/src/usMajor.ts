@@ -167,7 +167,31 @@ function nightSessionDates(kst: Date): string[] {
 /** 지금 도는 중인가 — 18:00~05:00 KST. 화면의 `marketSession` 과 같은 시간표다 */
 function nightOpen(kst: Date): boolean {
   const h = kst.getHours();
-  return h >= 18 || h < 5;
+  /*
+   * ⚠️ **요일을 봐야 한다** (2026-10-18 — 벤티지: "장 마감은 −3.5% 인데 VNTG 에서는
+   * −3.13% 로 되어 있다가 일요일이나 돼서야 −3.5% 되더라").
+   *
+   * 예전엔 시각만 봤다(18시 이후 또는 5시 이전). 그래서 **토요일·일요일 저녁도 「열림」**
+   * 이었다 — 실제로 일요일 22:10 에 매분 한투를 묻고 있었다. 화면 쪽(`marketSession`)은
+   * 요일을 보는데 서버만 안 봤다. **같은 시간표를 두 곳이 다르게 들고 있었다.**
+   *
+   * 저녁(18시~)이면 **오늘이 거래일**이어야 하고, 새벽(~05시)이면 **어제가 거래일**이어야
+   * 한다 — 금요일 밤 세션은 토요일 새벽 5시까지 이어지기 때문이다.
+   */
+  if (h >= 18) return isTradingDay(kst);
+  if (h < 5) return isTradingDay(new Date(kst.getTime() - 86400_000));
+  return false;
+}
+
+/**
+ * 그 세션이 **닫히는 시각**(ms) — 시작일 다음 날 05:00 KST.
+ *
+ * 「마감 뒤에 받은 값인가」를 가리는 데 쓴다. 자세한 까닭은 `nightFutures` 안.
+ */
+function sessionCloseMs(session: string): number {
+  if (!/^\d{8}$/.test(session)) return 0;
+  const start = Date.parse(`${session.slice(0, 4)}-${session.slice(4, 6)}-${session.slice(6, 8)}T05:00:00+09:00`);
+  return start + 86400_000;
 }
 
 /**
@@ -224,10 +248,24 @@ export async function nightFutures(): Promise<UsMajorRow | null> {
   const session = dates[0] ?? "";
   const open = nightOpen(kst);
   if (nightCache && nightCache.session === session) {
-    /* 닫힌 판의 마지막 값은 안 변한다 — 다시 묻지 않는다 */
-    if (!open && nightCache.row) return nightCache.row;
+    /*
+     * **닫힌 판의 값은 안 변한다 — 다만 「마감 뒤에 받은 것」이어야 한다** (2026-10-18).
+     *
+     * 예전엔 닫혀 있으면 무조건 캐시를 돌려줬다. 그런데 그 캐시는 **마감 직전 폴링**으로
+     * 받은 값이다 — 05:00 정각의 최종 체결은 그 뒤에 나온다. 그래서 금요일 밤이 끝나고도
+     * 토요일 내내 **마감 몇 분 전 값**을 보여 줬고, 토요일 저녁에 (요일을 안 보던) 잘못된
+     * 「열림」 판정으로 다시 묻기 시작하면서 그제야 최종값으로 바뀌었다.
+     * 벤티지가 "일요일이나 돼서야 −3.5% 되더라"고 한 것이 그 경로다.
+     *
+     * 마감 시각보다 **나중에 받은 값**이면 그게 최종값이다 — 그때부터 캐시를 쓴다.
+     * 그 전이면 닫혀 있어도 **한 번 더 받는다**(받고 나면 다시 안 묻는다).
+     */
+    const settled = nightCache.at >= sessionCloseMs(session);
+    if (!open && nightCache.row && settled) return nightCache.row;
     /* 못 받았으면 매분 열한 번씩 되묻지 않는다 */
     if (!nightCache.row && Date.now() - nightCache.at < NIGHT_RETRY_MS) return null;
+    /* 마감값을 아직 못 박았으면 너무 자주 묻지 않게 같은 간격을 둔다 */
+    if (!open && nightCache.row && Date.now() - nightCache.at < NIGHT_RETRY_MS) return nightCache.row;
   }
   const got = await fetchNight(dates);
   nightCache = { session, row: got.row, at: Date.now(), 길: got.길 };
