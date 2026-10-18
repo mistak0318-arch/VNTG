@@ -535,6 +535,18 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
             updatedAt={global.updatedAt} onRefresh={global.refresh}
             loading={global.loading}
             error={global.error}
+            /*
+             * **두 칸을 쓴다** (2026-10-18 — 벤티지: "너무 커.. 공백이 너무 많아").
+             *
+             * 줄이 서른한 개인 카드를 **332px 짜리 한 칸**에 넣고 있었다. 그 폭에서는
+             * 무엇을 해도 세로로 길 수밖에 없다 — 여백을 깎아도 1,000px 였다. 칸을 둘
+             * 쓰면 본문이 677px 가 되고, 묶음을 좌우로 세워 **700px** 로 떨어진다.
+             *
+             * 10/18 낮에 한 칸 안에서 2열로 흘려 본 것이 실패한 이유가 이것이다:
+             * 폭은 그대로인데 열만 늘리니 이름 칸이 0 으로 접혔다. **폭을 먼저 늘려야**
+             * 열이 는다. 1100px 미만에서는 span2 가 없어 저절로 한 열로 돌아간다.
+             */
+            span2
           >
             <div className="ov-card-b">
               {gEdit && (
@@ -567,19 +579,18 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                 화면이 그걸 버리고 있었다.
               */}
               {/*
-                **묶음을 여러 열로 흘린다** (2026-10-18 — 벤티지: "글로벌이 너무 길게 뻗쳐
-                있어서 보기가 안 이쁘거든").
+                **옆으로 세우기는 못 쓴다 — 이름 칸이 사라진다** (2026-10-18).
 
-                묶음이 여섯(야간선물·환율·미국지수선물·금리·아시아·원자재)인데 세로로만
-                쌓으니 카드 하나가 화면 두 개 높이가 됐다. 옆 칸은 비어 있는데 이쪽만
-                길어지니 **벽돌쌓기 격자가 한쪽으로 쏠린다.**
+                카드가 길다고 묶음을 2열 격자로 흘려 봤다. 폭이 반이 되자 `.ov-g-nm`
+                (이름 칸, `flex:1 1 0; min-width:0; overflow:hidden`)이 **0까지 줄어들어
+                종목명이 통째로 안 보였고**, 이름이 두 줄로 접히면서 줄 높이는 오히려
+                늘었다. 값·등락 칸은 `flex:none` 이라 안 줄어드니, 좁아지는 몫을 전부
+                이름이 뒤집어쓴다 — 폭을 깎아선 안 되는 구조다.
 
-                묶음 하나하나는 서너 줄짜리 작은 덩어리라 옆으로 세워도 읽기가 안 깨진다.
-                칸 폭이 되는 만큼 2열·3열로 흐르고, 폰에서는 저절로 1열이 된다.
-                ⚠️ 묶음은 **쪼개지지 않는다** — 격자 칸 하나가 묶음 하나다. 단 줄로 흘리면
-                「원자재」 제목과 WTI 가 다른 열로 갈라질 수 있다.
+                그래서 **폭은 그대로 두고 줄을 납작하게** 한다 (overview.css 의
+                `.ov-g-row` 위아래 여백 7px → 3px). 스무 줄이면 160px 가 준다.
               */}
-              <div className="ov-g-grid">
+              <div className="ov-g-cols">
               {[...new Set(gVisible.map((g) => g.group))].map((grp) => {
                 // 색은 서버가 정한다 — 리포트도 같은 색을 쓴다
                 const color = gVisible.find((g) => g.group === grp)?.color ?? "#8b98a5";
@@ -620,7 +631,8 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                       hintPrice: g.price,
                     })
                   }
-                  title="눌러서 차트 보기"
+                  /* 심볼은 줄에서 뺐다(아래) — 무엇을 보는 줄인지는 여기에 남긴다 */
+                  title={g.symbol ? `${g.symbol} — 눌러서 차트 보기` : undefined}
                 >
                   {/* 미장 주요지수와 같은 신호등. 판단할 게 없으면 자리만 비워 둔다 */}
                   <span
@@ -629,8 +641,21 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                   />
                   <span className="ov-g-nm">
                     {g.label}
-                    {/* 금리(한투)는 심볼이 없다 — 그 자리에 「MM/DD 종가」. 오늘 값이면 비운다 */}
-                    <span className={`ov-g-tk${g.asOf && pastBadge(g.asOf) ? " ov-g-as" : ""}`}>{g.symbol || (g.asOf ? pastBadge(g.asOf) : "")}</span>
+                    {/*
+                      **야후 심볼은 안 적는다** (2026-10-18 — 벤티지: "공백이 너무 많아").
+
+                      여기가 길이의 진짜 원인이었다. `A01612`·`KRW=X`·`ES=F` 가 이름 옆에
+                      붙으면 칸에 안 들어가 **다음 줄로 접힌다.** 줄 하나가 35px, 서른한
+                      줄이면 카드가 1,050px — 화면 하나를 통째로 먹는다. 여백을 아무리
+                      깎아도 **두 줄인 한** 못 줄인다.
+
+                      심볼은 읽어서 할 일이 없는 글자다(선물 월물코드와 같은 이유).
+                      무엇을 보는 줄인지는 줄 전체의 풍선말에 남겼다.
+
+                      ⚠️ 날짜 꼬리표(「MM/DD 종가」)는 남긴다 — 한투 금리 줄은 **오늘
+                      값이 아닐 수 있고**, 그건 매번 달라지는 소식이라 눈에 보여야 한다.
+                    */}
+                    {g.asOf && pastBadge(g.asOf) && <span className="ov-g-tk ov-g-as">{pastBadge(g.asOf)}</span>}
                     {/*
                       「n분 전」 (2026-09-10) — 야후는 CME 선물·원자재를 10분, 채권·아시아 지수를
                       15~20분 지연으로 준다. 3분 넘게 묵은 값이면 몇 분 전 값인지 적어 둔다.

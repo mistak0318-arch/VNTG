@@ -170,9 +170,10 @@
   gap: 1px;
   background: var(--ov-line-soft);
 }
+/* 11px → 8px (2026-10-18) — 네모를 줄인다. 값 글자는 그대로 둔다 */
 .ov-idx {
   background: var(--ov-panel);
-  padding: 11px 12px;
+  padding: 8px 11px;
 }
 .ov-idx-name {
   font-size: 0.7333rem;
@@ -187,9 +188,9 @@
 }
 .ov-idx-chg { font-size: 0.7333rem; margin-top: 2px; }
 .ov-spark {
-  height: 26px;
+  height: 20px;
   width: 100%;
-  margin: 7px 0 2px;
+  margin: 4px 0 1px;
   opacity: 0.75;
   display: block;
 }
@@ -199,8 +200,8 @@
   gap: 9px;
   font-size: 0.6667rem;
   border-top: 1px solid var(--ov-line-soft);
-  padding-top: 6px;
-  margin-top: 4px;
+  padding-top: 4px;
+  margin-top: 3px;
 }
 
 .ov-idx-flow div {
@@ -224,7 +225,6 @@
 .ib .ov-idx-chg { font-size: 1rem; font-weight: 700; margin-top: 0; }
 .ib .ov-spark { height: 16px; margin: 4px 0 1px; }
 .ib .ov-idx-flow { gap: 6px; padding-top: 3px; margin-top: 3px; }
-.ib .ov-fut { margin-top: 1px; }
 .ib .ov-idx-note { font-size: 0.62rem; margin-top: 2px; }
 /* 등락표·거래대금도 한 단계 촘촘히 */
 .ib .ov-card-b { padding: 0; }
@@ -233,11 +233,17 @@
 .ib .ov-table td { padding: 4px 0; }
 
 /* ---------- 글로벌 ---------- */
+/*
+ * 위아래 여백 **7px → 3px** (2026-10-18 — 벤티지: "너무 커.. 공백이 너무 많아").
+ * 스무 줄짜리 카드라 한 줄에서 8px 를 덜면 **카드가 160px 짧아진다.** 글자 크기는
+ * 손대지 않는다 — 줄이 빽빽해져도 읽히는 건 글자가 그대로이기 때문이다.
+ * ⚠️ 폭을 깎는 쪽(2열 격자)으로는 못 줄인다 — `.ov-g-nm` 이 0 까지 접힌다.
+ */
 .ov-g-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 0;
+  padding: 3px 0;
   border-top: 1px solid var(--ov-line-soft);
 }
 /*
@@ -637,23 +643,24 @@ button.ov-li:focus-visible { outline: 2px solid var(--accent); outline-offset: -
 
 /* ---------- 증시자금동향 ---------- */
 .dep-row { display: flex; gap: 10px; }
+/* 여백·스파크를 한 단계 줄였다 (2026-10-18) — 두 칸뿐인데 카드가 지수 카드보다 길었다 */
 .dep-cell {
   flex: 1 1 0;
   min-width: 0;                      /* 격자 칸과 같은 이유 — 안 주면 조가 길어질 때 카드가 넘친다 */
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 8px 10px;
+  gap: 1px;
+  padding: 6px 9px;
   border: 1px solid var(--ov-line-soft);
   border-radius: 8px;
   background: var(--ov-panel-2);
 }
 .dep-k { font-size: 0.7rem; color: var(--ov-txt-2); }
-.dep-cell b.num { font-size: 1.25rem; font-weight: 700; line-height: 1.15; }
+.dep-cell b.num { font-size: 1.1rem; font-weight: 700; line-height: 1.15; }
 .dep-d { font-size: 0.72rem; font-weight: 600; }
-.dep-cell .ov-spark { height: 22px; margin-top: 2px; }
+.dep-cell .ov-spark { height: 16px; margin-top: 1px; }
 .dep-t { font-size: 0.66rem; color: var(--ov-txt-3); }
-.dep-funds { margin-top: 8px; font-size: 0.72rem; color: var(--ov-txt-2); }
+.dep-funds { margin-top: 5px; font-size: 0.72rem; color: var(--ov-txt-2); }
 
 /* ---------- 개미 토론 ---------- */
 .dsc { margin-top: 10px; border-top: 1px solid var(--ov-line-soft); padding-top: 8px; }

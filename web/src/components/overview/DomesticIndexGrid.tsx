@@ -132,14 +132,14 @@ export function DomesticIndexGrid({
               {fmtSigned(c.change)} {fmtPct(c.changeRate)}
             </div>
             <Sparkline values={c.sparkline} up={c.changeRate >= 0} />
-            {/* 베이시스·미결제는 시트에 있다 — 타일엔 월물 이름만 */}
-            {c.futures && (
-              <div className="ov-fut">
-                <span className="pt-n" title="눌러서 차트·베이시스·수급 시트">
-                  {c.futures.name}
-                </span>
-              </div>
-            )}
+            {/*
+              **월물코드 줄을 지웠다** (2026-10-18 — 벤티지: "선물에서는 F로 시작하는
+              종목번호랑 밑에 네이버 10분 그거 지워도 돼").
+
+              「F 202612」는 **읽어서 할 일이 없는 글자**다. 이 타일에서 알고 싶은 건
+              지수와 등락이고, 월물·베이시스·미결제는 눌러서 여는 시트에 다 있다.
+              점선 한 줄과 그 위아래 여백까지 12px 를 차지하고 있었다.
+            */}
             {/*
               선물 수급 — 네이버 새 API 값이 **억원 그대로**다 (2026-09-18 벤티지가 키움 앱과 나란히 찍음:
               키움 외국인 15,789 · 기관 15,706 vs 우리 15,451 · 15,423). 옛 표(계약)에 붙어 있던
@@ -159,23 +159,26 @@ export function DomesticIndexGrid({
                   </div>
                 );
                 return (
-                  <div className="ov-idx-flow num">
+                  <div
+                    className="ov-idx-flow num"
+                    title={`${futFlow.date} 억원 순매수 · 네이버 투자자별 매매동향(±10분 지연) — 키움 앱 선물 수급과 같은 단위`}
+                  >
                     {row("외국인", futFlow.foreign)}
                     {row("기관", futFlow.institution)}
                     {row("개인", futFlow.individual)}
                   </div>
                 );
               })()}
-            {c.code === "F" && (
-              <div
-                className="ov-idx-note ov-idx-note-1"
-                title="억원 순매수 · 네이버 투자자별 매매동향(±10분 지연) — 키움 앱 선물 수급과 같은 단위"
-              >
-                {futFlow
-                  ? `${futFlow.date.slice(5).replace("-", "/")} 순매수 · 네이버 ±10분`
-                  : futEmpty
-                    ? "선물 수급 없음 — 네이버 응답이 비었다"
-                    : "선물 수급 불러오는 중…"}
+            {/*
+              **출처 줄은 값이 없을 때만** (2026-10-18).
+
+              「10/16 순매수 · 네이버 ±10분」은 늘 같은 글자라 한 번 읽으면 그 뒤로는
+              자리만 먹는다. 날짜와 출처는 **수급 줄의 풍선말**로 옮겼다 — 궁금할 때만
+              들여다보면 된다. 못 받았을 때의 알림은 남긴다: 그건 매번 다른 소식이다.
+            */}
+            {c.code === "F" && !futFlow && (
+              <div className="ov-idx-note ov-idx-note-1">
+                {futEmpty ? "선물 수급 없음 — 네이버 응답이 비었다" : "선물 수급 불러오는 중…"}
               </div>
             )}
             {f && (
