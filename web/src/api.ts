@@ -4569,6 +4569,12 @@ export interface CalendarEvent {
    * 저장 요청에 실어 보내면 안 된다.
    */
   span?: { i: number; of: number };
+  /**
+   * **같은 날 같은 제목이 몇 건이었나** — 서버에 이런 값은 없다 (2026-10-18).
+   * 증권사 캘린더·구독·직접 입력이 같은 사건을 따로 넣어 둔 것을 화면에서만 하나로
+   * 접고, 접힌 수를 여기 적는다. 저장 요청에 실어 보내면 안 된다.
+   */
+  dup?: number;
   title: string;
   kind: EventKind;
   memo?: string;

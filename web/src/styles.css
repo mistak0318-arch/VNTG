@@ -3529,9 +3529,11 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 .cal-toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;             /* 보기 넷 + 「중요만」 이 더해져 폰에서는 두 줄이 된다 */
   gap: 8px;
   margin-bottom: 10px;
 }
+.cal-onlyimp.active { color: var(--red); border-color: var(--red); }
 .cal-month {
   font-size: 1.0667rem;
   font-weight: 700;
@@ -3562,11 +3564,12 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 }
 .cal-wd.sun { color: var(--red); }
 .cal-wd.sat { color: var(--blue); }
+/* 칸을 조금 키우고 여백을 줄였다 (2026-10-18) — 같은 높이에 한 줄이 더 들어간다 */
 .cal-cell {
   background: var(--panel);
   border: none;
-  min-height: 78px;
-  padding: 5px 5px 4px;
+  min-height: 84px;
+  padding: 4px 4px 3px;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -3585,7 +3588,7 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 .cal-events { display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
 .cal-chip {
   font-size: 0.6667rem;
-  padding: 1px 4px;
+  padding: 1px 3px;
   border-radius: 3px;
   white-space: nowrap;
   overflow: hidden;
@@ -3593,9 +3596,28 @@ body.col-resizing { user-select: none; cursor: col-resize; }
   border-left: 2px solid;
 }
 /*
- * 종류별 색 — **`calendarKinds.ts` 의 KIND_META 와 같은 값이다** (2026-08-28).
- * 한쪽만 고치면 폼의 미리보기와 달력의 칩 색이 어긋난다.
+ * 종류 색은 **칩이 변수로 들고 온다** (2026-10-18 — `kindVars()`).
+ *
+ * 밑의 종류별 규칙은 2026-08-28 에 KIND_META 를 손으로 베껴 둔 것이다. 그 뒤
+ * 종류가 다섯(공개·회의·채권·파생·주간) 늘었는데 여기를 안 고쳐서, **그 다섯은
+ * 색 없는 회색 칩**이었다 — 벤티지 화면의 「📊 공개」·「🏛 회의」가 그것이다.
+ * 이제 색은 `var(--k)` 하나로 오고, 밑의 여섯은 같은 값이라 그대로 둔다
+ * (변수를 못 받는 자리의 안전망).
  */
+.cal-chip { background: color-mix(in srgb, var(--k, var(--muted)) 16%, transparent); border-color: var(--k, var(--border)); }
+.cal-badge { background: color-mix(in srgb, var(--k, var(--muted)) 20%, transparent); color: var(--k, var(--muted)); }
+/* 중요도 상 — 막대를 두껍게 하고 글자를 굵게. 월 칸에서 눈이 먼저 걸린다 */
+.cal-chip.imp { border-left-width: 4px; font-weight: 700; }
+/* 월 칸에서 못 보여 준 것들의 종류 점 — 「+8」 이 무엇이었는지 말한다 */
+.cal-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--k, var(--muted));
+  margin-right: 2px;
+  vertical-align: 1px;
+}
 .cal-chip.market     { background: rgba(76,141,255,.16);  border-color: #4c8dff; }
 .cal-chip.earnings   { background: rgba(245,197,66,.16);  border-color: #f5c542; }
 .cal-chip.holiday    { background: rgba(255,92,92,.16);   border-color: #ff5c5c; }
@@ -3605,7 +3627,7 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 .cal-chip-icon { font-style: normal; margin-right: 2px; }
 /* 앞 시간대에서 이어진 줄 — 시작한 자리를 알아보게 흐리게 */
 .cal-chip.cont { opacity: 0.55; }
-.cal-more { font-size: 0.6333rem; color: var(--muted); }
+.cal-more { font-size: 0.6333rem; color: var(--muted); white-space: nowrap; overflow: hidden; }
 .cal-list { display: flex; flex-direction: column; }
 .cal-item {
   display: flex;
@@ -3742,6 +3764,12 @@ body.col-resizing { user-select: none; cursor: col-resize; }
     flex: none;
   }
   .cal-more { font-size: 0.5667rem; line-height: 6px; }
+  /*
+   * 폰에서는 **요약 점을 안 찍는다** (2026-10-18). 여기선 칩 자체가 이미 종류색
+   * 점이라, 숨은 것들의 점을 또 찍으면 같은 크기 다른 뜻인 점이 한 칸에 두 벌
+   * 늘어선다 — 세어 보기 전에는 구별이 안 된다. 폰에서 한 달을 읽는 자리는 「목록」이다.
+   */
+  .cal-dot { display: none; }
   .cal-day { font-size: 0.8rem; }
   /* 요일 머리글도 한 글자라 좁혀도 된다 */
   .cal-wd { font-size: 0.6667rem; padding: 4px 0; }
@@ -6242,14 +6270,24 @@ tr.drag-src td { opacity: 0.45; }
 .cal-chip { cursor: pointer; }
 
 /* ── 캘린더 전면 개편 (2026-08-27) — 일정 카드·할 일·메모 ── */
+/*
+ * **카드가 아니라 줄이다** (2026-10-18 — 벤티지: "한 눈에 안 들어오네").
+ *
+ * 제목 한 줄짜리 일정이 테두리·둥근 모서리·배경·여백을 두르고 **60px** 를 썼다.
+ * 10월 22일처럼 열한 건인 날은 그것만 660px 다. 줄로 바꾸면 28px — 한 화면에
+ * 다 들어온다. 「무엇이 있나」를 읽는 곳이지 카드를 감상하는 곳이 아니다.
+ */
 .cal-ev {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 6px 8px;
-  margin-bottom: 6px;
-  background: var(--panel);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  padding: 5px 2px;
+  margin-bottom: 0;
+  background: none;
 }
-.cal-ev.editing { border-color: var(--blue); }
+.cal-ev:last-child { border-bottom: none; }
+/* 고치는 중인 줄만 눈에 띄게 — 테두리 대신 왼쪽 막대 */
+.cal-ev.editing { background: color-mix(in srgb, var(--blue) 10%, transparent); box-shadow: inset 2px 0 0 var(--blue); }
 .cal-ev.done .cal-item-title { text-decoration: line-through; color: var(--muted); }
 /*
  * 줄 머리는 **넘치면 다음 줄로** (2026-09-13). wrap 이 없어서 폰에서는 배지·제목·단추가 한 줄에
@@ -6258,17 +6296,91 @@ tr.drag-src td { opacity: 0.45; }
  */
 .cal-ev-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .cal-ev-head .cal-item-title { flex: 1 1 12rem; min-width: 0; text-align: left; }
-/* 메모가 제 줄을 갖는다 — 한 줄 꼬리표로 붙이면 긴 메모는 못 읽는다 */
+/*
+ * 메모는 **두 줄까지만** (2026-10-18). 제 줄은 갖되 상자는 안 두른다 — 목록에서는
+ * 「메모가 있구나」와 첫머리만 알면 되고, 전문은 제목을 눌러 여는 창이 맡는다.
+ */
 .cal-ev-memo {
-  margin-top: 4px;
-  padding: 5px 8px;
-  background: var(--panel-2);
-  border-radius: 6px;
-  font-size: 0.78rem;
+  margin-top: 2px;
+  padding: 0 0 0 2px;
+  background: none;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 0.74rem;
   color: var(--muted);
   white-space: pre-wrap;
   word-break: break-word;
 }
+/* ===== 목록 보기 (2026-10-18) — 한 달을 날짜별 한 줄씩 =====
+   왼쪽 날짜 칸은 고정 폭, 오른쪽이 일정. 칸 폭에 매이지 않아 제목이 안 잘린다. */
+.cal-agenda {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.cal-ag-day {
+  display: grid;
+  grid-template-columns: 2.9rem minmax(0, 1fr);
+  border-top: 1px solid var(--border);
+}
+.cal-ag-day:first-child { border-top: none; }
+.cal-ag-day.today { background: color-mix(in srgb, var(--blue) 9%, transparent); }
+.cal-ag-day.selected { box-shadow: inset 3px 0 0 var(--blue); }
+.cal-ag-date {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0;
+  padding: 5px 0;
+  background: var(--panel-2);
+  border: none;
+  border-right: 1px solid var(--border);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+.cal-ag-date b { font-size: 0.95rem; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.cal-ag-date i { font-style: normal; font-size: 0.62rem; color: var(--muted); }
+.cal-ag-date i.sun { color: var(--red); }
+.cal-ag-date i.sat { color: var(--blue); }
+.cal-ag-rows { display: flex; flex-direction: column; min-width: 0; }
+.cal-ag-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 8px;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--border);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cal-ag-rows > .cal-ag-row:first-child { border-top: none; }
+.cal-ag-row:hover { background: var(--panel-2); }
+/* 중요도는 맨 앞 — 눈이 왼쪽 끝을 훑으며 내려간다. 자리는 비어도 지킨다 */
+.cal-ag-imp { flex: 0 0 0.8rem; font-size: 0.72rem; font-weight: 800; text-align: center; }
+.cal-ag-imp.high { color: var(--red); }
+.cal-ag-imp.mid { color: var(--warn); }
+.cal-ag-k {
+  flex: 0 0 2.7rem;
+  font-size: 0.6rem;
+  text-align: center;
+  padding: 1px 0;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--k, var(--muted)) 18%, transparent);
+  color: var(--k, var(--muted));
+}
+.cal-ag-t { flex: 1 1 auto; min-width: 0; font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-ag-time { flex: none; font-style: normal; font-size: 0.66rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+
 .cal-memo-input { width: 100%; resize: vertical; margin-bottom: 6px; font: inherit; font-size: 0.8rem; }
 .cal-plan { max-width: 46rem; }
 .cal-dday.late { color: var(--red); border-color: var(--red); }

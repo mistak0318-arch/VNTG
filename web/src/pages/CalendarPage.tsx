@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { WeekBrief } from "../components/WeekBrief";
 import { useSheetBack } from "../useSheetBack";
 import { api, type CalendarEvent, type EventKind } from "../api";
-import { guessKind, kindMeta, KIND_ORDER, span, timeText, toHhmm, toMin } from "../calendarKinds";
+import { guessKind, kindMeta, kindVars, KIND_ORDER, span, timeText, toHhmm, toMin } from "../calendarKinds";
 import { DartTodayPanel } from "../components/DartTodayPanel";
 import { CalendarImageImport } from "../components/CalendarImageImport";
 import { EconomicCalendarCard } from "../components/EconomicCalendarCard";
@@ -22,15 +22,25 @@ function Chip({
   e,
   onOpen,
   showTime = true,
+  showIcon = true,
 }: {
   e: CalendarEvent;
   onOpen: (e: CalendarEvent) => void;
   showTime?: boolean;
+  /**
+   * **월 칸에서는 글머리를 안 쓴다** (2026-10-18 — 벤티지: "한 눈에 안 들어오네").
+   *
+   * 칸 하나가 110px 인데 이모지 하나가 16px 다. 그 자리에 **두 글자**가 더 들어간다.
+   * 「📈 중국 국경…」 보다 「중국 국경절 휴…」 가 낫다 — 종류는 왼쪽 색 막대가 이미
+   * 말하고 있고, 이모지는 그 말을 한 번 더 한 것이다. 주·일 보기는 칸이 넓어 그대로 둔다.
+   */
+  showIcon?: boolean;
 }) {
   const meta = kindMeta(e.kind);
   return (
     <span
-      className={`cal-chip ${e.kind}${e.todo && e.done ? " done" : ""}`}
+      className={`cal-chip ${e.kind}${e.todo && e.done ? " done" : ""}${e.importance === "high" ? " imp" : ""}`}
+      style={kindVars(e.kind)}
       title={`${timeText(e)} ${e.title}${e.memo ? ` — ${e.memo}` : ""} (눌러서 자세히)`}
       onClick={(ev) => {
         ev.stopPropagation(); // 날짜 선택까지 겹치지 않게
@@ -38,11 +48,15 @@ function Chip({
       }}
     >
       {showTime && e.time && <i className="cal-chip-time">{timeText(e)}</i>}
-      <i className="cal-chip-icon">{e.todo ? (e.done ? "✅" : "☐") : meta.icon}</i>
+      {showIcon && <i className="cal-chip-icon">{e.todo ? (e.done ? "✅" : "☐") : meta.icon}</i>}
+      {/* 글머리를 끈 자리에서도 할 일 여부는 알아야 한다 — 네모 하나는 이모지보다 좁다 */}
+      {!showIcon && e.todo && <i className="cal-chip-icon">{e.done ? "✅" : "☐"}</i>}
       {e.repeat ? "↻" : ""}
       {e.title}
       {/* 며칠짜리면 「2/3」 — 이게 없으면 같은 제목이 사흘 내리 있는 것처럼 보인다 */}
       {e.span && <i className="cal-chip-span">{e.span.i}/{e.span.of}</i>}
+      {/* 같은 날 같은 제목이 여럿이면 하나로 접고 숫자만 (byDate 의 foldDupes) */}
+      {e.dup && e.dup > 1 && <i className="cal-chip-span">×{e.dup}</i>}
     </span>
   );
 }
@@ -267,8 +281,42 @@ const CAL_TABS: { key: CalTab; label: string }[] = [
   { key: "import", label: "⬇ 가져오기" },
 ];
 
-/** 달력 보기 — 월(전체) · 주(한눈에) · 일(시간 단위 입력) (2026-08-27, 구글 캘린더처럼) */
-type CalView = "month" | "week" | "day";
+/**
+ * 달력 보기 — 월(전체) · 주(한눈에) · 일(시간 단위 입력) (2026-08-27, 구글 캘린더처럼)
+ * `list`(목록) 은 2026-10-18 에 더했다 — 아래 `CAL_VIEWS` 참고.
+ */
+type CalView = "month" | "week" | "day" | "list";
+
+const CAL_VIEWS: { key: CalView; label: string }[] = [
+  { key: "month", label: "월" },
+  { key: "week", label: "주" },
+  { key: "day", label: "일" },
+  /*
+   * **목록** (2026-10-18 — 벤티지: "모바일도 이게 한 눈에 안 들어오네").
+   *
+   * 폰의 월 칸은 45px 라 글자를 못 쓴다. 그래서 여태 **점만** 찍었는데, 점은
+   * 「무언가 있다」까지만 말하고 「무엇」을 안 말한다. 날짜를 하나하나 눌러 봐야
+   * 알 수 있으니 한 달을 훑으려면 서른 번을 눌러야 했다.
+   *
+   * 목록은 그 달의 일정을 **날짜별 한 줄씩** 세로로 늘어놓는다. 손가락 하나로
+   * 한 달이 읽힌다 — 폰 달력 앱이 기본값으로 쓰는 까닭이다.
+   */
+  { key: "list", label: "목록" },
+];
+
+const VIEW_KEY = "cal.view";
+const ONLY_IMP_KEY = "cal.onlyImp";
+
+/** 좁은 화면이면 목록으로 시작한다 — 고른 적이 있으면 그걸 따른다 */
+function initialView(): CalView {
+  try {
+    const saved = localStorage.getItem(VIEW_KEY);
+    if (saved && CAL_VIEWS.some((v) => v.key === saved)) return saved as CalView;
+  } catch {
+    /* 사생활 보호 창에서는 못 읽는다 — 그래도 달력은 떠야 한다 */
+  }
+  return typeof window !== "undefined" && window.innerWidth < 700 ? "list" : "month";
+}
 
 /**
  * CSV 양식 내려받기 — **AI 에게 그대로 주기 위한 파일.**
@@ -334,7 +382,27 @@ export function CalendarPage() {
     current: tab,
     onChange: (k) => setTab(k as CalTab),
   });
-  const [view, setView] = useState<CalView>("month");
+  const [view, setView] = useState<CalView>(initialView);
+  /*
+   * **중요만 보기** (2026-10-18). 10월 22일에 일정이 열한 건이다 — 그 중 아홉은
+   * 「미국 9월 선행지수」 같은 참고용이고, 눈이 가야 할 것은 금통위와 DevDay 둘이다.
+   * 고른 상태는 기기에 남긴다(매번 다시 누르면 안 쓰게 된다).
+   */
+  const [onlyImp, setOnlyImp] = useState(() => {
+    try {
+      return localStorage.getItem(ONLY_IMP_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(VIEW_KEY, view);
+      localStorage.setItem(ONLY_IMP_KEY, onlyImp ? "1" : "0");
+    } catch {
+      /* 못 써도 이번 세션은 그대로 쓴다 */
+    }
+  }, [view, onlyImp]);
   const [cursor, setCursor] = useState(() => new Date());
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -549,6 +617,38 @@ export function CalendarPage() {
       }
     }
     for (const list of m.values()) list.sort((a, b) => rank(a) - rank(b));
+    /*
+     * **같은 날 같은 제목은 하나로 접는다** (2026-10-18 — 벤티지의 10/22 화면에
+     * 「한국 금융통화위원회」가 두 줄, 「한국은행 금통위」가 또 두 줄이었다).
+     *
+     * 한 사건이 증권사 캘린더·구독·직접 입력 세 길로 들어오면 세 줄이 된다. 지우면
+     * 다음 동기화 때 되살아나므로 **화면에서만** 접는다. 접힌 수는 `dup` 으로 적어
+     * 「×2」를 붙인다 — 조용히 사라지면 「왜 하나밖에 없지」가 된다.
+     *
+     * ⚠️ 제목이 글자 그대로 같을 때만 접는다. 「금통위 (기준금리)」와 「금통위
+     * 금리결정」은 사람 눈에 같은 일이지만, 비슷한 것까지 묶기 시작하면 **다른
+     * 일정을 지우는** 쪽으로 틀린다. 띄어쓰기만 무시한다.
+     * ⚠️ 대표로 남기는 것은 **메모가 있는 쪽**이다 — 메모가 그 줄의 알맹이다.
+     */
+    for (const [key, list] of m) {
+      const seen = new Map<string, CalendarEvent>();
+      const out: CalendarEvent[] = [];
+      for (const e of list) {
+        const k = `${e.kind}\u0000${e.title.replace(/\s+/g, "")}`;
+        const had = seen.get(k);
+        if (!had) {
+          const copy = { ...e };
+          seen.set(k, copy);
+          out.push(copy);
+          continue;
+        }
+        had.dup = (had.dup ?? 1) + 1;
+        /* 메모가 있는 쪽을 대표로 — 제목은 같으니 알맹이는 메모에 있다 */
+        if (!had.memo && e.memo) had.memo = e.memo;
+        if (!had.time && e.time) had.time = e.time;
+      }
+      if (out.length !== list.length) m.set(key, out);
+    }
     return m;
   }, [events]);
 
@@ -712,7 +812,8 @@ export function CalendarPage() {
 
   /** 보기 단위로 이동 — 월은 ±1개월, 주는 ±7일, 일은 ±1일. 주·일은 선택일이 기준이다 */
   function shiftView(delta: number) {
-    if (view === "month") {
+    /* 목록은 그 달 전체를 보여 주므로 월과 같이 넘긴다 */
+    if (view === "month" || view === "list") {
       shiftMonth(delta);
       return;
     }
@@ -734,6 +835,15 @@ export function CalendarPage() {
 
   const grid = buildGrid(cursor);
   const todayStr = ymd(new Date());
+  /**
+   * 「중요만」을 적용한 목록 — 월 칸과 목록 보기가 같이 쓴다 (2026-10-18).
+   *
+   * 상·중만 남긴다. 「안 정함」을 같이 남기면 증권사 캘린더에서 들어온 것이 거의
+   * 다 안 정함이라 거르나 마나다. 중요한 게 하나도 없는 날은 **비운다** — 그게
+   * 이 단추를 누른 뜻이다. 날짜 숫자는 그대로 있으니 날이 사라지진 않는다.
+   */
+  const vis = (list: CalendarEvent[]): CalendarEvent[] =>
+    onlyImp ? list.filter((e) => e.importance === "high" || e.importance === "mid") : list;
   const selectedEvents = byDate.get(selected) ?? [];
 
   return (
@@ -766,7 +876,7 @@ export function CalendarPage() {
               ‹ 이전
             </button>
             <span className="cal-month">
-              {view === "month"
+              {view === "month" || view === "list"
                 ? `${cursor.getFullYear()}년 ${cursor.getMonth() + 1}월`
                 : view === "week"
                   ? (() => {
@@ -790,15 +900,20 @@ export function CalendarPage() {
             >
               오늘
             </button>
-            {/* 보기 전환 (2026-08-27) — 월=전체, 주=한눈에, 일=시간 단위 입력 */}
+            {/*
+              **중요만** (2026-10-18) — 월 칸과 목록에만 건다. 주·일 보기는 시간표라
+              줄이 사라지면 빈 시간처럼 보여 거짓말이 된다.
+            */}
+            <button
+              className={`filter-btn cal-onlyimp${onlyImp ? " active" : ""}`}
+              onClick={() => setOnlyImp((v) => !v)}
+              title={onlyImp ? "모든 일정 보기" : "중요도 상·중만 보기"}
+            >
+              ‼ 중요만
+            </button>
+            {/* 보기 전환 (2026-08-27) — 월=전체, 주=한눈에, 일=시간 단위, 목록=한 달 훑기 */}
             <span className="cal-views">
-              {(
-                [
-                  { key: "month", label: "월" },
-                  { key: "week", label: "주" },
-                  { key: "day", label: "일" },
-                ] as const
-              ).map((v) => (
+              {CAL_VIEWS.map((v) => (
                 <button
                   key={v.key}
                   className={`filter-btn${view === v.key ? " active" : ""}`}
@@ -834,16 +949,95 @@ export function CalendarPage() {
                   <span className={`cal-day${dow === 0 ? " sun" : dow === 6 ? " sat" : ""}`}>
                     {d.getDate()}
                   </span>
+                  {/*
+                    **못 보여 주는 것도 종류는 말한다** (2026-10-18).
+
+                    여태 「+8」 하나였다. 그 여덟이 실적인지 휴장인지 모르니, 날짜를
+                    눌러 보기 전에는 그 날의 성격을 못 읽는다. 이제 숨은 것들의
+                    **종류 색 점**을 같이 찍는다 — 노랑이 셋이면 실적 발표 날이다.
+                  */}
                   <span className="cal-events">
-                    {list.slice(0, 3).map((e) => (
-                      <Chip e={e} key={e.id} onOpen={setDetail} showTime={false} />
+                    {vis(list).slice(0, 3).map((e) => (
+                      <Chip e={e} key={e.id} onOpen={setDetail} showTime={false} showIcon={false} />
                     ))}
-                    {list.length > 3 && <span className="cal-more">+{list.length - 3}</span>}
+                    {vis(list).length > 3 && (
+                      <span className="cal-more">
+                        {[...new Set(vis(list).slice(3).map((e) => e.kind))].slice(0, 5).map((k) => (
+                          <i className="cal-dot" key={k} style={kindVars(k)} title={kindMeta(k).label} />
+                        ))}
+                        +{vis(list).length - 3}
+                      </span>
+                    )}
                   </span>
                 </button>
               );
             })}
           </div>
+          )}
+
+          {/*
+            ── 목록 보기 (2026-10-18 — 벤티지: "모바일도 이게 한 눈에 안 들어오네") ──
+
+            한 달을 **날짜별 한 줄씩** 세로로 늘어놓는다. 왼쪽에 날짜·요일이 서고
+            오른쪽에 그 날의 일정이 줄줄이 선다. 칸 폭에 매이지 않으니 제목이 안
+            잘린다 — 월 칸이 못 하는 일이 바로 그것이다.
+
+            ⚠️ **일정이 없는 날은 건너뛴다.** 서른한 줄을 빠짐없이 적으면 빈 날이
+            화면의 절반을 먹어, 정작 읽을 것이 멀어진다. 달력 모양이 필요하면 「월」이
+            있다.
+          */}
+          {view === "list" && (
+            <div className="cal-agenda">
+              {(() => {
+                const days = grid
+                  .filter((d): d is Date => Boolean(d))
+                  .map((d) => ({ d, key: ymd(d), list: vis(byDate.get(ymd(d)) ?? []) }))
+                  .filter((x) => x.list.length > 0);
+                if (days.length === 0) {
+                  return (
+                    <div className="empty">
+                      {onlyImp ? "이 달에 중요 표시한 일정이 없습니다 — 「중요만」을 끄면 다 보입니다." : "이 달에 등록된 일정이 없습니다."}
+                    </div>
+                  );
+                }
+                return days.map(({ d, key, list }) => (
+                  <div className={`cal-ag-day${key === todayStr ? " today" : ""}${key === selected ? " selected" : ""}`} key={key}>
+                    <button
+                      className="cal-ag-date"
+                      onClick={() => {
+                        setSelected(key);
+                        setFormDate(key);
+                      }}
+                      title="눌러서 이 날을 고릅니다"
+                    >
+                      <b>{d.getDate()}</b>
+                      <i className={d.getDay() === 0 ? "sun" : d.getDay() === 6 ? "sat" : ""}>
+                        {WEEKDAYS[d.getDay()]}
+                      </i>
+                    </button>
+                    <div className="cal-ag-rows">
+                      {list.map((e) => (
+                        <button className="cal-ag-row" key={e.id} onClick={() => setDetail(e)}>
+                          {/* 중요도는 **맨 앞**이다 — 눈이 왼쪽 끝을 훑으며 내려가기 때문 */}
+                          <span className={`cal-ag-imp ${e.importance ?? "none"}`}>
+                            {e.importance === "high" ? "‼" : e.importance === "mid" ? "!" : ""}
+                          </span>
+                          <span className="cal-ag-k" style={kindVars(e.kind)}>
+                            {kindMeta(e.kind).label}
+                          </span>
+                          <span className="cal-ag-t">
+                            {e.title}
+                            {e.span && <i className="cal-chip-span">{e.span.i}/{e.span.of}</i>}
+                            {e.dup && e.dup > 1 && <i className="cal-chip-span">×{e.dup}</i>}
+                          </span>
+                          {e.time && <i className="cal-ag-time">{timeText(e)}</i>}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ));
+              })()}
+            </div>
           )}
 
           {/*
@@ -1026,6 +1220,10 @@ export function CalendarPage() {
                     <button className="cal-item-title link-btn" onClick={() => setDetail(e)} title="자세히 보기">
                       {e.time && <b>{timeText(e)} </b>}
                       {e.title}
+                      {/* 같은 날 같은 제목을 접은 자리 — 몇 건이었는지는 남긴다 (2026-10-18) */}
+                      {e.dup && e.dup > 1 && (
+                        <i className="cal-chip-span" title={`같은 제목이 ${e.dup}건 들어와 하나로 묶었습니다`}>×{e.dup}</i>
+                      )}
                     </button>
                     {/* 가져온 일정(source 있음)도 고칠 수 있다 — 단 다음 동기화 때 원본으로 돌아간다 */}
                     <button className="row-del-btn" onClick={() => startEdit(e)} title="수정">

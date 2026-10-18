@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import type { CalendarEvent, EventKind } from "./api";
 
 /**
@@ -16,6 +17,18 @@ export interface KindMeta {
   icon: string;
   /** 칩·배지 색. CSS 는 `.cal-chip.<key>` 로도 같은 색을 쓴다 */
   color: string;
+}
+
+/**
+ * 칩·배지에 **종류 색을 변수로 건넨다** (2026-10-18).
+ *
+ * 여태 `.cal-chip.market { background: … }` 처럼 CSS 에 색을 한 벌 더 적어 뒀다.
+ * 그래서 종류를 다섯(공개·회의·채권·파생·주간) 늘렸을 때 CSS 를 안 고쳤고, 그
+ * 다섯은 **색 없는 회색 칩**으로 반년을 떠 있었다. 색을 한 곳에서만 정하면 그 일이
+ * 구조적으로 안 생긴다 — 칩은 `var(--k)` 만 읽는다.
+ */
+export function kindVars(kind: EventKind | string): CSSProperties {
+  return { ["--k" as string]: kindMeta(kind as EventKind).color } as CSSProperties;
 }
 
 export const KIND_META: Record<EventKind, KindMeta> = {
