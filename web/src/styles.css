@@ -6380,6 +6380,20 @@ tr.drag-src td { opacity: 0.45; }
 }
 .cal-ag-t { flex: 1 1 auto; min-width: 0; font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cal-ag-time { flex: none; font-style: normal; font-size: 0.66rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* 접어 둔 지난 날을 펴는 줄 — 목록 맨 위에 한 줄 (2026-10-19) */
+.cal-ag-past {
+  width: 100%;
+  padding: 6px 8px;
+  background: var(--panel-2);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.72rem;
+  text-align: center;
+  cursor: pointer;
+}
+.cal-ag-past:hover { color: var(--text); background: var(--panel); }
 
 .cal-memo-input { width: 100%; resize: vertical; margin-bottom: 6px; font: inherit; font-size: 0.8rem; }
 .cal-plan { max-width: 46rem; }

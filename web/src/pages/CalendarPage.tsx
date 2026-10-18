@@ -395,6 +395,13 @@ export function CalendarPage() {
       return false;
     }
   });
+  /*
+   * **목록은 오늘부터 시작한다** (2026-10-19 — 벤티지: "무조건 1일부터 나오니깐
+   * 쭉 내려야 하네"). 지난 날을 접어 둔다 — 접으면 목록 맨 위가 곧 오늘이라
+   * 스크롤이 필요 없다. 화면을 오늘로 **튕겨 보내는** 쪽은 안 쓴다: 그러면 머리줄
+   * (이전·다음·중요만)이 위로 밀려 나가고, 지난 일정은 아예 못 보게 된다.
+   */
+  const [showPast, setShowPast] = useState(false);
   useEffect(() => {
     try {
       localStorage.setItem(VIEW_KEY, view);
@@ -812,6 +819,8 @@ export function CalendarPage() {
 
   /** 보기 단위로 이동 — 월은 ±1개월, 주는 ±7일, 일은 ±1일. 주·일은 선택일이 기준이다 */
   function shiftView(delta: number) {
+    /* 달을 옮기면 지난 날 접기를 처음으로 되돌린다 — 지난달을 펼친 채 이번 달로 오면 또 1일부터다 */
+    setShowPast(false);
     /* 목록은 그 달 전체를 보여 주므로 월과 같이 넘긴다 */
     if (view === "month" || view === "list") {
       shiftMonth(delta);
@@ -896,6 +905,8 @@ export function CalendarPage() {
                 setCursor(new Date(now.getFullYear(), now.getMonth(), 1));
                 setSelected(ymd(now));
                 setFormDate(ymd(now));
+                /* 「오늘」은 오늘로 돌아오는 단추다 — 펼쳐 둔 지난 날도 다시 접는다 */
+                setShowPast(false);
               }}
             >
               오늘
@@ -1000,7 +1011,26 @@ export function CalendarPage() {
                     </div>
                   );
                 }
-                return days.map(({ d, key, list }) => (
+                /*
+                 * **지난 날은 접는다** (2026-10-19). 보고 있는 달에 오늘이 들어 있을
+                 * 때만이다 — 지난달·다음달을 열면 접을 「지난」이 그 달의 전부이거나
+                 * 아예 없어서, 같은 규칙을 걸면 빈 화면이 되거나 하나 마나가 된다.
+                 *
+                 * 지운 게 아니라 접은 것이므로 **몇 건을 접었는지 적고** 단추를 둔다.
+                 * 수가 없으면 「뭔가 안 보인다」가 된다.
+                 */
+                const past = days.filter((x) => x.key < todayStr);
+                const foldable = !showPast && past.length > 0 && past.length < days.length;
+                const shown = foldable ? days.filter((x) => x.key >= todayStr) : days;
+                const foldedEvents = past.reduce((n, x) => n + x.list.length, 0);
+                return (
+                  <>
+                {foldable && (
+                  <button className="cal-ag-past" onClick={() => setShowPast(true)}>
+                    ↑ 지난 {past.length}일 · {foldedEvents}건 보기
+                  </button>
+                )}
+                {shown.map(({ d, key, list }) => (
                   <div className={`cal-ag-day${key === todayStr ? " today" : ""}${key === selected ? " selected" : ""}`} key={key}>
                     <button
                       className="cal-ag-date"
@@ -1035,7 +1065,9 @@ export function CalendarPage() {
                       ))}
                     </div>
                   </div>
-                ));
+                ))}
+                  </>
+                );
               })()}
             </div>
           )}
