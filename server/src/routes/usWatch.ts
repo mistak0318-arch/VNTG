@@ -3,6 +3,7 @@ import {
   addGroup,
   addStock,
   evaluateGroups,
+  groupsNoWait,
   invalidateUsCache,
   reorderCachedGroup,
   listGroups,
@@ -158,7 +159,8 @@ export function createUsWatchRouter(): Router {
         groups.sort((a, b) => (rank.get(a.id) ?? 999) - (rank.get(b.id) ?? 999));
       });
       if (!ok) invalidateUsCache();
-      res.json(await evaluateGroups());
+      /* 캐시를 그 자리에서 고쳤으면 기다리지 않는다 (2026-10-19, `groupsNoWait` 주석) */
+      res.json(ok ? await groupsNoWait() : await evaluateGroups());
     } catch (err) {
       next(err);
     }
@@ -174,7 +176,12 @@ export function createUsWatchRouter(): Router {
        * 손에 있는 값의 줄 순서만 고쳐 주면 즉시 끝난다.
        */
       await reorderCachedGroup(req.params.id, symbols);
-      res.json(await evaluateGroups());
+      /*
+       * **그리고 기다리지 않는다** (2026-10-19). 여기서 `evaluateGroups()` 를 부르면
+       * 진행 중인 재수집에 붙잡혀 ▲ 한 번에 **12초**가 걸렸다(실측) — 캐시를 안 버린
+       * 보람이 마지막 한 줄에서 사라졌다.
+       */
+      res.json(await groupsNoWait());
     } catch (err) {
       next(err);
     }

@@ -1,6 +1,6 @@
 import { fetchQuotes } from "./globalMarket.js";
-import { hantooGet, hantooReady } from "./hantooClient.js";
-import { kospi200Futures, kospi200FuturesCodes } from "./kospiFutures.js";
+import { hantooGet, hantooReady, HantooError } from "./hantooClient.js";
+import { kospi200FuturesCodesWhy } from "./kospiFutures.js";
 import { isTradingDay } from "./tradingDay.js";
 
 /**
@@ -220,8 +220,19 @@ const NIGHT_LIVE_MS = 20_000;
  * 답이 나오게 적어 둔다.
  */
 let nightCache: { session: string; row: UsMajorRow | null; at: number; 길: string } | null = null;
-/** 못 받은 세션을 다시 묻기까지 */
+/**
+ * 못 받은 세션을 다시 묻기까지.
+ *
+ * **줄이 몰려 못 받은 것은 1분**이다 (2026-10-19). 한투 줄은 앞에 20건이 쌓이면
+ * 그 자리에서 거절한다(`QUEUE_FULL`) — 미국장이 열리는 시각에 가장 잘 나는 일이고,
+ * 하필 야간선물이 필요한 시각이 바로 그때다. 그런 실패를 10분이나 쉬면 **값이
+ * 멀쩡한 10분을 빈칸으로** 보낸다. 줄은 몇 초면 빠지므로 1분 뒤에 다시 묻는다.
+ * 나머지(응답이 비었다거나 한투가 거절했다거나)는 다시 물어도 같을 테니 10분 그대로.
+ */
 const NIGHT_RETRY_MS = 10 * 60_000;
+const NIGHT_BUSY_RETRY_MS = 60_000;
+/** 그 실패가 「줄이 몰려서」였나 — `길` 에 적힌 까닭으로 가린다 */
+const wasBusy = (why: string) => why.includes("QUEUE_FULL") || why.includes("DROPPED");
 
 /** 들고 있는 야간선물이 어느 판의 값인가 — health.json 「야간선물」 (2026-10-15) */
 export function nightFuturesSnapshot(): {
@@ -277,8 +288,9 @@ export async function nightFutures(): Promise<UsMajorRow | null> {
      */
     const settled = nightCache.at >= sessionSettleMs(session);
     if (!open && nightCache.row && settled) return nightCache.row;
-    /* 못 받았으면 매분 열한 번씩 되묻지 않는다 */
-    if (!nightCache.row && Date.now() - nightCache.at < NIGHT_RETRY_MS) return null;
+    /* 못 받았으면 매분 열한 번씩 되묻지 않는다 — 줄 혼잡이었으면 1분만 쉰다 */
+    const retry = wasBusy(nightCache.길) ? NIGHT_BUSY_RETRY_MS : NIGHT_RETRY_MS;
+    if (!nightCache.row && Date.now() - nightCache.at < retry) return null;
     /* 마감값을 아직 못 박았으면 10분 간격으로만 — 05:00~05:10 에 한두 번이면 된다 */
     if (!open && nightCache.row && Date.now() - nightCache.at < NIGHT_RETRY_MS) return nightCache.row;
     /* 열려 있어도 20초보다 자주는 안 묻는다 — 위 `NIGHT_LIVE_MS` */
@@ -289,17 +301,39 @@ export async function nightFutures(): Promise<UsMajorRow | null> {
   return got.row;
 }
 
+/**
+ * **마지막으로 값이 나온 월물코드** (2026-10-19).
+ *
+ * 여태 야간선물은 월물코드 한 글자를 얻으려고 **주간 전광판**을 먼저 불렀다. 그
+ * 전광판 호출이 막히면(줄 혼잡 한 번이면 족하다) 값이 멀쩡히 있는데도 빈칸이 됐다 —
+ * 밤에는 뜻도 없는 주간 판에 야간 값이 매달려 있었던 셈이다.
+ *
+ * 월물은 석 달에 한 번 바뀐다. **한 번 통한 코드는 다음에도 통한다.** 그걸 들고
+ * 있으면 평소 조회가 **한 건**으로 끝나고(전광판+목록+현재가 서넛이던 것), 전광판이
+ * 죽어도 야간선물은 산다.
+ *
+ * ⚠️ 만기가 지나면 그 코드는 빈 값을 준다 — 그때 이 기억을 버리고 전광판을 다시 본다.
+ */
+let lastGoodCode: string | null = null;
+
 async function fetchNight(dates: string[]): Promise<{ row: UsMajorRow | null; 길: string }> {
   try {
-    const front = await kospi200Futures(null);
-    if (!front) return { row: null, 길: "전광판없음" };
     /*
-     * 만기일 저녁엔 전광판 맨 앞(front)이 **죽은 월물**이다 (2026-09-10 실측 — 9월물 만기일 19시, `CM` 이 빈 응답).
-     * 목록을 앞에서부터 돌며 야간 값이 있는 첫 월물을 쓴다. 값은 두 길로 찾는다:
+     * 후보 월물: 기억해 둔 것 → (그게 없거나 안 되면) 전광판 목록.
+     * 만기일 저녁엔 전광판 맨 앞이 **죽은 월물**이다 (2026-09-10 실측 — 9월물 만기일
+     * 19시, `CM` 이 빈 응답). 그래서 목록을 앞에서부터 돌며 야간 값이 있는 첫 월물을 쓴다.
+     * 값은 두 길로 찾는다:
      *   ① `CM` 현재가 — 판이 도는 동안의 값
      *   ② `CM` 분 차트의 마지막 봉 — ①이 비면(마감 뒤엔 늘 빈다). 날짜는 `nightSessionDates`
      */
-    const codes = [...new Set([front.code, ...(await kospi200FuturesCodes())])];
+    let why = "";
+    let codes: string[] = lastGoodCode ? [lastGoodCode] : [];
+    if (codes.length === 0) {
+      const got = await kospi200FuturesCodesWhy();
+      codes = got.codes;
+      why = got.why;
+      if (codes.length === 0) return { row: null, 길: why || "코드없음" };
+    }
     for (const code of codes.slice(0, 3)) {
       const body = await hantooGet<{ output1?: Record<string, unknown> }>(
         "/uapi/domestic-futureoption/v1/quotations/inquire-price",
@@ -310,6 +344,7 @@ async function fetchNight(dates: string[]): Promise<{ row: UsMajorRow | null; �
       const o = body.output1 ?? {};
       const price = Math.abs(Number(o.futs_prpr));
       if (Number.isFinite(price) && price > 0) {
+        lastGoodCode = code; // 다음부터는 이 한 건으로 끝난다
         return {
           row: {
             key: "kospiNight",
@@ -330,21 +365,30 @@ async function fetchNight(dates: string[]): Promise<{ row: UsMajorRow | null; �
       }
       /* ② 분 차트 마지막 봉 — 최근 판부터 */
       for (const bizDate of dates) {
-        const got = await nightFromChart(code, bizDate, front).catch(() => null);
-        if (got) return { row: got, 길: `분차트:${bizDate}` };
+        const got = await nightFromChart(code, bizDate).catch(() => null);
+        if (got) {
+          lastGoodCode = code;
+          return { row: got, 길: `분차트:${bizDate}` };
+        }
       }
     }
-    return { row: null, 길: "현재가0·차트없음" };
-  } catch {
-    return { row: null, 길: "조회실패" };
+    /*
+     * 기억해 둔 코드로만 돌아 봤는데 값이 없다 — **만기가 지났을 수 있다.**
+     * 기억을 버리면 다음 호출이 전광판으로 새 월물을 받는다.
+     */
+    if (lastGoodCode) {
+      const stale = lastGoodCode;
+      lastGoodCode = null;
+      return { row: null, 길: `기억월물(${stale})값없음` };
+    }
+    return { row: null, 길: `현재가0·차트없음${why ? `·${why}` : ""}` };
+  } catch (e) {
+    const code = e instanceof HantooError ? e.code : "예외";
+    return { row: null, 길: `조회실패:${code}` };
   }
 }
 
-async function nightFromChart(
-  code: string,
-  bizDate: string,
-  front: { code: string; price: number | null },
-): Promise<UsMajorRow | null> {
+async function nightFromChart(code: string, bizDate: string): Promise<UsMajorRow | null> {
   const ch = await hantooGet<{ output2?: Record<string, unknown>[] }>(
     "/uapi/domestic-futureoption/v1/quotations/inquire-time-fuopchartprice",
     "FHKIF03020200",
@@ -377,7 +421,8 @@ async function nightFromChart(
   } catch {
     base = 0;
   }
-  if (!base && code === front.code) base = front.price ?? 0;
+  /* 주간 종가를 못 받으면 대비는 0 으로 둔다 — 값 자체는 보여 준다 (2026-10-19,
+     전광판 의존을 걷어내면서. 전에는 전광판 front 값을 썼다) */
   const hhmmss = String(r0.stck_cntg_hour ?? "").padStart(6, "0");
   const hNum = Number(hhmmss.slice(0, 2));
   const dayMs = Date.parse(`${bizDate.slice(0, 4)}-${bizDate.slice(4, 6)}-${bizDate.slice(6, 8)}T00:00:00+09:00`);

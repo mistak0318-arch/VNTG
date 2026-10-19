@@ -141,11 +141,34 @@ export function UsWatchPage() {
    * 그래서 `quiet` 갱신에서는 loading 을 건드리지 않는다. React 는 key 가 같은 행을
    * 다시 그리지 않고 바뀐 칸만 손대므로, 화면이 깜빡이지 않고 값만 움직인다.
    */
+  /**
+   * **묵은 응답이 새 순서를 덮고 있었다** (2026-10-19 — 벤티지: "순서 바꾸는 거는
+   * 바꾸고 나서 완료 누르면 바로 적용 안 되고 왜 페이지를 새로고침해야 그때 적용되는지").
+   *
+   * 30초마다 도는 조용한 갱신(`load`)은 164종목 시세를 모으느라 **몇 초**가 걸린다.
+   * 그 사이에 ▲▼ 를 누르면 이런 일이 난다:
+   *
+   *   0초  폴링이 목록을 **옛 순서**로 뜨기 시작한다
+   *   1초  ▲ 누름 → 저장 → 서버가 **새 순서**를 돌려줌 → 화면이 바뀐다 ✅
+   *   3초  0초에 시작한 폴링이 도착 → `setGroups(옛 순서)` → **되돌아간다** ❌
+   *
+   * 그래서 바꾼 것이 안 먹은 것처럼 보이고, 다음 폴링(30초)이나 새로고침에서야
+   * 새 순서가 나온다. 서버는 멀쩡했다 — 실측으로 PUT 응답과 재조회 모두 새 순서였다.
+   *
+   * 목록을 건드리는 **모든 요청에 번호를 매기고**, 돌아왔을 때 제 번호가 최신이 아니면
+   * 버린다. 늦게 온 옛 응답이 새 결과를 못 덮는다.
+   */
+  const groupsSeq = useRef(0);
+  /** 저장이 도는 동안은 폴링을 쉰다 — 번호만으로는 「쓰기 도중에 시작한 읽기」를 못 막는다 */
+  const writing = useRef(0);
+
   async function load(force = false, quiet = false) {
+    const my = ++groupsSeq.current;
     if (!quiet) setLoading(true);
     if (!quiet) setError(null);
     try {
       const r = await api.usWatch(force);
+      if (my !== groupsSeq.current) return; // 내가 뜨는 사이에 순서가 바뀌었다 — 이 응답은 묵었다
       setGroups(r.groups);
       setQuotedAt(r.quotedAt);
       setFetchedAt(r.fetchedAt);
@@ -237,6 +260,8 @@ export function UsWatchPage() {
   useEffect(() => {
     const period = openMarket ? 30_000 : 60_000;
     const timer = setInterval(() => {
+      /* 저장이 도는 중이면 건너뛴다 — 그 응답이 방금 바꾼 순서를 덮는다 (2026-10-19) */
+      if (writing.current > 0) return;
       if (document.visibilityState === "visible") void load(false, true);
     }, period);
     return () => clearInterval(timer);
@@ -257,6 +282,7 @@ export function UsWatchPage() {
   useEffect(() => {
     const onBack = () => {
       if (document.visibilityState !== "visible") return;
+      if (writing.current > 0) return;
       void load(false, true);
       if (fastSymbols) {
         api
@@ -387,12 +413,19 @@ export function UsWatchPage() {
     }
   }
 
+  /** 목록을 바꾸는 모든 요청은 여기를 지난다 — 번호를 올려 묵은 읽기를 무효로 만든다 */
   async function run(fn: () => Promise<{ groups: UsWatchGroup[] }>) {
+    const my = ++groupsSeq.current;
+    writing.current += 1;
     setError(null);
     try {
-      setGroups((await fn()).groups);
+      const r = await fn();
+      /* 내 뒤에 또 바꿨으면 그쪽이 맞다 — 두 번 빠르게 누를 때 앞 응답이 뒤를 못 덮게 */
+      if (my === groupsSeq.current) setGroups(r.groups);
     } catch (e) {
       setError(e instanceof Error ? e.message : "실패");
+    } finally {
+      writing.current -= 1;
     }
   }
 

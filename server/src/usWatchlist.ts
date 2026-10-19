@@ -874,6 +874,32 @@ function rebuild(force: boolean): Promise<UsWatchResult> {
   return building;
 }
 
+/**
+ * **기다리지 않는 조회** — 순서를 바꾼 직후에 쓴다 (2026-10-19).
+ *
+ * 벤티지: "순서 바꾸는 거는 바꾸고 나서 완료 누르면 바로 적용 안 되고 왜 페이지를
+ * 새로고침해야 그때 적용되는지". 실측 — ▲ 한 번에 **PUT 응답이 12초**였다.
+ *
+ * 순서 라우트는 캐시를 그 자리에서 고쳐 「즉시 끝난다」고 적어 놓고, 마지막 줄에서
+ * `evaluateGroups()` 를 불렀다. 그게 **진행 중인 재수집(164종목, 6~8초)에 붙잡힌다** —
+ * 주석에도 적혀 있듯 재수집은 「거의 늘 진행 중」이다. 캐시를 안 버린 보람이 마지막
+ * 한 줄에서 사라진 셈이다.
+ *
+ * 그 12초를 사람은 「안 먹었다」로 읽는다. 그래서 새로고침을 누르고, 그제서야 새 순서를
+ * 본다 — 저장은 처음부터 돼 있었다.
+ *
+ * ⚠️ 여기서는 **mtime 을 안 본다.** 원장을 방금 고친 것이 우리 자신이고 그 결과를 이미
+ * 캐시에 반영했으므로, 불일치를 이유로 기다릴 까닭이 없다. 캐시가 아예 없을 때만 받는다.
+ */
+export async function groupsNoWait(): Promise<UsWatchResult> {
+  await loadCache();
+  if (shot) {
+    if (Date.now() - shot.at > FRESH_MS) void rebuild(false).catch(() => undefined);
+    return shot.data;
+  }
+  return rebuild(false);
+}
+
 export async function evaluateGroups(force = false): Promise<UsWatchResult> {
   await loadCache();
 
@@ -909,6 +935,15 @@ export function invalidateUsCache(): void {
  * 캐시가 없으면 아무것도 안 한다. 다음 조회가 어차피 새로 받는다.
  */
 export async function reorderCachedGroup(groupId: string, symbols: string[]): Promise<void> {
+  /*
+   * **재시작 직후엔 메모리가 비어 있다** — 디스크 캐시부터 읽는다 (2026-10-19).
+   *
+   * 바로 아래 `patchCachedGroups`(그룹 순서)에는 이 줄이 있는데 여기(종목 순서)에만
+   * 빠져 있었다. 그래서 서버가 막 뜬 뒤의 **첫 ▲▼ 는 캐시 수술이 통째로 불발**되고,
+   * 곧바로 이어지는 조회가 디스크의 **옛 순서** 캐시를 올려 그대로 돌려줬다 — 저장은
+   * 됐는데 화면만 안 바뀌는, 새로고침해야 보이는 그 증상이다 (실측으로 재현).
+   */
+  await loadCache();
   if (!shot) return;
   const g = shot.data.groups.find((x) => x.id === groupId);
   if (!g) return;

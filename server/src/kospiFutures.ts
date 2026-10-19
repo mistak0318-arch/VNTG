@@ -1,4 +1,4 @@
-import { hantooGet, hantooReady } from "./hantooClient.js";
+import { hantooGet, hantooReady, HantooError } from "./hantooClient.js";
 
 /**
  * KOSPI200 선물 — 키움에 없어서 한국투자증권에서 받는다.
@@ -92,20 +92,44 @@ function num(v: unknown): number | null {
  * 야간선물은 이 목록을 앞에서부터 시도해 값이 있는 첫 월물을 쓴다.
  */
 export async function kospi200FuturesCodes(): Promise<string[]> {
-  if (!hantooReady()) return [];
+  return (await kospi200FuturesCodesWhy()).codes;
+}
+
+/**
+ * 월물코드 목록 + **왜 비었나** (2026-10-19).
+ *
+ * 야간선물이 사흘째 빈칸인데 로그가 **한 줄도 없었다.** 이 함수와 `kospi200Futures`
+ * 가 `catch { return [] }` 로 까닭을 통째로 삼켜, health 에는 「전광판없음」 다섯
+ * 글자만 남았다. 그 다섯 글자에 **네 가지 다른 사정**이 들어 있다 — 키 없음,
+ * 줄 혼잡, 한투 거절, 빈 응답. 어느 쪽인지 모르면 고칠 수가 없다.
+ *
+ * 돌려주는 `why` 는 그대로 health 에 실린다. 다음에 같은 일이 나면 **추측 없이**
+ * 한 줄로 답이 나온다.
+ */
+export async function kospi200FuturesCodesWhy(): Promise<{ codes: string[]; why: string }> {
+  if (!hantooReady()) return { codes: [], why: "한투미준비" };
   try {
-    const body = await hantooGet<{ output?: Record<string, unknown>[]; output1?: Record<string, unknown>[] }>(
+    const body = await hantooGet<{
+      output?: Record<string, unknown>[];
+      output1?: Record<string, unknown>[];
+      rt_cd?: string;
+      msg1?: string;
+    }>(
       BOARD,
       BOARD_TR,
       { FID_COND_MRKT_DIV_CODE: "F", FID_COND_SCR_DIV_CODE: "20503", FID_COND_MRKT_CLS_CODE: "" },
       "코스피200 선물",
     );
-    return (body.output ?? body.output1 ?? [])
+    const rows = body.output ?? body.output1 ?? [];
+    const codes = rows
       .map((o) => String(o.futs_shrn_iscd ?? "").trim())
       .filter((c) => /^A01\d{3}$/.test(c))
       .slice(0, 4);
-  } catch {
-    return [];
+    if (codes.length > 0) return { codes, why: "" };
+    return { codes: [], why: rows.length === 0 ? `전광판빈줄(rt_cd ${body.rt_cd ?? "?"})` : "코드꼴안맞음" };
+  } catch (e) {
+    const code = e instanceof HantooError ? e.code : "예외";
+    return { codes: [], why: `전광판실패:${code}` };
   }
 }
 
