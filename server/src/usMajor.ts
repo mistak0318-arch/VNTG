@@ -1,3 +1,4 @@
+import { collectFail, collectOk } from "./collectHealth.js";
 import { fetchQuotes } from "./globalMarket.js";
 import { hantooGet, hantooReady, HantooError } from "./hantooClient.js";
 import { kospi200FuturesCodesWhy } from "./kospiFutures.js";
@@ -298,6 +299,9 @@ export async function nightFutures(): Promise<UsMajorRow | null> {
   }
   const got = await fetchNight(dates);
   nightCache = { session, row: got.row, at: Date.now(), 길: got.길 };
+  /* 「수집」 칸에도 같이 낸다 — 비는 값들을 한 자리에서 보려고 (2026-10-19) */
+  if (got.row) collectOk("야간선물");
+  else collectFail("야간선물", got.길);
   return got.row;
 }
 

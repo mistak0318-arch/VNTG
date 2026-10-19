@@ -1,3 +1,4 @@
+import { collectFail, collectOk } from "./collectHealth.js";
 import { recordApiCall } from "./apiUsage.js";
 import { peekSnapshot } from "./marketSnapshot.js";
 
@@ -197,6 +198,12 @@ export async function depositTrend(days = 60): Promise<{ days: DepositDay[]; at:
       .filter((d) => d.date.length === 10)
       .sort((a, b) => (a.date < b.date ? -1 : 1));
   });
+  /*
+   * 네이버가 빈 배열을 주면 카드가 통째로 사라진다 — 그게 「오늘은 값이 없다」인지
+   * 「길이 막혔다」인지 밖에서 알 수가 없었다 (2026-10-19).
+   */
+  if (r.data.length === 0) collectFail("증시자금동향(네이버)", r.stale ? "빈 응답·옛 값" : "빈 응답");
+  else collectOk("증시자금동향(네이버)");
   return { days: r.data, at: r.at, stale: r.stale };
 }
 

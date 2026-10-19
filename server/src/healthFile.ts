@@ -16,6 +16,7 @@ import { recoveryStats } from "./recovery.js";
 import { shareGetStats } from "./shareGet.js";
 import { dropSamplesCache } from "./signalSamples.js";
 import { peekRealtime, realtimeFidSurvey, realtimePickSnapshot, subscribedCount } from "./realtimeHub.js";
+import { collectHealthSnapshot } from "./collectHealth.js";
 import { nightFuturesSnapshot } from "./usMajor.js";
 import { fxFidSnapshot } from "./fxFidProbe.js";
 import { phaseTodaySummary } from "./marketPhase.js";
@@ -344,6 +345,12 @@ async function writeOnceInner(): Promise<void> {
      * 세션 날짜·값·시세시각뿐이다.
      */
     야간선물: nightFuturesSnapshot(),
+    /*
+     * **무엇이 비어 있고 왜 비었나** (2026-10-19 — 야간선물이 사흘 비는 동안
+     * `apiUsage` 의 한투는 `ok 68,346 · failed 3` 이었다. 공급자는 멀쩡한데 우리 경로가
+     * 끊긴 경우를 그 집계로는 못 본다). 못 받고 있는 것이 **맨 위**에 온다.
+     */
+    수집: collectHealthSnapshot(),
   };
 
   try {

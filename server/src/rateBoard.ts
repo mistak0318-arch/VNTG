@@ -1,3 +1,4 @@
+import { collectFail, collectOk } from "./collectHealth.js";
 import { hantooGet, hantooReady } from "./hantooClient.js";
 
 /**
@@ -98,7 +99,10 @@ let cache: { at: number; rows: RateRow[] } | null = null;
 
 export async function rateBoard(force = false): Promise<RateRow[]> {
   if (!force && cache && Date.now() - cache.at < TTL_MS) return cache.rows;
-  if (!hantooReady()) return [];
+  if (!hantooReady()) {
+    collectFail("금리판(한투)", "한투미준비");
+    return [];
+  }
 
   try {
     const body = await hantooGet<{ output1?: Raw[]; output2?: Raw[] }>(
@@ -133,9 +137,16 @@ export async function rateBoard(force = false): Promise<RateRow[]> {
     rows.sort((a, b) => order.indexOf(a.code) - order.indexOf(b.code));
 
     cache = { at: Date.now(), rows };
+    /*
+     * **빈 줄도 실패다** (2026-10-19). 한투가 `rt_cd 0` 으로 빈 응답을 주면 예외가 없어
+     * 「조용히 0줄」이 된다 — 화면에서는 금리 묶음이 통째로 사라지는데 로그는 조용하다.
+     */
+    if (rows.length === 0) collectFail("금리판(한투)", "빈 응답");
+    else collectOk("금리판(한투)");
     return rows;
-  } catch {
-    // 금리 한 줄 때문에 대시보드가 멈추면 안 된다
+  } catch (e) {
+    // 금리 한 줄 때문에 대시보드가 멈추면 안 된다 — 다만 까닭은 남긴다
+    collectFail("금리판(한투)", (e as { code?: string })?.code ?? (e instanceof Error ? e.message : "예외"));
     return cache?.rows ?? [];
   }
 }

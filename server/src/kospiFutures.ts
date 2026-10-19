@@ -1,3 +1,4 @@
+import { collectFail, collectOk } from "./collectHealth.js";
 import { hantooGet, hantooReady, HantooError } from "./hantooClient.js";
 
 /**
@@ -134,7 +135,15 @@ export async function kospi200FuturesCodesWhy(): Promise<{ codes: string[]; why:
 }
 
 export async function kospi200Futures(spot?: number | null): Promise<FuturesQuote | null> {
-  if (!hantooReady()) return null;
+  /*
+   * **왜 null 인지 적는다** (2026-10-19). 이 함수는 네 가지 다른 사정을 전부 `null` 하나로
+   * 돌려줬고, 그래서 야간선물이 사흘 비는 동안 로그가 **한 줄도 없었다.** 화면은 선물 칸이
+   * 그냥 사라지므로 밖에서는 「원래 그런가」와 구별이 안 된다. health.json 「수집」 칸으로 낸다.
+   */
+  if (!hantooReady()) {
+    collectFail("코스피200 선물", "한투미준비");
+    return null;
+  }
   try {
     const body = await hantooGet<{
       output?: Record<string, unknown>[];
@@ -151,11 +160,17 @@ export async function kospi200Futures(spot?: number | null): Promise<FuturesQuot
     );
     // 맨 앞이 최근월물이다 — 거래가 몰리는 건 늘 최근월물이라 이것만 본다
     const o = (body.output ?? body.output1 ?? [])[0];
-    if (!o) return null;
-
+    if (!o) {
+      collectFail("코스피200 선물", "전광판빈줄");
+      return null;
+    }
     const code = String(o.futs_shrn_iscd ?? "").trim();
     const price = num(o.futs_prpr);
-    if (!code || price === null) return null;
+    if (!code || price === null) {
+      collectFail("코스피200 선물", !code ? "월물코드없음" : "현재가없음");
+      return null;
+    }
+    collectOk("코스피200 선물");
 
     return {
       code,
@@ -169,8 +184,9 @@ export async function kospi200Futures(spot?: number | null): Promise<FuturesQuot
       basis: spot != null && spot > 0 ? price - spot : null,
       sparkline: await futuresSparkline(code),
     };
-  } catch {
-    // 선물 하나 때문에 대시보드가 멈추면 안 된다
+  } catch (e) {
+    // 선물 하나 때문에 대시보드가 멈추면 안 된다 — 다만 까닭은 남긴다
+    collectFail("코스피200 선물", e instanceof HantooError ? e.code : e instanceof Error ? e.message : "예외");
     return null;
   }
 }
