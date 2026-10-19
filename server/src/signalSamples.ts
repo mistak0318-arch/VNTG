@@ -306,6 +306,98 @@ export interface Sample extends Feat {
   d1: number | null;
   d5: number | null;
   d20: number | null;
+  /*
+   * ── 아래는 2026-10-19 에 넓힌 칸 ───────────────────────────────────
+   *
+   * 벤티지: "지금 장세에서는 어떤 패턴을 찾기란 무의미해 보여. 일단 기록을 좀 더
+   * 세분하게 쌓는 구조로 바꿔보는 건 어때."
+   *
+   * 맞는 판단이다. 한 계절 표본으로 문턱을 고르면 그 계절에만 맞는 값이 나온다.
+   * 그런데 **지금 구조로는 두 달을 더 쌓아도 답할 수 없는 물음**이 있었다.
+   *
+   * 여태 결과 칸은 「k일 뒤 **종가**」 셋뿐이었다. 그러면 알 수 있는 것이
+   * 「얼마나 버는가」 하나뿐이다 — **「얼마나 아픈가」를 모른다.**
+   * d20 이 +5% 인 종목이 그 사이 −15% 까지 빠졌는지 알 길이 없고, 실전에서는
+   * 그 종목을 **손절로 이미 버렸을** 것이다. 즉 지금 표본으로 잰 성적은
+   * **손절이 없는 사람**의 성적이다.
+   *
+   * 고가·저가는 일봉에 이미 있다 — **조회를 한 번도 더 안 하고** 채울 수 있다.
+   */
+  /** 10·60 거래일 — 20일 하나만 보면 그 지평에 맞춘 값이 나온다. 60은 봉이 모자라면 null */
+  d10: number | null;
+  d60: number | null;
+  /** 보유 중 **최대 상승**(고가 기준) % — 익절을 어디에 둘지의 재료 */
+  mfe20: number | null;
+  /** 보유 중 **최대 하락**(저가 기준) % — 손절을 어디에 둘지의 재료. 늘 ≤ 0 이다 */
+  mae20: number | null;
+  /** 그 최고·최저를 **며칠째**에 찍었나 (1 = 산 날). 「며칠 들고 있어야 하나」의 답 */
+  mfeDay: number | null;
+  maeDay: number | null;
+}
+
+/** `outcomeOf` 가 돌려주는 것 — 표본 한 줄의 **결과** 쪽 전부 */
+export type Outcome = Pick<Sample, "d1" | "d5" | "d10" | "d20" | "d60" | "mfe20" | "mae20" | "mfeDay" | "maeDay">;
+
+/**
+ * **결과 칸을 한 곳에서 만든다** (2026-10-19).
+ *
+ * 표본을 만드는 길이 둘이다 — 원장으로 만드는 `samplesFromLedger`(조회 0회, 평소 쓰는 것)와
+ * 조회로 만드는 `signalBacktest`(화면의 백테스트). 둘이 **같은 이름의 숫자를 다른 규칙으로**
+ * 내면 비교가 안 된다. 실제로 「다음 날 시가에 산다」를 한쪽만 고쳐 놨던 적이 있다.
+ * 봉의 필드 이름만 다르므로(o/h/l/c vs open/high/low/close) 꺼내는 법을 받아서 쓴다.
+ *
+ * ⚠️ **산 날(k=1)부터 센다.** 다음 날 시가에 샀으니 그날 장중에도 이미 움직인다 —
+ * 그날을 빼면 당일에 손절될 종목이 안 아픈 것으로 잡힌다.
+ * ⚠️ 고가로 MFE, **저가로 MAE** 를 잰다. 종가로 재면 장중에 손절선을 스치고 돌아온 날이
+ * 통째로 안 보인다 — 그게 실전에서 가장 자주 나는 일이다.
+ */
+export function outcomeOf<T>(
+  bars: T[],
+  /** 신호가 난 날의 자리. 매수는 그 **다음** 봉의 시가다 */
+  at: number,
+  get: (b: T) => { o: number; h: number; l: number; c: number },
+): Outcome {
+  const none: Outcome = {
+    d1: null, d5: null, d10: null, d20: null, d60: null,
+    mfe20: null, mae20: null, mfeDay: null, maeDay: null,
+  };
+  const e = bars[at + 1];
+  if (!e) return none;
+  const entry = get(e).o;
+  if (!(entry > 0)) return none;
+
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  const fwd = (k: number): number | null => {
+    const x = bars[at + k];
+    return x ? r2(((get(x).c - entry) / entry) * 100) : null;
+  };
+
+  let up = -Infinity;
+  let dn = Infinity;
+  let upDay = 0;
+  let dnDay = 0;
+  for (let k = 1; k <= 20; k += 1) {
+    const b = bars[at + k];
+    if (!b) break;
+    const { h, l } = get(b);
+    const hi = ((h - entry) / entry) * 100;
+    const lo = ((l - entry) / entry) * 100;
+    if (hi > up) { up = hi; upDay = k; }
+    if (lo < dn) { dn = lo; dnDay = k; }
+  }
+
+  return {
+    d1: fwd(1),
+    d5: fwd(5),
+    d10: fwd(10),
+    d20: fwd(20),
+    /* 60일은 봉이 모자라면 null — 최근 날은 아직 채점할 수 없다 */
+    d60: fwd(60),
+    mfe20: upDay ? r2(up) : null,
+    mae20: upDay ? r2(dn) : null,
+    mfeDay: upDay || null,
+    maeDay: upDay ? dnDay : null,
+  };
 }
 
 export interface SampleFile {

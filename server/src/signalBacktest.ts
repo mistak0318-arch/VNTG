@@ -11,6 +11,7 @@ import {
   scoreFeat,
   type Feat,
   type Sample,
+  outcomeOf,
 } from "./signalSamples.js";
 import { isIndexLikeTheme, loadThemes } from "./naverThemes.js";
 import { yahooChart } from "./yahooChart.js";
@@ -1175,7 +1176,18 @@ export async function runSignalBacktest(
               : { qStreak: null, qYoY: null, qQoQ: null, qMargin: null }),
             etfBack: etfBackAt(bs[i].date),
           };
-          samples.push({ code, name, date: bs[i].date, ...full, ...f });
+          /*
+           * 저장하는 표본에는 **넓힌 결과 칸**을 같이 담는다 (2026-10-19).
+           * 화면 채점(`all`·`scored`)은 d1/d5/d20 만 쓰므로 위 `f` 를 그대로 둔다 —
+           * 거기까지 바꾸면 이번 변경이 화면 숫자를 건드리게 된다.
+           */
+          samples.push({
+            code,
+            name,
+            date: bs[i].date,
+            ...full,
+            ...outcomeOf(bs, i, (b) => ({ o: b.open, h: b.high, l: b.low, c: b.close })),
+          });
 
           /*
            * 채점은 시뮬레이터와 **같은 함수**를 쓴다 (2026-08-31).

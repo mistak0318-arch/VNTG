@@ -6,7 +6,7 @@ import { loadCloses } from "./dailyCloses.js";
 import { getCommonStockCodes, getStockIndex } from "./stockListCache.js";
 import { betaFrom, buildEtfCtx, buildThemeCtx } from "./signalBacktest.js";
 import { yahooChart } from "./yahooChart.js";
-import { MA_PERIODS, saveSamples, type Feat, type Sample } from "./signalSamples.js";
+import { MA_PERIODS, outcomeOf, saveSamples, type Feat, type Sample } from "./signalSamples.js";
 import type { DailyLedger, FlowRow } from "./dailyStore.js";
 import { loadFinanceCache, marginTrendAt, profitAt, quarterAt, type FinanceCache } from "./financeCache.js";
 import { peerMarginTrend, peerRet, sectorPeersOf } from "./sectorPeers.js";
@@ -509,21 +509,18 @@ export function buildSamplesFromLedger(
            *
            * d1 은 다음 날 시가에 사서 **그날 종가**에 파는 하루짜리다.
            */
-          const fwd = (k: number): number | null => {
-            const entry = bs[bi + 1];
-            const exit = bs[bi + k];
-            if (!entry || !exit || !(entry.o > 0)) return null;
-            return ((exit.c - entry.o) / entry.o) * 100;
-          };
-
+          /*
+           * 결과 칸은 **한 곳에서** 만든다 (`signalSamples.outcomeOf`) — 백테스트 쪽과
+           * 규칙이 갈라지면 같은 이름의 숫자가 다른 뜻이 된다 (2026-10-19).
+           * 2026-10-19 에 d10·d60 과 MFE/MAE(보유 중 최고·최저)를 더했다. 같은 일봉을
+           * 한 번 더 훑을 뿐이라 **조회가 늘지 않는다.**
+           */
           out.push({
             ...feat,
             code,
             name,
             date,
-            d1: fwd(1),
-            d5: fwd(5),
-            d20: fwd(20),
+            ...outcomeOf(bs, bi, (b) => b),
           });
         }
       }
