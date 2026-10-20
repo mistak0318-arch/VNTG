@@ -2570,6 +2570,39 @@ body.col-resizing { cursor: row-resize; }
   width: 100%;
   height: 130px;
 }
+/*
+ * 구간별 저~고 (2026-10-20) — 프리 · 정규 · 애프터를 **한 줄에 하나씩**.
+ * 하루 고·저 하나만 적으면 어느 장에서 찍은 값인지 못 읽는다.
+ */
+.intraday-segs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 8px;
+  font-size: 0.78rem;
+}
+.intraday-seg {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.intraday-seg i {
+  font-style: normal;
+  font-size: 0.7rem;
+  color: var(--muted);
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--panel-2);
+}
+.intraday-seg b {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.intraday-seg em {
+  font-style: normal;
+  color: var(--muted);
+}
+
 .intraday-legend {
   display: flex;
   flex-wrap: wrap;

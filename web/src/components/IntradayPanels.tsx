@@ -14,6 +14,17 @@ import { num, signOf } from "./SeriesTable";
 interface Point {
   time: string; // HHmm
   price: number;
+  /**
+   * **봉 안의 고가·저가** (2026-10-20 — 벤티지: "장중 고가·저가와 당일 차트의
+   * 고가·저가 값이 너무 이상합니다").
+   *
+   * 분봉 응답에 `high_pric`·`low_pric` 이 들어 있는데 여태 **전형가를 내는 데만 쓰고
+   * 버렸다.** 그래서 요약줄의 고가·저가가 `Math.max(종가들)` 이 되어, **봉 안에서만
+   * 찍은 고점이 통째로 사라졌다** — 삼성SDI 10/19 는 실제 고가가 593,000 인데
+   * 당일 흐름은 592,000 으로 적혔다(3분봉 종가 중 최대).
+   */
+  high: number;
+  low: number;
   /** 전형가 (고+저+종)/3 — VWAP 을 내는 재료 */
   typical: number;
   volume: number;
@@ -37,6 +48,8 @@ function todayPoints(chart: RawRecord | null): Point[] {
       out.push({
         time: tm.slice(8, 12),
         price,
+        high,
+        low,
         typical: (high + low + price) / 3,
         volume: Math.abs(num(r.trde_qty)),
       });
@@ -187,8 +200,12 @@ export function IntradayFlow({
   const prices = points.map((p) => p.price);
   const open = prices[0];
   const last = prices[prices.length - 1];
-  const high = Math.max(...prices);
-  const low = Math.min(...prices);
+  /*
+   * **봉 안의 고가·저가로 잰다** (2026-10-20). 여태 `Math.max(...prices)` 였는데
+   * `prices` 는 **종가** 배열이라, 봉 안에서만 찍고 내려온 고점이 안 잡혔다.
+   */
+  const high = Math.max(...points.map((p) => p.high));
+  const low = Math.min(...points.map((p) => p.low));
 
   // 기준선(전일종가)이 화면 밖으로 나가지 않도록 범위에 포함시킨다
   const base = basePrice > 0 ? basePrice : open;
@@ -315,6 +332,45 @@ export function IntradayFlow({
           </span>
         )}
       </div>
+
+      {/*
+        **구간별 저~고** (2026-10-20 — 벤티지: "장전에는 저가가 얼마였고 고가가 얼마였는지,
+        정규장에서는 … 애프터에서는 … 딱 알 수 있으면 좋겠습니다").
+
+        하루 전체의 고·저 하나만 적으면 **어느 장에서 찍은 값인지**를 못 읽는다.
+        삼성SDI 10/19 가 그랬다 — 저가 496,500 은 프리마켓 값이고 정규장 저가는
+        510,000 인데, 한 줄로 적어 두니 「정규장에서 496,500 까지 빠졌다」로 읽힌다.
+
+        구간이 없는 날(프리나 애프터에 체결이 없는 날)은 그 줄을 **아예 안 그린다** —
+        0 이나 「-」 을 적으면 「거래가 있었는데 못 받았다」와 구별이 안 된다.
+      */}
+      {(() => {
+        const seg = (from: number, to: number) => {
+          const xs = points.slice(from, to);
+          if (xs.length === 0) return null;
+          return { lo: Math.min(...xs.map((p) => p.low)), hi: Math.max(...xs.map((p) => p.high)) };
+        };
+        const regFrom = openIdx < 0 ? 0 : openIdx;
+        const regTo = closeIdx < 0 ? points.length : closeIdx;
+        const rows = [
+          { label: "프리", v: openIdx > 0 ? seg(0, openIdx) : null },
+          { label: "정규", v: seg(regFrom, regTo) },
+          { label: "애프터", v: closeIdx >= 0 ? seg(closeIdx, points.length) : null },
+        ].filter((r) => r.v);
+        if (rows.length < 2) return null; // 구간이 하나뿐이면 아래 요약줄로 충분하다
+        return (
+          <div className="intraday-segs">
+            {rows.map((r) => (
+              <span key={r.label} className="intraday-seg">
+                <i>{r.label}</i>
+                <b className={signOf(r.v!.lo - base)}>{fmtNum(r.v!.lo)}</b>
+                <em>~</em>
+                <b className={signOf(r.v!.hi - base)}>{fmtNum(r.v!.hi)}</b>
+              </span>
+            ))}
+          </div>
+        );
+      })()}
 
       <div className="intraday-legend">
         {[
