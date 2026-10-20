@@ -1,4 +1,5 @@
 ﻿import { PAGE_SIZES, PAGE_SIZE_DEFAULT } from "../components/Pager";
+import { useViewingCodes } from "../useViewingCodes";
 import { diffFromRate } from "../krxTick";
 import { MiniSpark } from "../components/MiniSpark";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
@@ -708,6 +709,8 @@ export function ScreenerPage({
    * 장중 선을 **한 번에** 받는다 — 줄마다 부르면 요청이 100개다. 안 쌓인 종목은
    * 서버가 빼고 주므로 그 줄은 빈칸이 된다. 표가 새로 오면 같이 새로 받는다.
    */
+  /* 화면에 보이는 줄을 소켓에 붙인다 (2026-10-21) — 줄마다 ref 를 달면 저절로 돈다 */
+  const viewRef = useViewingCodes();
   const sparkCodes = sparkOn ? all.map((r) => r.code).filter(Boolean).slice(0, 220).join(",") : "";
   useEffect(() => {
     if (!sparkCodes) {
@@ -1937,6 +1940,12 @@ export function ScreenerPage({
                   {part.map((r, i) => (
                     <tr
                       key={`${r.code}-${i}`}
+                      /*
+                       * **보이는 줄을 실시간에 붙인다** (2026-10-21 — 벤티지: "내 화면에
+                       * 보이는 애들, 걔네를 실시간으로 붙이는 거야"). 스크롤이 멈추면
+                       * 그 자리의 종목만 서버에 알린다 — `useViewingCodes` 주석 참고.
+                       */
+                      ref={viewRef(r.code)}
                       className={onSelectStock ? "clickable-row" : ""}
                       onClick={() => onSelectStock?.(r.code, r.name)}
                     >

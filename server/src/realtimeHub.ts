@@ -348,7 +348,29 @@ const RANK_DEPTH = RANK_PER_MARKET + DUAL_PER_MARKET;
  * 임시 자리(transient)가 몇 개 필요하다 — 실측(10/16 10:09) keep 175 · transient 1 로
  * **24 자리가 놀고 있었다.** 열 자리는 화면 몫으로 남기고 나머지를 쓴다.
  */
-const MAX_CODES = 185;
+/*
+ * ## ⚠️ 185 → 155 (2026-10-21 — 벤티지: "거래대금 상위 130은 고정을 하고 … 50개 남은
+ * 걸로 내 화면에 보이는 애들을 실시간으로 붙이는 거야")
+ *
+ * 여태 스케줄러가 185 를 먹어 **화면 몫이 15** 뿐이었다. 그래서 거래대금 상위 탭을
+ * 벗어나면(등락률 상위 등) 가격 앞 초록불이 안 켜졌다 — 그 종목들은 소켓에 없고
+ * 10초 폴링으로만 왔다.
+ *
+ * 실측(2026-10-21 08:25, 겹침을 직접 셈):
+ *   관심종목 47 · 거래대금 상위 130 과 **24개 겹침** → 따로 드는 자리 23
+ *   → keep 153, 화면 몫 47
+ *
+ * 그래서 스케줄러를 **155** 로 묶고 45 를 화면에 남긴다. 화면 몫은 `transient` 라
+ * 정원이 차면 **오래 본 것부터** 밀려나고 스케줄러 몫(`keep`)은 안 다친다.
+ */
+const MAX_CODES = 150;
+/**
+ * 거래대금 상위를 **몇 위까지 고정으로** 물까 (2026-10-21).
+ *
+ * 벤티지 안의 「130 고정」이다. 관심종목과 겹치는 만큼은 공짜라, 겹침이 많은 날은
+ * 조회순위까지 들어가고 적은 날은 130 을 다 못 채운다 — 그래도 지금(79개)보다 훨씬 넓다.
+ */
+const RANK_KEEP = 150;
 /** 순위를 몇 분마다 다시 볼지 — 거래대금 상위는 이보다 빨리 안 뒤집힌다 */
 const RANK_REFRESH_MS = 5 * 60 * 1000;
 
@@ -461,23 +483,33 @@ async function refreshRank(kiwoom: KiwoomClient): Promise<void> {
  *
  * 개수만 남긴다 — 종목코드는 한 줄도 안 싣는다.
  */
-let pickStat: { 관심종목: number; 조회순위: number; 거래대금: number; 합계: number; 정원: number; 남은자리: number } | null = null;
+let pickStat: { 조회순위: number; 거래대금: number; 합계: number; 정원: number; 남은자리: number; 화면몫: number } | null = null;
 export function realtimePickSnapshot() {
   return pickStat;
 }
 
 async function targets(kiwoom: KiwoomClient, max: number): Promise<string[]> {
   const codes: string[] = [];
-  let nWatch = 0;
   let nInquiry = 0;
-  try {
-    const items = await listWatchlist();
-    const w = items.map((x) => x.code).filter(Boolean);
-    nWatch = w.length;
-    codes.push(...w);
-  } catch {
-    /* 관심종목을 못 읽어도 순위는 걸린다 */
-  }
+  /*
+   * **관심종목은 더 이상 자리를 미리 잡지 않는다** (2026-10-21 — 벤티지: "관심 종목은
+   * 매번 숫자가 바뀔 수 있는 건데 유연하게 구성을 해야지. 그리고 관심 종목은 실시간
+   * 소켓으로 굳이 받아올 필요가 있는 거야? 그 원장 정리하면서 받아와 줄 텐데").
+   *
+   * 맞는 말이다. 관심종목이 소켓에서 빠져도 **대부분 다른 길이 있다**:
+   *   · 일별 수급·종가·거래량 → 마감 뒤 원장(`collectDaily`)이 전 종목 받는다
+   *   · 거래원·프로그램 장중 추이 → `brokerAuto` 가 **관심종목을 우선으로** 조회로 쌓는다
+   *   · VI 발동 알림 → `1h` 는 종목을 지정해도 **전체가 온다**. 구독과 무관하다
+   *   · 이중 스톱·체결 판정 → 보유 종목은 `ensureLiveCode` 가 따로 건다
+   *
+   * ⚠️ **딱 하나 잃는다 — 체결강도 급변 알림**(`liveAlerts` 의 `strengthJump`). 그건
+   * `0B` 가 없으면 조용히 건너뛰고 REST 대체 경로가 없다. 다만 관심종목의 절반쯤은
+   * 거래대금 상위에 겹쳐 그대로 살아 있고(2026-10-21 실측 47개 중 24개), 관심종목
+   * 화면을 열면 그때 `transient` 로 붙는다.
+   *
+   * 얻는 것: 관심종목이 10개든 100개든 **거래대금 상위 몫이 안 흔들린다.** 예전에는
+   * 관심종목이 늘수록 거래대금이 밀려 79개까지 쪼그라들었다.
+   */
   /*
    * **조회순위 상위 20** (2026-10-16 — 벤티지가 조회순위 탭에서 장중 선이 빈 것을 보고).
    *
@@ -505,18 +537,30 @@ async function targets(kiwoom: KiwoomClient, max: number): Promise<string[]> {
    * 관심종목과 조회순위를 먼저 담고 **남은 만큼** 거래대금 상위에서 가져온다.
    * 그러면 잘림이 구조적으로 0 이 되고, 「몇 종목을 무나」가 곧 정원이 된다.
    */
+  /*
+   * **거래대금은 130 위까지 고정으로 문다** (2026-10-21 — 벤티지 안).
+   *
+   * 예전엔 관심종목·조회순위를 먼저 담고 **남은 만큼만** 거래대금을 받았다. 그래서
+   * 거래대금이 79개밖에 안 들어가는 날이 있었고, 시세분석에서 조금만 내려가도 초록불이
+   * 꺼졌다. 이제 **130 을 먼저 확보**하고 관심종목·조회순위가 그 위에 얹힌다 —
+   * 겹치는 것은 자리를 한 번만 먹으므로 실측 기준 153 이면 다 들어간다.
+   *
+   * ⚠️ 순서가 곧 우선순위다. `max`(155) 를 넘기면 **뒤쪽부터 잘린다** — 그래서
+   * 관심종목을 거래대금보다 **앞**에 둔다. 관심종목에는 급등 알림이 걸려 있어
+   * 잘리면 그 알림이 조용해진다(VI·이중스톱은 구독과 무관하니 안전하다).
+   */
   const head = [...new Set(codes)];
-  const room = Math.max(0, max - head.length);
-  const hot = await hotCodes(kiwoom, room + 20); // 겹침을 감안해 조금 더 받아 둔다
+  const hot = await hotCodes(kiwoom, RANK_KEEP);
   const uniq = [...new Set([...head, ...hot])].slice(0, max);
   pickStat = {
-    관심종목: nWatch,
     조회순위: nInquiry,
     거래대금: uniq.length - head.length,
     합계: uniq.length,
     정원: max,
     /* 자리를 다 쓰고도 남은 후보 — 0 이면 더 받을 수 있다는 뜻이다 */
     남은자리: Math.max(0, max - uniq.length),
+    /* 화면(`transient`)이 쓸 수 있는 자리 — 여기가 0 이면 초록불이 안 켜진다 */
+    화면몫: 200 - uniq.length,
   };
   return uniq;
 }

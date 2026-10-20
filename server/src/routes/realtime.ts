@@ -211,6 +211,43 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
    *
    * `subscribeTransient` 를 쓰므로 상시 구독(관심종목·순위)을 밀어내지 않는다.
    */
+  /**
+   * **지금 화면에 보이는 종목을 실시간으로** (2026-10-21).
+   *
+   * 벤티지: "거래대금 상위 130은 고정을 하고 … 남은 걸로 내 다른 탭 이동하잖아.
+   * 그럼 거기서 내 화면에 보이는 애들, 걔네를 실시간으로 붙이는 거야. 그러면 내가
+   * 스크롤 내리면은 쭈르르르 새로 붙겠지."
+   *
+   * 그 전까지 스케줄러가 185 자리를 먹어 **화면 몫이 15** 뿐이었다. 그래서 거래대금
+   * 상위 탭을 벗어나면(등락률 상위 등) 가격 앞 초록불이 안 켜졌다.
+   *
+   * ⚠️ `subscribeTransient` 를 쓴다 — 정원이 차면 **오래 본 것부터** 밀려나고
+   * 스케줄러 몫(`keep`)은 안 다친다. 그래서 따로 해제할 필요가 없다. 스크롤로 사라진
+   * 종목은 새 종목에 밀려 저절로 빠진다.
+   * ⚠️ **`0B`(체결)만** 건다. 거래원·프로그램까지 걸면 프레임이 몇 배가 되는데,
+   * 지나가며 보는 종목에 시계열까지 쌓을 일은 없다.
+   * ⚠️ 장 밖에는 아무것도 안 한다 — 구독 자체가 꺼져 있다.
+   */
+  router.post("/viewing", async (req, res, next) => {
+    try {
+      if (!shouldRun()) {
+        res.json({ ok: true, live: false, n: 0 });
+        return;
+      }
+      const raw = Array.isArray(req.body?.codes) ? req.body.codes : [];
+      /* 한 화면에 보이는 줄은 많아야 서른 남짓이다. 그보다 크면 화면이 아니라 목록 전체다 */
+      const codes = raw
+        .map((x: unknown) => String(x ?? "").trim())
+        .filter(Boolean)
+        .slice(0, 60);
+      const { client: rt } = await getRealtime(client);
+      for (const code of codes) rt.subscribeTransient("0B", subCode(code));
+      res.json({ ok: true, live: true, n: codes.length, seats: rt.seats });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.post("/probe-nxt", async (req, res, next) => {
     try {
       const code = String(req.body?.code ?? "005930").replace(/[^0-9A-Za-z]/g, "");
