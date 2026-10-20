@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useSubscribedCodes } from "../useSubscribedCodes";
 import { useSheetBack } from "../useSheetBack";
 import { api, normalizeStockCode, pick, stockNameOf, type RawRecord } from "../api";
 import { krxOverlayLive, useRealtime } from "../useRealtime";
@@ -713,8 +714,17 @@ export function StockDetail({
  * 세 가지만 말한다. 더 말하면 머리줄에서 자리를 뺏는다.
  *
  *   · 초록 ● **실시간** — 소켓(0B)으로 체결이 들어오는 중. 90초 안에 틱이 있었다
+ *   · 초록 ○ **붙었는데 조용함** — 구독은 됐고 아직 체결이 없다 (2026-10-21)
  *   · 주황 ● **1초 갱신** — 소켓은 안 붙었고 REST 폴링만 돈다. 값은 맞지만 한 박자 늦다
  *   · 회색 ○ **장 아님** — 08:00~20:10 밖. 안 들어오는 게 정상이라 경고가 아니다
+ *
+ * ## ⚠️ 「조용함」을 따로 둔 까닭 (2026-10-21)
+ *
+ * 벤티지: "각 종목 상세 들어가면 소켓 붙어야 할듯 노란색이여" — 에코아이(448280)가
+ * 주황이었다. 그런데 그 종목은 프리마켓에 **거래량 594주 · 거래대금 0억**이었다.
+ * 구독은 됐는데 **체결이 없어서** 틱이 안 온 것이다. 불이 「붙었나」가 아니라
+ * 「틱이 왔나」만 보고 있었으니, 조용한 종목과 자리를 못 받은 종목이 똑같이 보였다.
+ * 이제 서버에 **구독 목록**을 물어(`/realtime/subscribed`) 둘을 가른다.
  *
  * ⚠️ 「안 들어온다」와 「안 움직인다」를 가르는 것이 이 불의 전부다. 그래서 **마지막 틱
  * 시각**을 툴팁에 적는다 — 숫자가 멎었을 때 그게 종목 탓인지 길 탓인지는 그 시각 하나로
@@ -727,9 +737,12 @@ function LiveLamp({ code }: { code: string }) {
   const bare = normalizeStockCode(code);
   const expect = /^\d{6}$/.test(bare) && krxOverlayLive();
   const rt = useRealtime(expect ? [`0B:${bare}`] : [], 1500);
+  const subbed = useSubscribedCodes(expect);
   const v = rt.values[`0B:${bare}`] ?? null;
   const ago = v ? Date.now() - v.at : null;
   const live = Boolean(rt.healthy && ago !== null && ago < 90_000);
+  /* 틱은 없지만 자리는 받았다 — 거래가 없는 것이지 고장이 아니다 */
+  const quiet = !live && subbed.has(bare);
 
   if (!expect) {
     return (
@@ -740,14 +753,16 @@ function LiveLamp({ code }: { code: string }) {
   }
   return (
     <span
-      className={`sd-lamp${live ? " on" : " poll"}`}
+      className={`sd-lamp${live ? " on" : quiet ? " quiet" : " poll"}`}
       title={
         live
           ? `실시간 체결이 들어오는 중입니다 — 마지막 ${new Date(v!.at).toLocaleTimeString("ko-KR", { hour12: false })}`
-          : "소켓이 안 붙어 1초 폴링으로만 받고 있습니다 — 값은 맞지만 한 박자 늦습니다"
+          : quiet
+            ? "소켓에 붙어 있습니다 — 아직 체결이 없어 값이 안 바뀝니다(거래가 없는 것이지 고장이 아닙니다)"
+            : "소켓이 안 붙어 1초 폴링으로만 받고 있습니다 — 값은 맞지만 한 박자 늦습니다"
       }
     >
-      ●
+      {live ? "●" : quiet ? "○" : "●"}
     </span>
   );
 }

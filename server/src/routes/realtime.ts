@@ -228,6 +228,20 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
    * 지나가며 보는 종목에 시계열까지 쌓을 일은 없다.
    * ⚠️ 장 밖에는 아무것도 안 한다 — 구독 자체가 꺼져 있다.
    */
+  /**
+   * 지금 **실제로 구독 중인 종목 코드**. 화면이 초록불을 정확히 그리는 데 쓴다 (2026-10-21).
+   * 목록만 주고 값은 안 준다 — 값은 `/latest`·`/stream` 몫이다.
+   */
+  router.get("/subscribed", (_req, res, next) => {
+    try {
+      const { client: rt } = hub();
+      const codes = rt?.subscribedCodes ?? [];
+      res.json({ codes, live: shouldRun(), seats: rt?.seats ?? null });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.post("/viewing", async (req, res, next) => {
     try {
       if (!shouldRun()) {

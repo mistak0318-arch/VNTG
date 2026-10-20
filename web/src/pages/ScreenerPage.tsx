@@ -1,4 +1,5 @@
 ﻿import { PAGE_SIZES, PAGE_SIZE_DEFAULT } from "../components/Pager";
+import { useSubscribedCodes } from "../useSubscribedCodes";
 import { useViewingCodes } from "../useViewingCodes";
 import { diffFromRate } from "../krxTick";
 import { MiniSpark } from "../components/MiniSpark";
@@ -711,6 +712,11 @@ export function ScreenerPage({
    */
   /* 화면에 보이는 줄을 소켓에 붙인다 (2026-10-21) — 줄마다 ref 를 달면 저절로 돈다 */
   const viewRef = useViewingCodes();
+  /*
+   * **붙었는데 조용한 것**과 **안 붙은 것**을 가른다 (2026-10-21).
+   * 초록불은 「90초 안에 틱이 왔나」라서, 거래가 없는 종목은 붙어 있어도 안 켜졌다.
+   */
+  const subbed = useSubscribedCodes();
   const sparkCodes = sparkOn ? all.map((r) => r.code).filter(Boolean).slice(0, 220).join(",") : "";
   useEffect(() => {
     if (!sparkCodes) {
@@ -2075,7 +2081,16 @@ export function ScreenerPage({
                             const lv = liveOf(r.code);
                             return (
                               <td key={c.key} className="num">
-                                {lv && <span className="uw-live-dot" title="키움 실시간 (1.5초)" />}
+                                {lv ? (
+                                  <span className="uw-live-dot" title="키움 실시간 — 틱이 들어오는 중 (1.5초)" />
+                                ) : (
+                                  subbed.has(r.code) && (
+                                    <span
+                                      className="uw-live-dot idle"
+                                      title="소켓에 붙어 있습니다 — 아직 체결이 없어 값이 안 바뀝니다(거래가 없는 것이지 고장이 아닙니다)"
+                                    />
+                                  )
+                                )}
                                 {lv ? fmtNum(lv.price) : v.text}
                                 {showNxtSub && r.nxtPrice != null && !lv && (
                                   <i className="scr-split" title={subTitle}>

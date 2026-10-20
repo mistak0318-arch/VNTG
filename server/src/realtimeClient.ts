@@ -338,6 +338,23 @@ export class RealtimeClient {
     };
   }
 
+  /**
+   * **지금 걸려 있는 종목 코드** (2026-10-21).
+   *
+   * 화면의 초록불은 「90초 안에 틱이 왔나」만 본다. 그래서 **구독은 됐는데 체결이 없는**
+   * 조용한 종목과 **아예 구독이 안 된** 종목이 똑같이 주황으로 보인다 — 벤티지가
+   * 「화면에 고정하고 있는데도 소켓이 안 붙는다」고 한 것이 그 구별이 안 돼서였다.
+   * 이 목록이 있어야 둘을 가른다.
+   *
+   * 접미(`_AL`)는 떼고 돌려준다 — 화면이 아는 것은 6자리 코드다.
+   */
+  get subscribedCodes(): string[] {
+    const all = new Set<string>();
+    for (const c of this.keep) all.add(c.replace(/_(AL|NX)$/i, ""));
+    for (const c of this.transient) all.add(c.replace(/_(AL|NX)$/i, ""));
+    return [...all];
+  }
+
   /** 지금 걸려 있는 **종목** 수 (타입은 안 센다 — 상한이 종목 기준이다) */
   private codeCount(): number {
     const all = new Set<string>(this.keep);
