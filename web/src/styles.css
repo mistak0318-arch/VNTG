@@ -2602,6 +2602,17 @@ body.col-resizing { cursor: row-resize; }
   font-style: normal;
   color: var(--muted);
 }
+/* 전일종가 대비 % — 값보다 한 단계 작게, 괄호로 묶어 값과 안 섞이게 */
+.intraday-seg small {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+.intraday-seg small::before { content: "("; color: var(--muted); }
+.intraday-seg small::after { content: ")"; color: var(--muted); }
 
 .intraday-legend {
   display: flex;
@@ -3240,6 +3251,7 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 }
 .intraday-sessions {
   display: flex;
+  flex-wrap: wrap;             /* 폰에서 셋이 한 줄에 안 들어가면 내려 보낸다 */
   margin-top: 4px;
   font-size: 0.6667rem;
   color: var(--muted);
@@ -3250,6 +3262,18 @@ body.col-resizing { user-select: none; cursor: col-resize; }
   overflow: hidden;
   border-top: 1px solid var(--border);
   padding-top: 2px;
+  /*
+   * **글자만큼은 자리를 준다** (2026-10-20). 이름 뒤에 등락률 괄호가 붙으면서
+   * 비율 폭(프리는 차트의 8%쯤)으로는 통째로 잘리게 됐다 — 위의 `overflow: hidden`.
+   * 비율은 넓을 때만 뜻이 있고, 좁아지면 글자가 이긴다.
+   */
+  min-width: max-content;
+  padding-inline: 3px;
+}
+/* 이름 뒤 등락률 — 이름보다 한 단계 흐리게, 줄바꿈 없이 */
+.intraday-session i {
+  font-style: normal;
+  opacity: 0.8;
 }
 .intraday-session.main {
   color: var(--text);

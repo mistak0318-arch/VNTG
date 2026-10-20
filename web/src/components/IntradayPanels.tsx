@@ -316,21 +316,50 @@ export function IntradayFlow({
         )}
       </svg>
 
-      {/* 구간 라벨 — 그래프 폭에 맞춰 비율로 배치 */}
+      {/*
+        구간 라벨 — 그래프 폭에 맞춰 비율로 배치.
+
+        **이름 뒤에 전일종가 대비 %를 괄호로 붙인다** (2026-10-20 — 벤티지: "프리마켓
+        정규장 애프터마켓 글자 뒤에 괄호로 붙여"). 값(원)은 아래 줄이 맡고, 여기서는
+        **그 구간이 어느 쪽으로 얼마나** 움직였나만 읽는다.
+
+        ⚠️ 분모는 **전일종가**다 — 위의 큰 등락률·요약줄과 같아야 한 얘기를 한다.
+        ⚠️ `min-width: max-content` 가 CSS 에 있어야 한다. 프리 구간은 차트의 8%쯤이라
+           비율 폭만 주면 괄호가 통째로 잘린다(이 줄은 `overflow: hidden` 이다).
+      */}
       <div className="intraday-sessions">
-        {hasPre && (
-          <span className="intraday-session pre" style={{ width: `${regularStart}%` }}>
-            프리마켓
-          </span>
-        )}
-        <span className="intraday-session main" style={{ width: `${regularEnd - regularStart}%` }}>
-          정규장
-        </span>
-        {hasAfter && (
-          <span className="intraday-session after" style={{ width: `${W - regularEnd}%` }}>
-            애프터마켓
-          </span>
-        )}
+        {(() => {
+          const pc = (v: number) => (base > 0 ? `${(v - base) / base > 0 ? "+" : ""}${(((v - base) / base) * 100).toFixed(2)}%` : "");
+          const span = (from: number, to: number) => {
+            const xs = points.slice(from, to);
+            if (xs.length === 0) return null;
+            const lo = Math.min(...xs.map((p) => p.low));
+            const hi = Math.max(...xs.map((p) => p.high));
+            return ` (${pc(lo)} ~ ${pc(hi)})`;
+          };
+          const regFrom = openIdx < 0 ? 0 : openIdx;
+          const regTo = closeIdx < 0 ? points.length : closeIdx;
+          return (
+            <>
+              {hasPre && (
+                <span className="intraday-session pre" style={{ width: `${regularStart}%` }}>
+                  프리마켓
+                  <i>{span(0, openIdx)}</i>
+                </span>
+              )}
+              <span className="intraday-session main" style={{ width: `${regularEnd - regularStart}%` }}>
+                정규장
+                <i>{span(regFrom, regTo)}</i>
+              </span>
+              {hasAfter && (
+                <span className="intraday-session after" style={{ width: `${W - regularEnd}%` }}>
+                  애프터마켓
+                  <i>{span(closeIdx, points.length)}</i>
+                </span>
+              )}
+            </>
+          );
+        })()}
       </div>
 
       {/*
