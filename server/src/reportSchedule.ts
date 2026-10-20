@@ -51,7 +51,8 @@ export interface ReportSchedule {
 /** 지금까지 동작하던 것과 같은 구성 — 설정 파일이 없으면 이걸 쓴다 */
 export const DEFAULT_SCHEDULE: ReportSchedule = {
   slots: [
-    { id: "morning", label: "조간", hour: 7, minute: 0, kind: "morning", enabled: true, days: "weekday", deliver: true },
+    /* 07:00 → **06:00** (2026-10-21, 벤티지 요청). 채널 발행(07:00)과는 서로 안 묶여 있어 앞당겨도 된다 */
+    { id: "morning", label: "조간", hour: 6, minute: 0, kind: "morning", enabled: true, days: "weekday", deliver: true },
     { id: "midday", label: "장중", hour: 12, minute: 0, kind: "intraday", enabled: true, days: "weekday", deliver: true },
     { id: "closing", label: "석간", hour: 18, minute: 0, kind: "closing", enabled: true, days: "weekday", deliver: true },
     { id: "weekend", label: "주말", hour: 9, minute: 0, kind: "weekend", enabled: true, days: "weekend", deliver: true },

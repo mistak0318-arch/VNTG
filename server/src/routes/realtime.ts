@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { getSpark, requestSparks } from "../sparkCache.js";
 import { hantooRealtimeStatus } from "../hantooRealtime.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { RealtimeClient } from "../realtimeClient.js";
@@ -630,9 +631,23 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
         .slice(0, MAX_ITEMS);
       const { store } = hub();
       const out: Record<string, number[]> = {};
+      const missing: string[] = [];
       for (const code of items) {
         const pts = store?.getSeries("0B", code) ?? [];
-        if (pts.length < 2) continue;
+        if (pts.length < 2) {
+          /*
+           * **소켓에 없으면 분봉 캐시로** (2026-10-21 — 벤티지: "굳이 미니스파크 만드는 데
+           * 소켓에까지 연결해야 되나? … ETF는 비어 있잖아").
+           *
+           * 구독 정원(185)에 못 든 종목·ETF·프리마켓은 소켓에 체결이 안 쌓여 늘 빈칸이었다.
+           * 분봉은 종목당 1콜이라 그 자리에서 받을 수는 없고, **대기열에 넣고 다음 번에**
+           * 채운다(`sparkCache`). 화면은 기다리지 않는다.
+           */
+          const line = getSpark(code);
+          if (line && line.length >= 2) out[code] = line;
+          else missing.push(code);
+          continue;
+        }
         const step = Math.max(1, Math.ceil(pts.length / MAX_PTS));
         const line: number[] = [];
         for (let i = 0; i < pts.length; i += step) {
@@ -644,7 +659,10 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
         if (Number.isFinite(last) && last > 0 && line[line.length - 1] !== last) line.push(last);
         if (line.length >= 2) out[code] = line;
       }
-      res.json({ lines: out, live: shouldRun() });
+      /* 못 채운 것은 배경에서 받아 둔다 — 이번 응답이 아니라 다음 번에 쓰인다 */
+      const live = shouldRun();
+      if (missing.length > 0) requestSparks(missing, live);
+      res.json({ lines: out, live });
     } catch (err) {
       next(err);
     }

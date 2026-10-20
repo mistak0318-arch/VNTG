@@ -497,6 +497,55 @@ function summarizeBuckets(stat: DayStat, day: string): NonNullable<ProviderUsage
   };
 }
 
+/**
+ * **날짜별 조회 추이와 어제 늘어난 TR** (2026-10-21).
+ *
+ * 벤티지: "현재 각 종목 상세 들어갈 때 어제보다 살짝 느려졌는데 이유 좀 파악해봐."
+ * 재어 보니 키움 조회가 하루 **5.9만 → 11.7만** 으로 뛰고 한도초과가 220건 났는데,
+ * **무엇이 두 배가 됐는지는 못 짚었다** — health 의 `조회상위` 가 **오늘 누계**만 주기
+ * 때문이다. 어제와 견줄 수가 없으니 「장이 급락해서 사람이 많이 본 것」과 「배경 수집
+ * 하나가 늘어난 것」이 밖에서 똑같이 보인다.
+ *
+ * 날짜별 숫자는 `apiUsage.json` 에 **이미 30일치 쌓여 있다.** 못 본 것은 그 파일이
+ * 미니PC 안에 있어서다. 요약만 health 로 내보낸다.
+ *
+ * ⚠️ 증감은 **어제 ↔ 그제**로 잰다. 오늘은 진행 중이라 어제와 견주면 늘 「줄었다」가
+ * 나온다 — 그건 시각이 다른 것이지 호출이 준 것이 아니다.
+ */
+export async function usageTrend(
+  provider: ApiProvider,
+  days = 6,
+): Promise<{ 일별: string[]; "늘어난TR": string[] } | null> {
+  const data = await load();
+  const keys = Object.keys(data).sort().slice(-days);
+  if (keys.length === 0) return null;
+  const sumOf = (day: string) => {
+    const c = data[day]?.[provider]?.calls ?? {};
+    return Object.values(c).reduce((a, b) => a + b, 0);
+  };
+  const t = today();
+  const 일별 = [...keys].reverse().map((d) => `${d.slice(5)} ${sumOf(d).toLocaleString()}${d === t ? " (진행중)" : ""}`);
+
+  /* 어제 ↔ 그제 — 둘 다 끝난 날이라 공평하다 */
+  const done = keys.filter((d) => d !== t);
+  const y = done[done.length - 1];
+  const dby = done[done.length - 2];
+  const 늘어난TR: string[] = [];
+  if (y && dby) {
+    const a = data[dby]?.[provider]?.calls ?? {};
+    const b = data[y]?.[provider]?.calls ?? {};
+    const names = new Set([...Object.keys(a), ...Object.keys(b)]);
+    const diffs = [...names]
+      .map((n) => ({ n, d: (b[n] ?? 0) - (a[n] ?? 0) }))
+      .filter((x) => Math.abs(x.d) >= 500)
+      .sort((p1, p2) => p2.d - p1.d)
+      .slice(0, 8);
+    늘어난TR.push(`${dby.slice(5)} → ${y.slice(5)}`);
+    for (const x of diffs) 늘어난TR.push(`${x.n} ${x.d > 0 ? "+" : ""}${x.d.toLocaleString()}`);
+  }
+  return { 일별, 늘어난TR };
+}
+
 export async function getUsage(day = today()): Promise<{ day: string; providers: ProviderUsage[] }> {
   const data = await load();
   const dayData = data[day] ?? ({} as Record<ApiProvider, DayStat>);

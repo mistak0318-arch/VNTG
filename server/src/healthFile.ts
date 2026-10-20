@@ -17,6 +17,7 @@ import { shareGetStats } from "./shareGet.js";
 import { dropSamplesCache } from "./signalSamples.js";
 import { peekRealtime, realtimeFidSurvey, realtimePickSnapshot, subscribedCount } from "./realtimeHub.js";
 import { collectHealthSnapshot } from "./collectHealth.js";
+import { sparkCacheStat } from "./sparkCache.js";
 import { nightFuturesSnapshot } from "./usMajor.js";
 import { fxFidSnapshot } from "./fxFidProbe.js";
 import { phaseTodaySummary } from "./marketPhase.js";
@@ -24,7 +25,7 @@ import { hantooRealtimeStatus } from "./hantooRealtime.js";
 import { hantooQueueDepth } from "./hantooClient.js";
 import { afterCloseStatus, afterCloseStateSummary } from "./afterClose.js";
 import { tradingDayStatus } from "./tradingDay.js";
-import { getUsage } from "./apiUsage.js";
+import { getUsage, usageTrend } from "./apiUsage.js";
 import { cisWhyNotSnapshot } from "./cisWhyNot.js";
 import { alertHealthLines } from "./alertHealth.js";
 import { getCisConfig } from "./cisConfig.js";
@@ -270,6 +271,12 @@ async function writeOnceInner(): Promise<void> {
       })
       .catch(() => null),
     /*
+     * **어제와 견준다** (2026-10-21). 위 `조회상위` 는 오늘 누계뿐이라 「어제보다
+     * 느려졌다」에 답을 못 한다 — 무엇이 늘었는지가 안 보인다. 날짜별 합계와
+     * **어제 ↔ 그제 TR별 증감**을 같이 싣는다. 개수뿐이고 종목·계좌는 없다.
+     */
+    조회추이: await usageTrend("kiwoom").catch(() => null),
+    /*
      * **알림 갈래가 켜져 있나** (2026-09-22). 키워드 알림이 한 달 동안 안 왔는데 원인이 「벤티지가
      * 꺼 놓은 것」이었다 — 밖에서 「꺼짐」과 「고장」이 구분이 안 돼 코드를 한참 뒤졌다. 상태만 싣는다.
      */
@@ -351,6 +358,8 @@ async function writeOnceInner(): Promise<void> {
      * 끊긴 경우를 그 집계로는 못 본다). 못 받고 있는 것이 **맨 위**에 온다.
      */
     수집: collectHealthSnapshot(),
+    /* 미니스파크 분봉 캐시 (2026-10-21) — 소켓에 없던 종목을 배경에서 받아 둔 것 */
+    미니스파크: sparkCacheStat(),
   };
 
   try {

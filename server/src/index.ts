@@ -50,6 +50,7 @@ import { createNewsKeywordRouter } from "./routes/newsKeywords.js";
 import { createNaverSyncRouter } from "./routes/naverSync.js";
 import { createDataRouter } from "./routes/data.js";
 import { startRetentionScheduler } from "./dataRetention.js";
+import { startSparkWorker } from "./sparkCache.js";
 import { createCalendarRouter } from "./routes/calendar.js";
 import { createMarketRouter } from "./routes/market.js";
 import { createUsKiwoomRouter } from "./routes/usKiwoom.js";
@@ -433,6 +434,11 @@ startHantooScheduleSync();
 startFillStore(client);
 /* 데이터 보관 기간 정리 (2026-08-31) — 실시간 로그가 무한히 쌓고 있었다 */
 startRetentionScheduler();
+/*
+ * 미니스파크 분봉 워커 (2026-10-21) — 화면이 찾았는데 소켓에 없던 종목을 **한 건씩**
+ * 천천히 받아 캐시에 넣는다. 조회가 몰리지 않게 간격을 두므로 키움 큐를 막지 않는다.
+ */
+startSparkWorker(client);
 /* 「이 종목을 담은 ETF」 역인덱스 — 하루 1회(애프터 마감 20:00 뒤). 화면은 파일만 읽는다 */
 startEtfHoldersScheduler(client);
 /* 시스 되짚기 — 평일 15:50, 오늘 물어본 종목이 그 뒤로 어떻게 됐나 (2026-09-03) */
