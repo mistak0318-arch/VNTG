@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useLive } from "../useLive";
 import { api, fmtNum, pickList, type RawRecord } from "../api";
 import { num, signOf } from "./SeriesTable";
+import type { LastSession } from "./PeriodReturns";
 
 /**
  * 당일 흐름 패널들.
@@ -30,10 +31,15 @@ interface Point {
   volume: number;
 }
 
-/** 분봉 응답에서 "가장 최근 날짜" 것만 뽑아 시간순으로 정렬 */
-function todayPoints(chart: RawRecord | null): Point[] {
+/**
+ * 분봉 응답에서 "가장 최근 날짜" 것만 뽑아 시간순으로 정렬.
+ *
+ * **그 날짜(`day`)도 같이 돌려준다** (2026-10-21). 기준선으로 쓸 전일종가가 **그 날의
+ * 것**이어야 하는데, 날짜를 안 돌려주니 바깥이 알 길이 없었다 — 아래 `baseFor` 참고.
+ */
+function todayPoints(chart: RawRecord | null): { day: string; points: Point[] } {
   const rows = pickList(chart ?? undefined, ["stk_min_pole_chart_qry"]);
-  if (rows.length === 0) return [];
+  if (rows.length === 0) return { day: "", points: [] };
 
   // cntr_tm: YYYYMMDDHHmmss (최신순으로 내려옴)
   const latestDay = String(rows[0].cntr_tm ?? "").slice(0, 8);
@@ -55,7 +61,29 @@ function todayPoints(chart: RawRecord | null): Point[] {
       });
     }
   }
-  return out.reverse();
+  return { day: latestDay, points: out.reverse() };
+}
+
+/**
+ * **그 날의 전일종가** (2026-10-21 — 벤티지: "당일흐름의 시고저랑 종목상세 맨위의
+ * 시고저가 안 맞아 좀 맞추자").
+ *
+ * 여태 기준선으로 `info.base_pric` 을 그대로 썼다. 그런데 그건 **오늘의 기준가**다.
+ * 장 끝난 뒤(이튿날 새벽 포함)에 열면 분봉은 **어제 것**을 그리는데 기준선만 오늘 것이라
+ * 하루가 어긋났다 — 삼성전기 10/21 06:47 화면이 그랬다:
+ *
+ *     당일 흐름  전일종가 1,155,000   ← 10/20 **종가**(= 10/21 기준가)
+ *     맨 위      전일종가 1,170,000   ← 10/19 종가. 이게 맞다
+ *
+ * 그래서 시가·고가·저가의 % 가 전부 밀렸다. 맨 위 머리줄은 이미 같은 함정을 알고
+ * 「어제 일봉」(`LastSession`)의 `base` 로 되돌리고 있었다 — 여기도 같은 값을 쓴다.
+ *
+ * ⚠️ 날짜가 **맞을 때만** 바꾼다. 장중이면 분봉 날짜가 오늘이라 `last.date`(어제)와
+ * 안 맞고, 그때는 `base_pric` 이 맞는 값이다.
+ */
+function baseFor(day: string, basePrice: number, lastDay?: LastSession | null): number {
+  if (day && lastDay?.date === day && (lastDay.base ?? 0) > 0) return lastDay.base!;
+  return basePrice;
 }
 
 /**
@@ -129,11 +157,21 @@ function sessionBands(points: Point[], W: number): { pre: number; post: number }
   };
 }
 
-export function IntradaySpark({ chart, basePrice }: { chart: RawRecord | null; basePrice: number }) {
-  const points = todayPoints(chart);
+export function IntradaySpark({
+  chart,
+  basePrice,
+  lastDay,
+}: {
+  chart: RawRecord | null;
+  basePrice: number;
+  /** 어제 일봉 — 분봉이 어제 것이면 기준선을 그 날의 전일종가로 (2026-10-21, `baseFor`) */
+  lastDay?: LastSession | null;
+}) {
+  const { day, points } = todayPoints(chart);
   if (points.length < 2) return null;
   const prices = points.map((p) => p.price);
-  const base = basePrice > 0 ? basePrice : prices[0];
+  const bp = baseFor(day, basePrice, lastDay);
+  const base = bp > 0 ? bp : prices[0];
   const last = prices[prices.length - 1];
   const top = Math.max(...prices, base);
   const bottom = Math.min(...prices, base);
@@ -169,11 +207,14 @@ export function IntradayFlow({
   code,
   basePrice,
   chart: given,
+  lastDay,
 }: {
   code: string;
   basePrice: number;
   /** 바깥이 이미 들고 있으면 그것을 쓴다 — 같은 분봉을 두 번 받지 않으려고 (2026-10-12) */
   chart?: RawRecord | null;
+  /** 어제 일봉 — 분봉이 어제 것이면 기준선을 그 날의 전일종가로 (2026-10-21, `baseFor`) */
+  lastDay?: LastSession | null;
 }) {
   /*
    * 3분봉이라 장중에는 계속 새 봉이 붙는다. 30초마다 조용히 갱신한다 —
@@ -194,7 +235,7 @@ export function IntradayFlow({
   if (loading && !chart) return <div className="empty">당일 흐름 불러오는 중...</div>;
   if (error && !chart) return <div className="error-banner">{error}</div>;
 
-  const points = todayPoints(chart);
+  const { day, points } = todayPoints(chart);
   if (points.length < 2) return <div className="empty">당일 분봉 데이터가 없습니다.</div>;
 
   const prices = points.map((p) => p.price);
@@ -208,7 +249,8 @@ export function IntradayFlow({
   const low = Math.min(...points.map((p) => p.low));
 
   // 기준선(전일종가)이 화면 밖으로 나가지 않도록 범위에 포함시킨다
-  const base = basePrice > 0 ? basePrice : open;
+  const bp = baseFor(day, basePrice, lastDay);
+  const base = bp > 0 ? bp : open;
   const top = Math.max(high, base);
   const bottom = Math.min(low, base);
   const range = top - bottom || 1;

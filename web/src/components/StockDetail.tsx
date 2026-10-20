@@ -521,7 +521,7 @@ export function StockDetail({
           */}
           {wide && basePrice > 0 && minuteChart && (
             <span className="sd-spark-wrap">
-              <IntradaySpark chart={minuteChart} basePrice={basePrice} />
+              <IntradaySpark chart={minuteChart} basePrice={basePrice} lastDay={lastSession} />
             </span>
           )}
           {/*
@@ -633,7 +633,7 @@ export function StockDetail({
           */}
           {basePrice > 0 && !wide && (
             <div className="sd-blk" style={{ order: cards.orderOf("intraday") }}>
-              <IntradayFlow code={code} basePrice={basePrice} />
+              <IntradayFlow code={code} basePrice={basePrice} lastDay={lastSession} />
             </div>
           )}
           {/*
@@ -689,7 +689,7 @@ export function StockDetail({
                   <>
                     <StockStatusBanner code={code} />
                     <PriceHeader info={info} code={code} onLastSession={setLastSession} />
-                    {basePrice > 0 && <IntradayFlow code={code} basePrice={basePrice} chart={minuteChart ?? null} />}
+                    {basePrice > 0 && <IntradayFlow code={code} basePrice={basePrice} chart={minuteChart ?? null} lastDay={lastSession} />}
                     <IntradayLevelsBar code={code} />
                     {late && <InvestorEstimate code={code} />}
                     <StockSummaryPanel code={code} onSelectStock={onSelectStock} />
