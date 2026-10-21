@@ -85,6 +85,31 @@ function aligned(s: Sample): boolean {
   return m5 != null && m20 != null && m60 != null && m5 > m20 && m20 > m60;
 }
 
+/**
+ * **장중에도 같은 목록을 쓴다** (2026-10-21 — 벤티지: "마켓브리핑의 지금 탭에 외국인
+ * 매수 상위 기관 매수상위 그리고 신고가 돌파 정배열 진입 이런 시장특이사항 종목들
+ * 추려서 보여주는 거 어때").
+ *
+ * 리포트용과 **같은 함수**를 쓴다 — 두 화면이 다른 규칙으로 뽑으면 「리포트엔 있는데
+ * 지금 탭엔 없는」 종목이 생긴다. 다만 장중에는 자주 불리므로 캐시를 둔다:
+ * 재료(표본·일봉)는 **하루 한 번** 마감 뒤에 바뀌니 10분이면 넉넉하다.
+ */
+let picksCache: { at: number; key: string; data: ReportPicks | null } | null = null;
+const PICKS_TTL_MS = 10 * 60_000;
+
+export async function cachedReportPicks(
+  client?: KiwoomClient,
+  earningsMode = false,
+): Promise<ReportPicks | null> {
+  const key = `${client ? "k" : "-"}${earningsMode ? "e" : "-"}`;
+  if (picksCache && picksCache.key === key && Date.now() - picksCache.at < PICKS_TTL_MS) {
+    return picksCache.data;
+  }
+  const data = await buildReportPicks(client, earningsMode);
+  picksCache = { at: Date.now(), key, data };
+  return data;
+}
+
 export async function buildReportPicks(
   client?: KiwoomClient,
   /** 실적 시즌 모드 — 설정에서 켠다 (기본 꺼짐) */

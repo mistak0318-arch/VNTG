@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { cachedReportPicks } from "../reportPicks.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 
 import { buildDigest } from "../aiSummary.js";
@@ -202,6 +203,19 @@ export function createReportRouter(client: KiwoomClient): Router {
   });
 
   /** 발행 일정 설정 */
+  /**
+   * 매매 참고 종목 목록 — 리포트와 **같은 함수**로 뽑는다 (2026-10-21).
+   * 마켓 브리핑 「지금」 탭이 쓴다. 10분 캐시라 자주 불러도 조회가 안 는다.
+   */
+  router.get("/picks", async (_req, res, next) => {
+    try {
+      const schedule = await getSchedule();
+      res.json({ picks: await cachedReportPicks(client, schedule.earningsMode === true) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.get("/schedule", async (_req, res, next) => {
     try {
       res.json({ schedule: await getSchedule(), defaults: DEFAULT_SCHEDULE });

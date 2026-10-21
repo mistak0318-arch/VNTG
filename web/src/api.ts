@@ -1977,6 +1977,8 @@ export const api = {
     getJson<{ result: ReviewResult | null }>(
       `/api/report/review?date=${date}&edition=${encodeURIComponent(edition)}`,
     ),
+  /** 매매 참고 종목 — 리포트와 같은 목록. 마켓 브리핑 「지금」이 쓴다 (2026-10-21) */
+  reportPicks: () => getJson<{ picks: ReportPicks | null }>("/api/report/picks"),
   reportSchedule: () =>
     getJson<{
       schedule: { slots: EditionSlot[]; earningsMode?: boolean };

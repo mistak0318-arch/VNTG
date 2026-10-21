@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, type MoneyAccountRow, type MoneyBuyerRow, type MoneyNow, type MoneyWhereTheme } from "../api";
+import { api, type MoneyAccountRow, type MoneyBuyerRow, type MoneyNow, type MoneyWhereTheme, type ReportPicks } from "../api";
 
 /**
  * **돈의 흐름 — 「지금」 탭** (2026-09-17, 벤티지: "직장인·단타·스윙·종배 트레이더에게 가장 귀중한 정보를 가장 효율적으로").
@@ -106,6 +106,34 @@ export function MoneyNowPanel({ onSelectStock }: { onSelectStock?: (code: string
   const [data, setData] = useState<MoneyNow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /*
+   * 특이사항 종목 — 리포트와 **같은 목록**. 한 번만 받는다(서버가 10분 캐시).
+   * 실패해도 판정 카드는 그대로 뜬다 — 곁다리 하나 때문에 「지금」이 빈 화면이 되면 안 된다.
+   */
+  const [picks, setPicks] = useState<ReportPicks | null>(null);
+  /*
+   * **「지금」에는 추려서** (2026-10-21). 리포트는 열네 묶음을 다 싣지만 여기는 **빠르게
+   * 훑는 자리**다 — 다 그리면 판정 카드 아래로 화면 몇 개가 더 붙는다.
+   *
+   * 고르는 기준: ①실측이 있는 것 먼저(★ 초록∩외인3칸) ②수급은 **20일 하나만**
+   * (5·10일은 같은 얘기를 세 번 하는 꼴) ③오늘 **벌어진 일**(상한가·신고가·거래 급증·
+   * 정배열 전환). 종목도 묶음마다 다섯만 — 더 보려면 리포트로 간다.
+   */
+  const NOW_KEYS = ["greenFgn", "fgn20", "inst20", "limitUp", "high52", "brk3m", "maTurn", "volSurge"];
+  const nowGroups = (picks?.groups ?? [])
+    .filter((g) => NOW_KEYS.includes(g.key))
+    .sort((a, b) => NOW_KEYS.indexOf(a.key) - NOW_KEYS.indexOf(b.key));
+
+  useEffect(() => {
+    let dead = false;
+    api
+      .reportPicks()
+      .then((r) => !dead && setPicks(r.picks ?? null))
+      .catch(() => undefined);
+    return () => {
+      dead = true;
+    };
+  }, []);
 
   const loadSeq = useRef(0);
   const load = (fresh = false) => {
@@ -229,6 +257,52 @@ export function MoneyNowPanel({ onSelectStock }: { onSelectStock?: (code: string
         )}
         <div className="mnw-advice">🕒 {data.slot.advice}</div>
       </section>
+
+      {/*
+        ②' **오늘의 특이사항 종목** (2026-10-21 — 벤티지: "마켓브리핑의 지금 탭에 외국인
+        매수 상위 기관 매수상위 그리고 신고가 돌파 정배열 진입 이런 시장특이사항 종목들
+        추려서 보여주는 거 어때").
+
+        데일리 리포트와 **같은 목록**이다(`/report/picks`) — 두 화면이 다른 규칙으로 뽑으면
+        「리포트엔 있는데 지금 탭엔 없는」 종목이 생긴다. 서버가 10분 캐시라 자주 열어도
+        조회가 안 는다.
+
+        ⚠️ 재료는 **어제 마감 원장**이다. 장중 실시간이 아니라 「어제까지 이렇게 쌓였다」는
+        뜻이고, 그래서 머리에 기준일을 적는다.
+        ⚠️ 판정 카드 **바로 아래**다. 「지금 어떤 장인가」를 읽고 나서 「그럼 뭘 보나」로
+        이어지는 순서다.
+      */}
+      {nowGroups.length > 0 && (
+        <section className="card mnw-card">
+          <h3>
+            오늘의 특이사항 종목{" "}
+            <span className="usm-sub">
+              {picks!.date.slice(4, 6)}/{picks!.date.slice(6, 8)} 마감 원장 기준 · 리포트에 더 많이 있습니다
+            </span>
+          </h3>
+          <div className="rp-picks" style={{ marginTop: 0, borderTop: "none", paddingTop: 0 }}>
+            {nowGroups.map((g) => (
+              <div className="rp-pick-g" key={g.key}>
+                <div className="rp-pick-label">{g.label}</div>
+                <div className="rp-pick-rows">
+                  {g.picks.slice(0, 5).map((p) => (
+                    <button
+                      key={p.code}
+                      className="rp-pick"
+                      onClick={() => onSelectStock?.(p.code, p.name)}
+                      title={`${p.name} — ${p.why}`}
+                    >
+                      <b>{p.name}</b>
+                      <i>{p.why}</i>
+                    </button>
+                  ))}
+                </div>
+                <div className="rp-pick-note">{g.note}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ② 돈이 가는 곳 */}
       <section className="card mnw-card">
