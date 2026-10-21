@@ -232,5 +232,95 @@ export async function buildReportPicks(): Promise<ReportPicks | null> {
     "⚠️ 재검증에서 **방향이 거꾸로였다** — 신호등에서 이 기준을 끄면 초록 성적이 +1.8 → +2.5 로 올랐다. 참고로만 본다.",
   );
 
+  /* ── 기술적 특징주 — 일봉만으로 (2026-10-21) ─────────────────
+   *
+   * 벤티지가 인포스탁 조간을 주며 "우리꺼에 충분히 녹여봐봐 … 장중 특이사항들에
+   * 대해서도 잘 나오더라고". 그쪽 「기술적 분석 특징주」가 이런 묶음이었다 —
+   * 고점돌파(3개월/1년) · 첫·연속 상한가 · 거래 급증 · 골든크로스 · MACD · 일목 ·
+   * Stochastic.
+   *
+   * ⚠️ **가격·거래량 쪽만 넣는다.** MACD·일목·Stochastic 은 우리 표본으로 **한 번도
+   * 검증한 적이 없다.** 신호등을 19만 관측으로 재면서 기각한 가설이 셋이었는데, 그
+   * 잣대를 안 거친 지표를 같은 리포트에 나란히 놓으면 둘이 같은 무게로 읽힌다.
+   * 골든크로스는 장기(60·180)만 넣는다 — 위의 정배열(5>20>60)과 다른 축이라서다.
+   */
+  if (store?.bars) {
+    const ma = (xs: number[], n: number, back = 0) => {
+      const end = xs.length - back;
+      if (end < n) return null;
+      let sum = 0;
+      for (let i = end - n; i < end; i += 1) sum += xs[i];
+      return sum / n;
+    };
+    const brk3m: { p: Pick; vol: number }[] = [];
+    const surge: { p: Pick; x: number }[] = [];
+    const limitUp: Pick[] = [];
+    const goldLong: { p: Pick; vol: number }[] = [];
+
+    for (const s2 of cur) {
+      const bars = store.bars[s2.code];
+      if (!bars || bars.length < 30) continue;
+      const closes = bars.map((b) => b.c).filter((v) => v > 0);
+      const last = bars[bars.length - 1];
+      const prev = bars[bars.length - 2];
+      if (!last || !prev || !(last.c > 0) || !(prev.c > 0)) continue;
+
+      /* 고점돌파 3개월 — 60봉. 1년(위 `high52`)에 든 것은 빼서 겹치지 않게 */
+      const win60 = closes.slice(-60);
+      if (win60.length >= 40) {
+        const prevMax = Math.max(...win60.slice(0, -1));
+        const in52 = high52.some((h) => h.p.code === s2.code);
+        if (last.c >= prevMax && !in52) {
+          brk3m.push({ p: { code: s2.code, name: s2.name, why: `60봉 최고 · 거래대금 ${eok(s2.volEok ?? 0)}` }, vol: s2.volEok ?? 0 });
+        }
+      }
+
+      /* 상한가 — 한국은 ±30%. 종가가 전일 대비 +29% 넘으면 상한가로 본다 */
+      const rate = ((last.c - prev.c) / prev.c) * 100;
+      if (rate >= 29) {
+        const prev2 = bars[bars.length - 3];
+        const back2 = prev2 && prev2.c > 0 ? ((prev.c - prev2.c) / prev2.c) * 100 : 0;
+        limitUp.push({
+          code: s2.code,
+          name: s2.name,
+          why: back2 >= 29 ? "연속 상한가" : `상한가 (+${rate.toFixed(1)}%)`,
+        });
+      }
+
+      /* 거래 급증 — 오늘 거래량 ÷ 직전 10일 평균 */
+      const vols = bars.map((b) => b.v ?? 0).filter((v) => v > 0);
+      if (vols.length >= 12 && (last.v ?? 0) > 0) {
+        const base = vols.slice(-11, -1);
+        const avg = base.reduce((a, b) => a + b, 0) / base.length;
+        const x = avg > 0 ? (last.v as number) / avg : 0;
+        if (x >= 3) {
+          surge.push({ p: { code: s2.code, name: s2.name, why: `10일 평균의 ${x.toFixed(1)}배 · 거래대금 ${eok(s2.volEok ?? 0)}` }, x });
+        }
+      }
+
+      /* 장기 골든크로스 — 오늘 60선이 180선을 넘었고 어제는 아니었다 */
+      const a0 = ma(closes, 60);
+      const b0 = ma(closes, 180);
+      const a1 = ma(closes, 60, 1);
+      const b1 = ma(closes, 180, 1);
+      if (a0 != null && b0 != null && a1 != null && b1 != null && a0 > b0 && a1 <= b1) {
+        goldLong.push({ p: { code: s2.code, name: s2.name, why: `60일선이 180일선 위로 · 거래대금 ${eok(s2.volEok ?? 0)}` }, vol: s2.volEok ?? 0 });
+      }
+    }
+
+    brk3m.sort((a, b) => b.vol - a.vol);
+    surge.sort((a, b) => b.x - a.x);
+    goldLong.sort((a, b) => b.vol - a.vol);
+
+    add("brk3m", "고점돌파 (3개월)", brk3m.slice(0, TOP).map((x) => x.p),
+      "60봉 안에서 종가가 가장 높은 종목. 위의 52주 신고가에 든 것은 뺐다 — 같은 종목이 두 줄에 나오지 않게.");
+    add("limitUp", "상한가", limitUp.slice(0, TOP),
+      "종가가 전일 대비 +29% 이상. 「연속」은 어제도 상한가였다는 뜻이다.");
+    add("volSurge", "거래 급증 (10일 평균의 3배↑)", surge.slice(0, TOP).map((x) => x.p),
+      "거래량이 평소의 몇 배인지. 방향은 안 본다 — 몰린 자리가 고점이었던 계절도 있다(신조 ①체).");
+    add("goldLong", "장기 골든크로스 (60일선 > 180일선)", goldLong.slice(0, TOP).map((x) => x.p),
+      "오늘 처음 넘어선 것만. 위의 정배열(5>20>60)보다 느린 축이라 둘이 같이 서면 더 무겁다. ⚠️ 우리 표본으로 따로 검증한 기준은 아니다.");
+  }
+
   return { date: today, ageDays, groups };
 }
