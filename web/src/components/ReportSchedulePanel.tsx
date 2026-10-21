@@ -45,11 +45,16 @@ export function ReportSchedulePanel() {
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
+  /* 실적 시즌 모드 — 1·4·7·10월 말에만 켠다 (2026-10-21) */
+  const [earningsMode, setEarningsMode] = useState(false);
 
   useEffect(() => {
     api
       .reportSchedule()
-      .then((r) => setSlots(r.schedule.slots))
+      .then((r) => {
+        setSlots(r.schedule.slots);
+        setEarningsMode(r.schedule.earningsMode === true);
+      })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
@@ -64,8 +69,9 @@ export function ReportSchedulePanel() {
     setNote(null);
     setError(null);
     try {
-      const r = await api.reportScheduleSave(slots);
+      const r = await api.reportScheduleSave(slots, earningsMode);
       setSlots(r.schedule.slots);
+      setEarningsMode(r.schedule.earningsMode === true);
       setDirty(false);
       setNote("저장했습니다. 다음 발행부터 적용됩니다.");
     } catch (e) {
@@ -187,6 +193,27 @@ export function ReportSchedulePanel() {
           {saving ? "저장 중…" : dirty ? "저장" : "저장됨"}
         </button>
       </div>
+
+      {/*
+        **실적 시즌 모드** (2026-10-21 — 벤티지: "설정에서 실적시즌 모드 켜기 하면
+        키면 되는 거 아냐?"). 기본은 꺼짐이다 — 실적은 1·4·7·10월 말에만 쏟아지고
+        나머지 열 달은 「오늘은 없음」이 자리만 먹는다.
+      */}
+      <label className="rs-earnings">
+        <input
+          type="checkbox"
+          checked={earningsMode}
+          onChange={(e) => {
+            setEarningsMode(e.target.checked);
+            setDirty(true);
+          }}
+        />
+        <b>실적 시즌 모드</b>
+        <i>
+          켜면 리포트에 「오늘 실적 발표 예정」이 붙습니다 — 캘린더의 실적 일정에서 종목을 찾아
+          <b> 작년 같은 분기</b>·<b>직전 분기</b> 영업이익을 같이 보여 줍니다. 실적 시즌에만 켜세요.
+        </i>
+      </label>
 
       {note && <div className="alert-note">{note}</div>}
       {error && <div className="error-banner">{error}</div>}

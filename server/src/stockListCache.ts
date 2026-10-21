@@ -304,7 +304,39 @@ export async function searchStocks(
     return hit.slice(0, 20).map((x) => x.item);
   }
 
-  return list
-    .filter((item) => item.code.toLowerCase().includes(q) || item.name.toLowerCase().includes(q))
-    .slice(0, 20);
+  /*
+   * **맞는 순서대로 올린다** (2026-10-21 — 벤티지: "sk 검색이 안 되냐 왜").
+   *
+   * 여태 일반 검색은 **정렬이 아예 없었다.** 거른 뒤 앞 20개를 자를 뿐이라 목록 순서
+   * (코드순)가 그대로 등수가 됐다. 그래서 `sk` 를 치면
+   *
+   *     000660 SK하이닉스 · 001510 SK증권 · 001515 SK증권우 · 001740 SK네트웍스 … 034730 **SK**
+   *
+   * 정작 이름이 **딱 그것**인 SK(034730)가 한참 뒤로 밀려 화면에서 사라졌다.
+   * 바로 위 초성 검색에는 순위가 있는데 이쪽만 빠져 있었다.
+   *
+   * 등수: ①이름이 정확히 같다 ②이름이 그 글자로 시작 ③코드가 정확히 같다
+   *       ④나머지(포함). 같은 급이면 **우선주를 뒤로** — 「SK증권」이 「SK증권우」보다 위다.
+   *       그 다음은 이름이 짧은 쪽이 위다(더 정확히 맞은 것이므로).
+   */
+  const hit = list.filter(
+    (item) => item.code.toLowerCase().includes(q) || item.name.toLowerCase().includes(q),
+  );
+  const rank = (item: StockEntry): number => {
+    const name = item.name.toLowerCase();
+    if (name === q) return 0;
+    if (name.startsWith(q)) return 1;
+    if (item.code.toLowerCase() === q) return 2;
+    return 3;
+  };
+  /* 우선주는 한 칸 뒤로 — 「우」·「우B」·「1우」 로 끝나는 이름 */
+  const pref = (item: StockEntry): number => (/[0-9]?우[A-Z]?$/.test(item.name) ? 1 : 0);
+  hit.sort((a, b) => {
+    const r = rank(a) - rank(b);
+    if (r !== 0) return r;
+    const p = pref(a) - pref(b);
+    if (p !== 0) return p;
+    return a.name.length - b.name.length;
+  });
+  return hit.slice(0, 20);
 }

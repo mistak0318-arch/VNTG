@@ -21269,6 +21269,11 @@ tr.gv-strong td:first-child { color: var(--text); }
  * 거래가 없는 종목을 「안 붙음」과 구별하려고 만든 자리다.
  */
 /* 상세 머리줄의 「붙었는데 조용함」 — 초록 테두리 (2026-10-21) */
+/* 실적 시즌 모드 토글 (2026-10-21) */
+.rs-earnings { display: flex; align-items: flex-start; gap: 7px; margin-top: 10px; padding: 9px 11px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); font-size: 0.8rem; cursor: pointer; }
+.rs-earnings i { font-style: normal; font-size: 0.72rem; color: var(--muted); line-height: 1.5; }
+.rs-earnings input { margin-top: 2px; }
+
 /* ===== 리포트의 매매용 종목 목록 (2026-10-21) ===== */
 .rp-picks { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; }
 .rp-picks-h { font-size: 0.78rem; font-weight: 700; color: var(--muted); margin-bottom: 8px; }

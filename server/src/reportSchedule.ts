@@ -46,10 +46,21 @@ export interface EditionSlot {
 
 export interface ReportSchedule {
   slots: EditionSlot[];
+  /**
+   * **실적 시즌 모드** (2026-10-21 — 벤티지: "설정에서 실적시즌 모드 켜기 하면
+   * 키면 되는 거 아냐?").
+   *
+   * 켜면 리포트에 「오늘 실적 발표 예정」 묶음이 붙는다. 기본은 **꺼짐**이다 —
+   * 실적은 1·4·7·10월 말에만 쏟아지고 나머지 열 달은 빈 묶음이라, 늘 켜 두면
+   * 「오늘은 없음」이 열 달 내내 자리를 먹는다.
+   */
+  earningsMode?: boolean;
 }
 
 /** 지금까지 동작하던 것과 같은 구성 — 설정 파일이 없으면 이걸 쓴다 */
 export const DEFAULT_SCHEDULE: ReportSchedule = {
+  /* 실적 시즌에만 벤티지가 설정에서 켠다 */
+  earningsMode: false,
   slots: [
     /* 07:00 → **06:00** (2026-10-21, 벤티지 요청). 채널 발행(07:00)과는 서로 안 묶여 있어 앞당겨도 된다 */
     { id: "morning", label: "조간", hour: 6, minute: 0, kind: "morning", enabled: true, days: "weekday", deliver: true },
@@ -75,8 +86,9 @@ function safeId(v: unknown): string {
 }
 
 function normalize(input: unknown): ReportSchedule {
+  const earningsMode = (input as ReportSchedule)?.earningsMode === true;
   const raw = (input as ReportSchedule)?.slots;
-  if (!Array.isArray(raw)) return DEFAULT_SCHEDULE;
+  if (!Array.isArray(raw)) return { ...DEFAULT_SCHEDULE, earningsMode };
 
   const seen = new Set<string>();
   const slots: EditionSlot[] = [];
@@ -101,10 +113,10 @@ function normalize(input: unknown): ReportSchedule {
       deliver: s?.deliver !== false,
     });
   }
-  if (slots.length === 0) return { slots: [] };
+  if (slots.length === 0) return { slots: [], earningsMode };
   // 시각 순으로 정렬해 두면 화면에서도, 스케줄러에서도 읽기 쉽다
   slots.sort((a, b) => a.hour * 60 + a.minute - (b.hour * 60 + b.minute));
-  return { slots };
+  return { slots, earningsMode };
 }
 
 let cache: ReportSchedule | null = null;

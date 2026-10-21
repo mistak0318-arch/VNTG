@@ -85,7 +85,11 @@ function aligned(s: Sample): boolean {
   return m5 != null && m20 != null && m60 != null && m5 > m20 && m20 > m60;
 }
 
-export async function buildReportPicks(client?: KiwoomClient): Promise<ReportPicks | null> {
+export async function buildReportPicks(
+  client?: KiwoomClient,
+  /** 실적 시즌 모드 — 설정에서 켠다 (기본 꺼짐) */
+  earningsMode = false,
+): Promise<ReportPicks | null> {
   const file = await loadSamples();
   if (!file || file.samples.length === 0) return null;
 
@@ -420,6 +424,65 @@ export async function buildReportPicks(client?: KiwoomClient): Promise<ReportPic
       }
     } catch (e) {
       console.warn("[reportPicks] 화제 묶음 실패 —", e instanceof Error ? e.message : e);
+    }
+  }
+
+  /* ── 오늘 실적 발표 예정 — **실적 시즌 모드일 때만** (2026-10-21) ──
+   *
+   * 벤티지: "실적은 실적시즌에만 나오면 되서 당장은 필요없음" →
+   *         "지금 세팅해두자 그리고 설정에서 실적시즌 모드 켜기."
+   *
+   * 인포스탁 조간의 「당일 3분기 실적 발표 예정 주요 기업」 자리다. 그쪽은
+   * **컨센서스(예상치)** 를 같이 싣는데 우리는 그 값이 없다 — 대신 우리가 가진
+   * **작년 같은 분기**와 **직전 분기**를 붙인다. 「작년 이맘때 얼마였나」를 알고
+   * 발표를 맞는 것이 요점이라, 예상치가 없어도 쓸모가 남는다.
+   *
+   * ⚠️ 일정은 **캘린더의 실적(`earnings`) 일정**에서 온다. 제목에 종목명이 들어 있어야
+   * 코드를 찾는다 — 못 찾으면 그 줄은 건너뛴다(이름만 적어 두면 누를 수가 없다).
+   * ⚠️ 실적 숫자는 `financeCache`(분기, **억원**)에서 읽는다. 조회가 안 는다.
+   */
+  if (earningsMode && client) {
+    try {
+      const { listEventsRange } = await import("./calendar.js");
+      const { loadFinanceCache } = await import("./financeCache.js");
+      const { getStockIndex } = await import("./stockListCache.js");
+      const d = new Date();
+      const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const evs = (await listEventsRange(ymd, ymd)).filter((e) => e.kind === "earnings");
+      if (evs.length > 0) {
+        const idx = await getStockIndex(client);
+        const fin = await loadFinanceCache();
+        /* 종목명 → 코드. 긴 이름부터 맞춰야 「한화」가 「한화에어로스페이스」를 가로채지 않는다 */
+        const byName = [...idx.entries()]
+          .map(([code, name]) => ({ code, name: String(name) }))
+          .filter((x) => x.name.length >= 2)
+          .sort((a, b) => b.name.length - a.name.length);
+        const seenCode = new Set<string>();
+        const rows: Pick[] = [];
+        for (const e of evs) {
+          for (const x of byName) {
+            if (rows.length >= 12) break;
+            if (seenCode.has(x.code) || !e.title.includes(x.name)) continue;
+            seenCode.add(x.code);
+            const q = fin[x.code]?.quarters ?? [];
+            /* 작년 같은 분기 = 네 분기 전 */
+            const yoy = q[4];
+            const last = q[0];
+            const bits: string[] = [];
+            if (yoy?.operatingProfit != null) bits.push(`작년 ${yoy.label} 영업익 ${eok(yoy.operatingProfit)}`);
+            if (last?.operatingProfit != null) bits.push(`직전 ${last.label} ${eok(last.operatingProfit)}`);
+            rows.push({ code: x.code, name: x.name, why: bits.join(" · ") || "지난 실적 없음" });
+          }
+        }
+        add(
+          "earnings",
+          "오늘 실적 발표 예정",
+          rows,
+          "캘린더의 실적 일정에서 종목을 찾아 **작년 같은 분기**와 **직전 분기** 영업이익을 붙였다. 컨센서스(예상치)는 우리에게 없다 — 숫자가 나오면 이 둘과 견주면 된다.",
+        );
+      }
+    } catch (e) {
+      console.warn("[reportPicks] 실적 묶음 실패 —", e instanceof Error ? e.message : e);
     }
   }
 

@@ -1978,11 +1978,16 @@ export const api = {
       `/api/report/review?date=${date}&edition=${encodeURIComponent(edition)}`,
     ),
   reportSchedule: () =>
-    getJson<{ schedule: { slots: EditionSlot[] }; defaults: { slots: EditionSlot[] } }>(
-      "/api/report/schedule",
-    ),
-  reportScheduleSave: (slots: EditionSlot[]) =>
-    putJson<{ schedule: { slots: EditionSlot[] } }>("/api/report/schedule", { slots }),
+    getJson<{
+      schedule: { slots: EditionSlot[]; earningsMode?: boolean };
+      defaults: { slots: EditionSlot[] };
+    }>("/api/report/schedule"),
+  /** `earningsMode` — 실적 시즌에만 켜는 묶음 (2026-10-21) */
+  reportScheduleSave: (slots: EditionSlot[], earningsMode?: boolean) =>
+    putJson<{ schedule: { slots: EditionSlot[]; earningsMode?: boolean } }>("/api/report/schedule", {
+      slots,
+      earningsMode,
+    }),
   /** 곧바로 jobId 를 돌려준다. 진행 상황은 reportPublishStatus 로 폴링한다 */
   reportPublishNow: (deliver = false) =>
     postJson<{ jobId: string }>("/api/report/publish-now", { deliver }),
