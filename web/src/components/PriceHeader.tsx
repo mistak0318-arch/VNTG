@@ -546,9 +546,20 @@ export function PriceHeader({
              * 임시. 마감 국면에만 마지막 거래일 값으로 메운다 — 07:50 부터는 오늘 값만.
              * 넘어간 새벽엔 거래소별 조회가 0 을 준다 — 그 0 대신 어제 일봉으로(`rolled`).
              */
+            /*
+             * **저 → 시 → 고** 로 세운다 (2026-10-21 — 벤티지: "가격 순서를 저 시 고
+             * 이렇게 하자. 이래야 한눈에 들어올듯 흘러가면서").
+             *
+             * 「시·고·저」는 OHLC 라는 **관례**의 순서지 눈이 읽는 순서가 아니다. 그
+             * 차례로 적으면 숫자가 1,260,000 → 1,329,000 → 1,258,000 으로 **올라갔다
+             * 내려온다** — 한 줄을 훑으면서 매번 크기를 다시 견줘야 한다.
+             *
+             * 저→시→고 면 왼쪽에서 오른쪽으로 **값이 커지기만** 한다. 그래서 세 숫자가
+             * 곧 그날의 **띠**로 읽히고, 시가가 그 띠의 어디쯤에 있는지가 한눈에 보인다.
+             */
+            { label: "저", value: rolled ? last!.low : krx?.low || (fillOk ? fill(info.low_pric, last?.low) : info.low_pric), nxtValue: rolled ? null : nxt?.low ?? null },
             { label: "시", value: rolled ? last!.open : krx?.open || (fillOk ? fill(info.open_pric, last?.open) : info.open_pric), nxtValue: rolled ? null : nxt?.open ?? null },
             { label: "고", value: rolled ? last!.high : krx?.high || (fillOk ? fill(info.high_pric, last?.high) : info.high_pric), nxtValue: rolled ? null : nxt?.high ?? null },
-            { label: "저", value: rolled ? last!.low : krx?.low || (fillOk ? fill(info.low_pric, last?.low) : info.low_pric), nxtValue: rolled ? null : nxt?.low ?? null },
           ];
           const anyNxt = items.some((it) => it.nxtValue !== null && it.nxtValue > 0);
           return (
