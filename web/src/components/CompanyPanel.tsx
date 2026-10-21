@@ -28,8 +28,14 @@ function chip(info: RawRecord, key: string, label: string, suffix = ""): { k: st
 function KeyChips({ info }: { info: RawRecord }) {
   const mac = Number(String(pick(info, ["mac"])).replace(/,/g, ""));
   const chips = [
-    chip(info, "per", "PER", "배"),
-    chip(info, "pbr", "PBR", "배"),
+    /*
+     * **「작년」을 라벨에 적는다** (2026-10-21 전수점검). 이 per·pbr 은 키움 ka10001 이고,
+     * 분모가 **직전 결산 EPS·BPS** 다 — 머리줄 밑 밸류에이션 띠의 첫 칸과 같은 값이다.
+     * 그냥 「PER」이라 적어 두면 띠의 「최근 4분기」와 서로 다른 숫자가 되어, 같은 앱이
+     * 한 종목에 두 PER 을 말하는 꼴이 된다. 하이닉스는 그 둘이 21.8 과 5.7 이었다.
+     */
+    chip(info, "per", "PER(작년)", "배"),
+    chip(info, "pbr", "PBR(작년)", "배"),
     chip(info, "roe", "ROE", "%"),
     // 시총은 억이 여덟 자리면 안 읽힌다 — 조로 끊는다
     Number.isFinite(mac) && mac > 0

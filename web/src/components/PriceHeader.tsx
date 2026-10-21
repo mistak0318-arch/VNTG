@@ -4,6 +4,7 @@ import { useTabActive } from "../tabActive";
 import { useMarketOpen } from "../useLive";
 import { PeriodReturns, type LastSession } from "./PeriodReturns";
 import { MiniCandle } from "./MiniCandle";
+import { ValuationStrip } from "./ValuationStrip";
 import { afterMarketEra, krPhase, type KrPhase } from "../marketSession";
 
 /**
@@ -853,32 +854,20 @@ export function PriceHeader({
           </span>
         </div>
         {/*
-          **몸집과 값** — 키움이 `ka10001` 에서 같이 주는데 여태 안 쓰고 있었다.
-          재무 탭에 있긴 했지만, 종목을 처음 열었을 때 「이게 얼마짜리 회사인가」는
-          시가·고가와 같은 층의 질문이다. 탭을 옮겨서 볼 값이 아니다.
+          **몸집과 값은 아래 띠로 내렸다** (2026-10-21 — `ValuationStrip`).
 
-          PER 은 **적자면 안 나온다**(음수거나 빈 값). 그때 0 을 적으면 「값이 싸다」로
-          읽히므로 아예 안 적는다 — 없는 걸 있는 척하는 게 제일 나쁘다.
+          여기 PER·PBR 이 작게 붙어 있었는데, 그 값은 키움 `ka10001` 의 것이고
+          **분모가 작년 결산 이익**이었다. 대형주 13 개 중 7 개가 1.3 배 이상 어긋났고
+          하이닉스는 3.8 배였다. 한 칸에 작게 적어서는 「무슨 기준이냐」를 적을 자리가
+          없다 — 그래서 기준이 다른 셋을 나란히 놓을 수 있는 띠로 옮겼다.
         */}
-        <div className="ph-cell">
-          <span className="ph-label">시가총액</span>
-          <span className="ph-row">
-            <span className="ph-value">{eok(info.mac)}</span>
-          </span>
-          <span className="ph-row">
-            <em className="ph-sublabel" title="주가 ÷ 주당순이익. 적자면 안 나옵니다">
-              PER
-            </em>
-            <span className="ph-value sub">{ratio(info.per)}</span>
-          </span>
-          <span className="ph-row">
-            <em className="ph-sublabel" title="주가 ÷ 주당순자산. 1 보다 낮으면 장부가 아래">
-              PBR
-            </em>
-            <span className="ph-value sub">{ratio(info.pbr)}</span>
-          </span>
-        </div>
       </div>
+      {/*
+        **밸류에이션 띠** — 「이게 얼마짜리 회사이고 비싼가」 (2026-10-21).
+        위 격자는 **오늘 하루**를 재고, 이 띠는 **회사 자체**를 잰다. 층이 다르니 칸을
+        나눠 쓰지 않는다. 자세한 사정은 `ValuationStrip` 머리말.
+      */}
+      {code && <ValuationStrip code={code} price={Math.abs(Number(mainPrice)) || 0} info={info} />}
       {/* 오늘 하루만 보면 흐름을 못 읽는다 — 아래에 기간별 상승률을 붙인다 */}
       {code && (
         <PeriodReturns

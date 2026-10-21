@@ -32,6 +32,8 @@ const num = (v: unknown): number | null => {
   const n = Number(s);
   return Number.isFinite(n) ? n : null;
 };
+/** 0 을 「없음」으로 — 컨센서스가 없을 때 네이버가 0 을 준다 (2026-10-21) */
+const nz = (v: number | null): number | null => (v === null || v === 0 ? null : v);
 async function cached<T>(key: string, fn: () => Promise<T>): Promise<T> {
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < TTL) return hit.v as T;
@@ -86,6 +88,14 @@ export interface KrOutlook {
   eps: number | null;
   bps: number | null;
   dividendYield: number | null;
+  /**
+   * **이 EPS·BPS 가 언제까지를 센 것인가** — "2026.06." 꼴 (2026-10-21).
+   *
+   * 네이버의 PER 은 **최근 네 분기 합(TTM)** 이라 분기 실적이 나올 때마다 기준이 옮겨
+   * 간다. 그 시점을 안 적으면 키움의 「작년 결산」 PER 과 나란히 놓았을 때 **왜 두
+   * 값이 다른지** 설명할 길이 없다 — 그게 21.83 과 5.74 가 한 화면에서 싸우던 이유다.
+   */
+  asOf: string | null;
   /** **추정** PER·EPS — 컨센서스 기준 */
   estPer: number | null;
   estEps: number | null;
@@ -118,6 +128,10 @@ export async function krOutlook(code: string): Promise<KrOutlook | null> {
     ]);
     if (!integ?.totalInfos) return null;
     const t = new Map(integ.totalInfos.map((x) => [x.code, x.value]));
+    /* 값 옆에 붙는 기준월("2026.06.") — PER·EPS 가 어느 시점까지를 센 것인지 */
+    const desc = new Map(
+      integ.totalInfos.map((x) => [x.code, String((x as { valueDesc?: string }).valueDesc ?? "").trim()]),
+    );
     const byKey = new Map(integ.totalInfos.map((x) => [x.key, x.value]));
     const pick = (codes: string[], keys: string[]) => {
       for (const c of codes) if (t.has(c)) return num(t.get(c));
@@ -146,8 +160,15 @@ export async function krOutlook(code: string): Promise<KrOutlook | null> {
       eps: pick(["eps"], ["EPS"]),
       bps: pick(["bps"], ["BPS"]),
       dividendYield: pick(["dividendYieldRatio", "dividendYield"], ["배당수익률"]),
-      estPer: pick(["cnsPer", "estimatedPer"], ["추정PER"]),
-      estEps: pick(["cnsEps", "estimatedEps"], ["추정EPS"]),
+      asOf: (desc.get("per") || desc.get("eps") || "").replace(/\.$/, "") || null,
+      /*
+       * ⚠️ **0 은 「없다」다** (2026-10-21 전수점검). 컨센서스가 없는 종목은 네이버가
+       * `cnsPer: "0.00배"` 로 준다 — 한미반도체가 그랬다. 그대로 내보내면 화면이
+       * 「추정 PER 0배」라 적고, 그건 **엄청나게 싸다**로 읽힌다. 적자라 PER 이 안
+       * 나오는 것과 똑같은 함정이라 같은 자리에서 끊는다.
+       */
+      estPer: nz(pick(["cnsPer", "estimatedPer"], ["추정PER"])),
+      estEps: nz(pick(["cnsEps", "estimatedEps"], ["추정EPS"])),
       targetMean: num(integ.consensusInfo?.priceTargetMean),
       recommMean: num(integ.consensusInfo?.recommMean),
       consensusDate: integ.consensusInfo?.createDate ?? null,

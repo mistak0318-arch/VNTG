@@ -4832,6 +4832,8 @@ export interface KrOutlook {
   eps: number | null;
   bps: number | null;
   dividendYield: number | null;
+  /** 이 EPS·BPS 가 언제까지를 센 것인가 — "2026.06" (2026-10-21). 서버 주석 참고 */
+  asOf: string | null;
   estPer: number | null;
   estEps: number | null;
   targetMean: number | null;

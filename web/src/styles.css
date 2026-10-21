@@ -7736,6 +7736,127 @@ button.nav-group-toggle {
 .pr-value { font-size: 0.9333rem; font-variant-numeric: tabular-nums; }
 .pr-note { font-size: 0.7333rem; color: var(--muted); margin-left: auto; }
 
+/*
+ * 밸류에이션 띠 (2026-10-21) — 기준이 다른 PER 셋을 **나란히**.
+ *
+ * 격자 네 칸: `라벨 | 작년 | 최근4분기 | 올해추정 | 방향`. 세 칸이 같은 폭(1fr)이라
+ * 줄이 바뀌어도 세로로 맞는다 — PER 과 PBR 을 위아래로 견주는 게 이 띠의 일이다.
+ *
+ * ⚠️ 가운데 칸(`.lead`)이 **지금 값**이다. 셋 다 사실이지만 매매에서 기준이 되는 것은
+ *    최근 4분기이므로 거기에만 무게를 준다 — 셋이 똑같이 생기면 어느 것을 봐야 할지
+ *    매번 벤티지가 골라야 한다.
+ */
+.val-strip {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.val-grid {
+  display: grid;
+  /*
+   * 숫자 칸은 **내용 폭**(auto)이고 남는 자리는 마지막 칸이 먹는다. 1fr 셋으로 두면
+   * 세 칸이 폭을 균등하게 나눠 가져서 「PER」 라벨과 21.80 사이가 손가락 두 마디쯤
+   * 벌어진다 — 같은 줄인데 눈이 한 번 건너뛴다.
+   */
+  grid-template-columns: auto repeat(3, minmax(68px, auto)) 1fr;
+  align-items: baseline;
+  gap: 3px 14px;
+}
+.val-rowlab {
+  font-size: 0.8rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.val-head {
+  font-size: 0.7rem;
+  color: var(--muted);
+  text-align: right;
+  white-space: nowrap;
+}
+/* 기준 시점 — 라벨보다 한 단계 흐리게, 줄을 안 늘리려고 옆에 붙인다 */
+.val-head i {
+  font-style: normal;
+  opacity: 0.7;
+  margin-left: 3px;
+}
+.val-v {
+  text-align: right;
+  font-size: 0.9333rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+/* 지금 값 — 이 띠에서 기준이 되는 칸 */
+.val-v.lead {
+  font-size: 1.12rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.val-v u {
+  text-decoration: none;
+  font-size: 0.7rem;
+  opacity: 0.6;
+  margin-left: 1px;
+}
+.val-none {
+  font-style: normal;
+  font-size: 0.7rem;
+  opacity: 0.5;
+}
+/* 방향 한 마디 — 숫자 셋을 뒤집어 읽지 않아도 되게 */
+.val-note {
+  font-size: 0.7333rem;
+  white-space: nowrap;
+  padding-left: 4px;
+}
+.val-note em {
+  font-style: normal;
+  color: var(--muted);
+}
+.val-note em.up { color: var(--red); }
+.val-note em.down { color: var(--blue); }
+/* 적자·무자료 — 「-」 셋을 늘어놓는 대신 왜 없는지 적는다 */
+.val-loss {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.val-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  margin-top: 8px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.val-foot b {
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.val-foot i { font-style: normal; }
+.val-foot i.up { color: var(--red); }
+.val-foot i.down { color: var(--blue); }
+.val-src {
+  margin-left: auto;
+  font-size: 0.7rem;
+  opacity: 0.65;
+}
+@media (max-width: 480px) {
+  .val-grid {
+    grid-template-columns: auto repeat(3, minmax(52px, 1fr));
+    gap: 2px 6px;
+  }
+  /* 방향 한 마디는 격자 밖으로 — 다섯째 칸까지 넣으면 숫자가 눌린다 */
+  .val-note {
+    grid-column: 1 / -1;
+    text-align: right;
+    padding: 0;
+  }
+  .val-note:empty { display: none; }
+  .val-v.lead { font-size: 1rem; }
+  .val-src { margin-left: 0; width: 100%; }
+}
+
 /* 목표주가 — 의견 변경이 맨 위, 컨센서스가 그 다음 */
 .op-changes { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
 .op-change {
