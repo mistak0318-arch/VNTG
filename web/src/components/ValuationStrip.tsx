@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, fmtNum, type KrOutlook } from "../api";
+import { api, fmtNum, type KrOutlook, type SectorValue } from "../api";
 
 /**
  * **밸류에이션 띠** (2026-10-21 — 벤티지: "PER, PBR, 시가총액, 거래대금 이런 거 있잖아.
@@ -66,6 +66,31 @@ function eok(n: number | null): string {
 }
 
 /**
+ * 작년 칸 밑에 까는 **업종 평균** 한 줄 (2026-10-21).
+ *
+ * ⚠️ **작년 칸에만** 붙인다. 이 평균은 업종 상위 열 종목의 키움·한투 per 을 시총가중한
+ * 값이라 **직전 결산 기준**이다 — 최근 4분기 칸 옆에 놓으면 다른 기간끼리 견주게 되고,
+ * 그건 틀린 숫자를 적는 것보다 나쁘다(어느 쪽도 틀리지 않았는데 결론이 틀린다).
+ *
+ * 몇 종목으로 냈고 몇을 뺐는지는 툴팁에 적는다. 적자를 뺀 평균이라는 사실을 숨기면
+ * 「업종이 싸다」가 어디서 왔는지 알 수 없다.
+ */
+function secLine(sec: SectorValue | null, key: "per" | "pbr") {
+  const v = sec?.[key];
+  if (!sec || v === null || v === undefined || !Number.isFinite(v) || v <= 0) return null;
+  return (
+    <small
+      className="val-sector"
+      title={`${sec.sector} 업종 시총 상위 ${sec.used + sec.skipped}종목의 시총가중 평균 · 작년 결산 기준${
+        sec.skipped > 0 ? ` (적자·무자료 ${sec.skipped}종목 제외)` : ""
+      }`}
+    >
+      업종 {v >= 100 ? v.toFixed(0) : v.toFixed(1)}
+    </small>
+  );
+}
+
+/**
  * 셋의 **방향**을 한 마디로.
  *
  * PER 이 내려가면 (같은 주가에) 이익이 느는 것이다. 숫자만 셋 늘어놓으면 어느 쪽이
@@ -99,14 +124,26 @@ export function ValuationStrip({
   info: Record<string, unknown> | null;
 }) {
   const [out, setOut] = useState<KrOutlook | null>(null);
+  /**
+   * 업종 평균 (2026-10-21 — 벤티지: "업종 평균은 못구하나?").
+   *
+   * 어디서도 안 줘서 우리가 집계한다(서버 `sectorValuation.ts`). **작년 결산 기준**이라
+   * 첫 칸 밑에만 깐다 — 최근 4분기 칸 옆에 놓으면 기준이 섞여 비교가 거짓이 된다.
+   */
+  const [sec, setSec] = useState<SectorValue | null>(null);
 
   useEffect(() => {
     let alive = true;
     setOut(null);
+    setSec(null);
     if (!code) return;
     api
       .naverOutlook(code)
       .then((r) => alive && setOut(r.outlook))
+      .catch(() => undefined);
+    api
+      .sectorValuation(code)
+      .then((r) => alive && setSec(r.sector))
       .catch(() => undefined);
     return () => {
       alive = false;
@@ -124,6 +161,15 @@ export function ValuationStrip({
   };
   /** 주가 ÷ 이익. 이익이 0 이하면 PER 이란 게 없다 — 「-」 로 둔다 */
   const div = (eps: number | null): number | null => (eps !== null && eps > 0 && price > 0 ? price / eps : null);
+  /**
+   * 폴백으로 쓰는 값도 **양수만** 받는다 (2026-10-21).
+   *
+   * `div(...) ?? out.estPer` 처럼 받아 두면, EPS 가 없어 `div` 가 null 일 때 네이버가
+   * 적자 종목에 주는 **음수 PER**(LG에너지솔루션 -396.14)이 그대로 들어온다. 그러면
+   * 값은 「-」로 찍히는데 단위 「배」는 붙어서 **「-배」** 라는 꼴이 나온다.
+   */
+  const pos = (v: number | null | undefined): number | null =>
+    typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null;
 
   /* 작년 결산 — 키움이 주는 EPS·BPS. 못 받으면 키움의 per·pbr 을 그대로 쓴다 */
   const lastEps = n(info?.eps);
@@ -133,21 +179,21 @@ export function ValuationStrip({
       key: "past",
       label: "작년 결산",
       when: out?.last?.year ?? "",
-      per: div(lastEps) ?? n(info?.per),
-      pbr: div(lastBps) ?? n(info?.pbr),
+      per: div(lastEps) ?? pos(n(info?.per)),
+      pbr: div(lastBps) ?? pos(n(info?.pbr)),
     },
     {
       key: "now",
       label: "최근 4분기",
       when: out?.asOf ?? "",
-      per: div(out?.eps ?? null) ?? out?.per ?? null,
-      pbr: div(out?.bps ?? null) ?? out?.pbr ?? null,
+      per: div(out?.eps ?? null) ?? pos(out?.per),
+      pbr: div(out?.bps ?? null) ?? pos(out?.pbr),
     },
     {
       key: "est",
       label: "올해 추정",
       when: out?.est?.year ? `${out.est.year}E` : "",
-      per: div(out?.estEps ?? null) ?? out?.estPer ?? null,
+      per: div(out?.estEps ?? null) ?? pos(out?.estPer),
       pbr: null, // 추정 BPS 는 네이버 integration 에 없다 — 없는 칸은 비워 둔다
     },
   ];
@@ -177,9 +223,16 @@ export function ValuationStrip({
             {c.when && <i>{c.when}</i>}
           </span>
         ))}
-        <span className="val-note">
-          {way && <em className={way.cls}>{way.text}</em>}
-        </span>
+        {/*
+          방향 한 마디는 **제 줄을 통째로** 쓴다(`grid-column: 1/-1`). 빈 칸으로 자리만
+          잡아 두면 안 된다 — `:empty` 로 숨기는 순간 칸이 밀려 **PBR 라벨이 PER 행
+          끝으로 올라간다.** 안 그릴 것은 아예 안 그린다.
+        */}
+        {way && (
+          <span className="val-note">
+            <em className={way.cls}>{way.text}</em>
+          </span>
+        )}
 
         <span className="val-rowlab" title="주가 ÷ 주당순이익. 분모가 어느 기간의 이익이냐에 따라 값이 크게 달라집니다">
           PER
@@ -188,9 +241,9 @@ export function ValuationStrip({
           <span className={`val-v${c.key === "now" ? " lead" : ""}`} key={c.key}>
             {fmtRatio(c.per)}
             {c.per !== null && <u>배</u>}
+            {c.key === "past" && secLine(sec, "per")}
           </span>
         ))}
-        <span className="val-note" />
 
         <span className="val-rowlab" title="주가 ÷ 주당순자산. 1 보다 낮으면 장부가 아래">
           PBR
@@ -199,9 +252,9 @@ export function ValuationStrip({
           <span className={`val-v${c.key === "now" ? " lead" : ""}`} key={c.key}>
             {c.key === "est" ? <em className="val-none">추정 없음</em> : fmtRatio(c.pbr)}
             {c.key !== "est" && c.pbr !== null && <u>배</u>}
+            {c.key === "past" && secLine(sec, "pbr")}
           </span>
         ))}
-        <span className="val-note" />
       </div>
       ) : (
         <div className="val-loss">
@@ -233,6 +286,8 @@ export function ValuationStrip({
         )}
         <span className="val-src">
           작년=키움 · 최근4분기·추정=네이버 컨센{out?.consensusDate ? ` ${out.consensusDate.slice(5)}` : ""}
+          {/* 업종 평균은 받아온 게 아니라 **우리가 낸 것**이다 — 출처를 그렇게 적는다 */}
+          {sec && (sec.per !== null || sec.pbr !== null) && ` · 업종=${sec.sector} 상위 ${sec.used + sec.skipped}종목 시총가중`}
         </span>
       </div>
     </div>

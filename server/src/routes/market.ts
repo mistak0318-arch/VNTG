@@ -46,6 +46,7 @@ import {
 } from "../naverThemes.js";
 import { futuresCandles } from "../kospiFutures.js";
 import { krOutlook, usConsensus } from "../naverOutlook.js";
+import { allSectorValues, sectorValueOf } from "../sectorValuation.js";
 import { stockReports } from "../naverResearch.js";
 import { usCandles, usDetail } from "../usDetail.js";
 import { orderBook } from "../orderBook.js";
@@ -1484,6 +1485,28 @@ export function createMarketRouter(client: KiwoomClient): Router {
    *   /naver-outlook/:code    국내 — 추정 PER·EPS, 목표주가·의견, 다음 해 추정 매출·영업이익·순이익, 같은 업종
    *   /us-consensus/:symbol   미국 — 투자의견·목표주가 평균/최고/최저 (리피니티브)
    */
+  /**
+   * **업종 평균 PER·PBR** (2026-10-21) — `sectorValuation.ts` 머리말 참고.
+   *
+   * 받아오는 게 아니라 **우리가 집계한다**(어디서도 안 준다). 낡았으면 배경 수집을
+   * 걸고 들고 있던 값을 바로 준다 — 첫 조회가 화면을 세우면 안 된다.
+   */
+  router.get("/sector-valuation/:code", async (req, res, next) => {
+    try {
+      res.json({ sector: await sectorValueOf(String(req.params.code)) });
+    } catch (err) {
+      next(err);
+    }
+  });
+  /** 전 업종 — 업종 비교 화면을 만들 때 */
+  router.get("/sector-valuation", async (_req, res, next) => {
+    try {
+      res.json(await allSectorValues());
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.get("/naver-outlook/:code", async (req, res, next) => {
     try {
       const outlook = await krOutlook(String(req.params.code));

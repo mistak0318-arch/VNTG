@@ -1928,6 +1928,13 @@ export const api = {
     }>(`/api/market/us-chart/${encodeURIComponent(symbol)}?period=${period}`),
   /** 네이버 컨센서스·추정치 (2026-09-24) — 국내: 추정 PER·EPS·목표주가·다음 해 추정·같은 업종 / 미국: 목표주가 평균·최고·최저 */
   naverOutlook: (code: string) => getJson<{ outlook: KrOutlook | null }>(`/api/market/naver-outlook/${encodeURIComponent(code)}`),
+  /**
+   * 이 종목이 속한 업종의 **시총가중 평균 PER·PBR** (2026-10-21).
+   * 어디서도 안 주므로 우리가 집계한다 — 서버 `sectorValuation.ts` 머리말 참고.
+   * 기준은 **작년 결산**이라 밸류에이션 띠의 첫 칸과만 견준다.
+   */
+  sectorValuation: (code: string) =>
+    getJson<{ sector: SectorValue | null }>(`/api/market/sector-valuation/${encodeURIComponent(code)}`),
   /** 종목별 증권사 리포트 — 본문 요약·PDF·목표주가 변경 (2026-09-25) */
   stockReports: (code: string, limit = 8) => getJson<{ reports: StockReport[] }>(`/api/market/reports/${encodeURIComponent(code)}?limit=${limit}`),
   usConsensus: (symbol: string) => getJson<{ consensus: UsConsensus | null }>(`/api/market/us-consensus/${encodeURIComponent(symbol)}`),
@@ -4825,6 +4832,16 @@ export interface EstimateResult {
 }
 
 /** 네이버 국내 컨센서스·추정치 (서버 naverOutlook.ts 와 같은 모양) */
+/** 업종 시총가중 평균 (2026-10-21) — 서버 `sectorValuation.ts` */
+export interface SectorValue {
+  sector: string;
+  per: number | null;
+  pbr: number | null;
+  /** 집계에 쓴 종목 수 */
+  used: number;
+  /** 적자·무자료로 뺀 종목 수 */
+  skipped: number;
+}
 export interface KrOutlook {
   code: string;
   per: number | null;

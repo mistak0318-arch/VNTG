@@ -32,8 +32,14 @@ const num = (v: unknown): number | null => {
   const n = Number(s);
   return Number.isFinite(n) ? n : null;
 };
-/** 0 을 「없음」으로 — 컨센서스가 없을 때 네이버가 0 을 준다 (2026-10-21) */
-const nz = (v: number | null): number | null => (v === null || v === 0 ? null : v);
+/**
+ * **0 과 음수를 「없음」으로** (2026-10-21).
+ *
+ * 컨센서스가 없으면 네이버가 `0.00배` 를 주고(한미반도체), **적자 추정이면 음수**를
+ * 준다(LG에너지솔루션 `cnsPer: -396.14`). 둘 다 PER 이라는 게 없는 경우다.
+ * 0 은 「엄청 싸다」로, 음수는 화면 어딘가에서 「-배」 같은 괴상한 꼴로 새어 나온다.
+ */
+const nz = (v: number | null): number | null => (v === null || v <= 0 ? null : v);
 async function cached<T>(key: string, fn: () => Promise<T>): Promise<T> {
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < TTL) return hit.v as T;
