@@ -4607,12 +4607,33 @@ export interface AiSummary {
   digest?: string;
 }
 
+/** 리포트에 붙는 매매용 종목 목록 (2026-10-21) — 서버 `reportPicks.ts` 와 같은 모양 */
+export interface ReportPick {
+  code: string;
+  name: string;
+  why: string;
+}
+export interface ReportPickGroup {
+  key: string;
+  label: string;
+  picks: ReportPick[];
+  /** 이 묶음을 어떻게 읽어야 하나 — 실측이 있으면 그 말 */
+  note: string;
+}
+export interface ReportPicks {
+  date: string;
+  /** 원장이 며칠 묵었나. 0 이면 오늘 */
+  ageDays: number;
+  groups: ReportPickGroup[];
+}
+
 export interface PublishedReport {
   date: string;
   edition: string;
   label: string;
   publishedAt: string;
   summary: AiSummary;
+  picks?: ReportPicks;
 }
 
 export interface PublishedReportResponse {

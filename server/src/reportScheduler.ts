@@ -1,4 +1,5 @@
 import { noopProgress, type ProgressReporter } from "./reportProgress.js";
+import { buildReportPicks } from "./reportPicks.js";
 import { pushNotice } from "./notifyCenter.js";
 import { warmResearch } from "./webResearch.js";
 import { buildAiSummary } from "./aiSummary.js";
@@ -48,12 +49,21 @@ export async function publishEdition(
   const meta = { key: edition, label: slot?.label ?? edition };
   // 프롬프트는 kind가 정한다 — 사용자가 만든 판도 넷 중 하나로 매핑된다
   const summary = await buildAiSummary(client, slot?.kind ?? "intraday");
+  /*
+   * 매매에 쓰는 종목 목록 (2026-10-21) — 표본·일봉으로만 만든다. **조회가 0 이다**
+   * (실측 1.1초). 실패해도 리포트는 나간다 — 목록 하나 때문에 발행을 거를 일은 아니다.
+   */
+  const picks = await buildReportPicks().catch((e) => {
+    console.warn("[report] 종목 목록 실패 —", e instanceof Error ? e.message : e);
+    return null;
+  });
   const report: PublishedReport = {
     date,
     edition,
     label: meta.label,
     publishedAt: new Date().toISOString(),
     summary,
+    ...(picks && picks.groups.length > 0 ? { picks } : {}),
   };
   await saveReport(report);
   console.log(`[report] ${date} ${meta.label} 발행 완료 (토큰 ${summary.inputTokens}/${summary.outputTokens})`);

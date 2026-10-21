@@ -109,7 +109,14 @@ function render(text: string): React.ReactNode[] {
  *   판 선택은 화면 상단이 이미 하고 있으므로 여기서 또 고르게 하면 두 곳이 어긋난다.
  *   이 카드의 드롭박스는 **지난 날짜**만 고르는 용도로 좁힌다.
  */
-export function AiSummaryCard({ edition }: { edition?: string }) {
+export function AiSummaryCard({
+  edition,
+  onSelectStock,
+}: {
+  edition?: string;
+  /** 종목 목록에서 눌렀을 때 — 없으면 이름만 보이고 안 눌린다 (2026-10-21) */
+  onSelectStock?: (code: string, name: string) => void;
+}) {
   const [res, setRes] = useState<PublishedReportResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -280,6 +287,48 @@ export function AiSummaryCard({ edition }: { edition?: string }) {
           <button className="ai-link" onClick={deliverAgain} disabled={busy}>
             다시 보내기
           </button>
+        </div>
+      )}
+
+      {/*
+        **매매용 종목 목록** (2026-10-21 — 벤티지: "데일리 브리핑 아침 조간 석간에 이거
+        넣자 … 실제 매매할 때 참고할 수 있는 것들로").
+
+        AI 본문 **아래**다. 글은 「오늘 장이 어떤가」를 말하고 이 표는 「그래서 무엇을
+        보나」를 말한다 — 순서가 거꾸로면 종목부터 보고 글을 안 읽는다.
+
+        ⚠️ 묶음마다 `note` 를 **반드시 같이** 그린다. 쌍끌이·눌림목은 재검증에서 성적이
+        나빴던 기준이라, 목록만 내면 추천으로 읽힌다.
+      */}
+      {report?.picks && report.picks.groups.length > 0 && (
+        <div className="rp-picks">
+          <div className="rp-picks-h">
+            매매 참고 — {report.picks.date.slice(4, 6)}/{report.picks.date.slice(6, 8)} 원장 기준
+            {report.picks.ageDays > 1 && (
+              <b className="rp-stale" title="원장이 묵었습니다 — 그만큼 옛 자리입니다">
+                {report.picks.ageDays}일 전
+              </b>
+            )}
+          </div>
+          {report.picks.groups.map((g) => (
+            <div className="rp-pick-g" key={g.key}>
+              <div className="rp-pick-label">{g.label}</div>
+              <div className="rp-pick-rows">
+                {g.picks.map((p) => (
+                  <button
+                    key={p.code}
+                    className="rp-pick"
+                    onClick={() => onSelectStock?.(p.code, p.name)}
+                    title={`${p.name} — ${p.why}`}
+                  >
+                    <b>{p.name}</b>
+                    <i>{p.why}</i>
+                  </button>
+                ))}
+              </div>
+              <div className="rp-pick-note">{g.note}</div>
+            </div>
+          ))}
         </div>
       )}
 

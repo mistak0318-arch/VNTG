@@ -492,7 +492,7 @@ export function DailyReportPage({
 
       {/* 읽어주기 — 출근길에 AI 정리를 귀로. 브라우저 내장 음성이라 키·비용이 없다 */}
       <ReportTts edition={edition} />
-      <AiSummaryCard edition={edition} />
+      <AiSummaryCard edition={edition} onSelectStock={onSelectStock} />
       {/*
         **다른 눈** (2026-09-16) — 우리 요약 바로 밑, **펼친 채로**.
 

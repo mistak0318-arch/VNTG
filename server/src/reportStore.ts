@@ -1,4 +1,5 @@
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import type { ReportPicks } from "./reportPicks.js";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AiSummary } from "./aiSummary.js";
@@ -46,6 +47,14 @@ export interface PublishedReport {
   /** 실제 발행된 시각 */
   publishedAt: string;
   summary: AiSummary;
+  /**
+   * **매매에 바로 쓰는 종목 목록** (2026-10-21 — 벤티지 요청).
+   *
+   * AI 본문과 따로 둔다. 글에 녹이면 종목이 흐려지고, 무엇보다 **기계가 다시 읽을 수
+   * 없다** — 나중에 「그때 이 목록이 어땠나」를 되짚으려면 구조로 남아야 한다.
+   * 없을 수도 있다(표본이 묵었거나 아직 안 만들어졌을 때).
+   */
+  picks?: ReportPicks;
 }
 
 function fileName(date: string, edition: EditionKey): string {
