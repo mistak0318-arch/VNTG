@@ -1,5 +1,9 @@
 import { loadCloses } from "./dailyCloses.js";
-import { loadSamples, type Sample } from "./signalSamples.js";
+import { loadSamples, scoreFeat, type Sample } from "./signalSamples.js";
+import { getConfig } from "./signalLight.js";
+import { topicPulse } from "./topicPulse.js";
+import type { KiwoomClient } from "./kiwoomClient.js";
+import { regimeMap } from "./signalSimulate.js";
 
 /**
  * **데일리 리포트에 붙는 종목 목록** (2026-10-21).
@@ -81,7 +85,7 @@ function aligned(s: Sample): boolean {
   return m5 != null && m20 != null && m60 != null && m5 > m20 && m20 > m60;
 }
 
-export async function buildReportPicks(): Promise<ReportPicks | null> {
+export async function buildReportPicks(client?: KiwoomClient): Promise<ReportPicks | null> {
   const file = await loadSamples();
   if (!file || file.samples.length === 0) return null;
 
@@ -320,6 +324,103 @@ export async function buildReportPicks(): Promise<ReportPicks | null> {
       "거래량이 평소의 몇 배인지. 방향은 안 본다 — 몰린 자리가 고점이었던 계절도 있다(신조 ①체).");
     add("goldLong", "장기 골든크로스 (60일선 > 180일선)", goldLong.slice(0, TOP).map((x) => x.p),
       "오늘 처음 넘어선 것만. 위의 정배열(5>20>60)보다 느린 축이라 둘이 같이 서면 더 무겁다. ⚠️ 우리 표본으로 따로 검증한 기준은 아니다.");
+  }
+
+  /* ── 초록 ∩ 외인 3칸 — **실측 근거가 있는 유일한 조합** ──────────
+   *
+   * 2026-09-11 재검증(29,570관측·87거래일, 시총 중립 초과수익)에서 **가장 넓고 좋았다**:
+   *
+   *     초록 ∩ 외국인 3칸   20일 +3.2%p · 승률 59 · 하루 17.3개
+   *     초록 ∩ 쌍끌이(6칸)  20일 +3.1%p · 승률 58 · 하루  6.2개
+   *
+   * 성적은 같은데 후보가 **세 배**고, 5일로 봐도 외인3칸은 +0.7 인데 쌍끌이는 −0.1 이다.
+   * 그래서 위의 쌍끌이 묶음보다 이쪽을 **맨 아래 결론 자리**에 둔다.
+   *
+   * ⚠️ 신호등 점수는 **저장된 설정**으로 낸다(`getConfig`) — 화면의 신호등과 같은 값이어야
+   * 한다. 백테스트가 코드 기본값으로 채점하던 버그를 한 번 겪었다.
+   * ⚠️ 장세(`regimeMap`)를 넘긴다. 실제 신호등이 장세에 따라 기준을 갈아 끼우므로,
+   * 안 넘기면 여기 초록과 화면 초록이 다른 날이 생긴다.
+   */
+  try {
+    const cfg = await getConfig();
+    const todayRows = file.samples.filter((s2) => s2.date === today);
+    const regimeOf = regimeMap(file.samples, cfg);
+    const reg = regimeOf.get(today);
+    const greenFgn: { p: Pick; vol: number }[] = [];
+    for (const s2 of cur) {
+      const fg3 = (s2.fgn5 ?? 0) > 0 && (s2.fgn10 ?? 0) > 0 && (s2.fgn20 ?? 0) > 0;
+      if (!fg3) continue;
+      const sc = scoreFeat(s2, cfg, reg);
+      if (sc?.level !== "green") continue;
+      greenFgn.push({
+        p: {
+          code: s2.code,
+          name: s2.name,
+          why: `신호등 초록 ${Math.round(sc.score)}점 · 외인 20일 ${sign(toEok(s2.fgn20 ?? 0))}억`,
+        },
+        vol: s2.volEok ?? 0,
+      });
+    }
+    greenFgn.sort((a, b) => b.vol - a.vol);
+    void todayRows;
+    add(
+      "greenFgn",
+      "★ 신호등 초록 ∩ 외국인 3칸",
+      greenFgn.slice(0, TOP).map((x) => x.p),
+      "재검증에서 **가장 넓고 좋았던 조합**이다 — 20일 +3.2%p · 승률 59 · 하루 17.3개. 쌍끌이(+3.1·6.2개)와 성적은 같은데 후보가 세 배다. 위의 묶음들 중 이것만 실측으로 뒷받침된다.",
+    );
+  } catch (e) {
+    console.warn("[reportPicks] 초록∩외인3칸 실패 —", e instanceof Error ? e.message : e);
+  }
+
+  /* ── 오늘의 화제 → 관련 종목 (2026-10-21) ────────────────────
+   *
+   * 벤티지: "얘네는 … 뉴스나 이런 것도 되게 풍부하고" — 인포스탁의 「주요이슈」·
+   * 「특징테마」 자리다. 우리는 그 재료가 **이미 있었다**: `topicPulse` 가 채널(빠르고
+   * 투기적)과 뉴스(느리고 공식적)를 낱말별로 합쳐 두고, 낱말마다 **관련 종목(`codes`)**
+   * 과 **실제 문장(`quote`)** 을 달아 둔다. 여태 글로만 쓰이던 것을 목록으로도 낸다.
+   *
+   * ⚠️ **둘 다 뜬 것(`where: "both"`)이 먼저다.** 빠른 쪽이 먼저 말하고 느린 쪽이
+   * 확인해 준 것이라 질이 다르다 — `topicPulse` 가 이미 그 순서로 정렬해 준다.
+   * ⚠️ 종목이 안 붙은 낱말은 **건너뛴다.** 「관세」만 적어 두면 매매에 쓸 수가 없다.
+   * ⚠️ `client` 가 없으면 종목명을 못 붙이므로 이 묶음 자체를 안 만든다.
+   */
+  if (client) {
+    try {
+      const pulse = await topicPulse("today", client);
+      const names = pulse.names ?? {};
+      let made = 0;
+      for (const it of pulse.items) {
+        if (made >= 4) break;
+        const codes = it.codes.filter((c) => names[c]).slice(0, 6);
+        /*
+         * ⚠️ **종목이 둘 이상 엮인 낱말만** 화제로 친다 (2026-10-21 실측으로 조였다).
+         *
+         * 처음엔 하나만 붙어도 냈는데 이런 것이 섞였다:
+         *
+         *     화제 — 이닉스 … 「삼성전자·**SK하이닉스** 자사주 매입에만 매달린 코스피」
+         *
+         * 「하이닉스」 안의 「이닉스」에 걸린 **거짓 연결**이다. 낱말을 자루로 읽어
+         * 엉뚱한 기사를 근거로 다는 것 — 사이드카 오보와 같은 종류다.
+         *
+         * 종목 하나짜리는 애초에 「화제」가 아니라 그냥 그 종목 뉴스이기도 하다.
+         * 둘 이상이 같이 엮여야 **테마**가 된다(위 「증권」이 그랬다 — 5종목·기사 144건).
+         * 진짜 단일 종목 뉴스를 놓치는 대가는 치르되, 거짓 근거는 안 낸다.
+         */
+        if (codes.length < 2) continue;
+        made += 1;
+        const seen = it.where === "both" ? "채널·뉴스 둘 다" : it.where === "channel" ? "채널" : "뉴스";
+        add(
+          `topic:${it.term}`,
+          `화제 — ${it.term}`,
+          codes.map((c) => ({ code: c, name: names[c], why: `${it.term} 관련` })),
+          `${seen} · 채널 ${it.buzzCount}건 · 기사 ${it.newsCount}건${it.fresh ? " · 처음 나온 말" : ""}` +
+            (it.quote ? ` — 「${it.quote.slice(0, 60)}」` : ""),
+        );
+      }
+    } catch (e) {
+      console.warn("[reportPicks] 화제 묶음 실패 —", e instanceof Error ? e.message : e);
+    }
   }
 
   return { date: today, ageDays, groups };

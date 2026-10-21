@@ -53,7 +53,7 @@ export async function publishEdition(
    * 매매에 쓰는 종목 목록 (2026-10-21) — 표본·일봉으로만 만든다. **조회가 0 이다**
    * (실측 1.1초). 실패해도 리포트는 나간다 — 목록 하나 때문에 발행을 거를 일은 아니다.
    */
-  const picks = await buildReportPicks().catch((e) => {
+  const picks = await buildReportPicks(client).catch((e) => {
     console.warn("[report] 종목 목록 실패 —", e instanceof Error ? e.message : e);
     return null;
   });
