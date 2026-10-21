@@ -26,6 +26,18 @@ interface Point {
    */
   high: number;
   low: number;
+  /**
+   * **봉의 시가** (2026-10-21 — 벤티지: "왜 두개의 저시고 값이 안 맞는거야???").
+   *
+   * 10/20 에 고·저는 봉 안의 값으로 고쳤는데 **시가는 빠뜨렸다.** 그래서 당일 흐름의
+   * 「시가」가 `prices[0]` — **첫 3분봉의 종가**였다. SK하이닉스 10/21 이 그랬다:
+   *
+   *     당일 흐름  시가 1,252,000   ← 08:00~08:03 봉의 **종가**
+   *     맨 위      시 1,248,000(NXT) / 1,260,000(KRX)
+   *
+   * 어느 쪽과도 안 맞는 제3의 숫자다. 첫 봉의 `open_pric` 이 그날 **첫 체결가**다.
+   */
+  open: number;
   /** 전형가 (고+저+종)/3 — VWAP 을 내는 재료 */
   typical: number;
   volume: number;
@@ -56,6 +68,7 @@ function todayPoints(chart: RawRecord | null): { day: string; points: Point[] } 
         price,
         high,
         low,
+        open: Math.abs(num(r.open_pric)) || price,
         typical: (high + low + price) / 3,
         volume: Math.abs(num(r.trde_qty)),
       });
@@ -239,12 +252,13 @@ export function IntradayFlow({
   if (points.length < 2) return <div className="empty">당일 분봉 데이터가 없습니다.</div>;
 
   const prices = points.map((p) => p.price);
-  const open = prices[0];
   const last = prices[prices.length - 1];
   /*
-   * **봉 안의 고가·저가로 잰다** (2026-10-20). 여태 `Math.max(...prices)` 였는데
-   * `prices` 는 **종가** 배열이라, 봉 안에서만 찍고 내려온 고점이 안 잡혔다.
+   * **봉 안의 시·고·저로 잰다** (고·저 2026-10-20, 시가 2026-10-21).
+   * `prices` 는 **종가** 배열이라 `prices[0]`·`Math.max(...prices)` 로 재면
+   * 봉 안에서만 찍은 값이 통째로 빠진다 — `Point.open` 주석 참고.
    */
+  const open = points[0].open;
   const high = Math.max(...points.map((p) => p.high));
   const low = Math.min(...points.map((p) => p.low));
 
@@ -266,6 +280,9 @@ export function IntradayFlow({
   const color = up ? "var(--red)" : "var(--blue)";
 
   const rate = base > 0 ? ((last - base) / base) * 100 : 0;
+  /** 전일종가 대비 % — 아래 표와 요약줄이 **같은 분모**를 쓰게 한 곳에 둔다 */
+  const pct = (v: number) =>
+    base > 0 ? `${v >= base ? "+" : ""}${(((v - base) / base) * 100).toFixed(2)}%` : "-";
 
   /*
    * 정규장 시작(09:00)·종료(15:30) 지점을 찾아 세 구간으로 나눈다.
@@ -359,61 +376,48 @@ export function IntradayFlow({
       </svg>
 
       {/*
-        구간 라벨 — 그래프 폭에 맞춰 비율로 배치.
+        구간 이름 — 그래프 폭에 맞춰 비율로. **이름만 둔다** (2026-10-21).
 
-        **이름 뒤에 전일종가 대비 %를 괄호로 붙인다** (2026-10-20 — 벤티지: "프리마켓
-        정규장 애프터마켓 글자 뒤에 괄호로 붙여"). 값(원)은 아래 줄이 맡고, 여기서는
-        **그 구간이 어느 쪽으로 얼마나** 움직였나만 읽는다.
+        벤티지: "당일 흐름 부분 그래프 밑에 좀 더 이해하기 쉽게 간략하게 표현하고
+        등락률도 표시해줘."
 
-        ⚠️ 분모는 **전일종가**다 — 위의 큰 등락률·요약줄과 같아야 한 얘기를 한다.
-        ⚠️ `min-width: max-content` 가 CSS 에 있어야 한다. 프리 구간은 차트의 8%쯤이라
-           비율 폭만 주면 괄호가 통째로 잘린다(이 줄은 `overflow: hidden` 이다).
+        10/20 에 여기 등락률 괄호를 달았는데, 프리 구간은 차트의 8%쯤이라 글자가 비율을
+        이기도록(`min-width: max-content`) 둬야 했다. 그러면 **이름이 음영에서 밀려난다** —
+        눈금이어야 할 줄이 눈금을 잃었다. 숫자는 아래 표로 내리고 여기는 이름만 둔다.
       */}
       <div className="intraday-sessions">
-        {(() => {
-          const pc = (v: number) => (base > 0 ? `${(v - base) / base > 0 ? "+" : ""}${(((v - base) / base) * 100).toFixed(2)}%` : "");
-          const span = (from: number, to: number) => {
-            const xs = points.slice(from, to);
-            if (xs.length === 0) return null;
-            const lo = Math.min(...xs.map((p) => p.low));
-            const hi = Math.max(...xs.map((p) => p.high));
-            return ` (${pc(lo)} ~ ${pc(hi)})`;
-          };
-          const regFrom = openIdx < 0 ? 0 : openIdx;
-          const regTo = closeIdx < 0 ? points.length : closeIdx;
-          return (
-            <>
-              {hasPre && (
-                <span className="intraday-session pre" style={{ width: `${regularStart}%` }}>
-                  프리마켓
-                  <i>{span(0, openIdx)}</i>
-                </span>
-              )}
-              <span className="intraday-session main" style={{ width: `${regularEnd - regularStart}%` }}>
-                정규장
-                <i>{span(regFrom, regTo)}</i>
-              </span>
-              {hasAfter && (
-                <span className="intraday-session after" style={{ width: `${W - regularEnd}%` }}>
-                  애프터마켓
-                  <i>{span(closeIdx, points.length)}</i>
-                </span>
-              )}
-            </>
-          );
-        })()}
+        {hasPre && (
+          <span className="intraday-session pre" style={{ width: `${regularStart}%` }}>
+            프리마켓
+          </span>
+        )}
+        <span className="intraday-session main" style={{ width: `${regularEnd - regularStart}%` }}>
+          정규장
+        </span>
+        {hasAfter && (
+          <span className="intraday-session after" style={{ width: `${W - regularEnd}%` }}>
+            애프터마켓
+          </span>
+        )}
       </div>
 
       {/*
-        **구간별 저~고** (2026-10-20 — 벤티지: "장전에는 저가가 얼마였고 고가가 얼마였는지,
-        정규장에서는 … 애프터에서는 … 딱 알 수 있으면 좋겠습니다").
+        **구간 표 — 한 줄에 한 구간** (저~고 2026-10-20, 등락률·하루줄 2026-10-21).
+
+            정규   1,258,000 ~ 1,329,000   (+2.86% ~ +8.67%)
+
+        세로로 칸이 맞아서(`display: contents` + 5열 grid) 구간끼리 **눈으로 견줄 수**
+        있다. 여태 원은 이 줄, %는 위 이름줄에 흩어져 있어 같은 구간의 두 값을 보려면
+        줄을 건너뛰어야 했다.
 
         하루 전체의 고·저 하나만 적으면 **어느 장에서 찍은 값인지**를 못 읽는다.
         삼성SDI 10/19 가 그랬다 — 저가 496,500 은 프리마켓 값이고 정규장 저가는
         510,000 인데, 한 줄로 적어 두니 「정규장에서 496,500 까지 빠졌다」로 읽힌다.
+        그래서 구간을 가르고, **하루** 줄을 맨 아래 하나 더 둔다.
 
-        구간이 없는 날(프리나 애프터에 체결이 없는 날)은 그 줄을 **아예 안 그린다** —
-        0 이나 「-」 을 적으면 「거래가 있었는데 못 받았다」와 구별이 안 된다.
+        ⚠️ 분모는 **전일종가**다 — 위의 큰 등락률과 같아야 한 얘기를 한다.
+        ⚠️ 구간이 없는 날(프리나 애프터에 체결이 없는 날)은 그 줄을 **아예 안 그린다** —
+           0 이나 「-」 을 적으면 「거래가 있었는데 못 받았다」와 구별이 안 된다.
       */}
       {(() => {
         const seg = (from: number, to: number) => {
@@ -423,50 +427,62 @@ export function IntradayFlow({
         };
         const regFrom = openIdx < 0 ? 0 : openIdx;
         const regTo = closeIdx < 0 ? points.length : closeIdx;
-        const rows = [
-          { label: "프리", v: openIdx > 0 ? seg(0, openIdx) : null },
-          { label: "정규", v: seg(regFrom, regTo) },
-          { label: "애프터", v: closeIdx >= 0 ? seg(closeIdx, points.length) : null },
-        ].filter((r) => r.v);
-        if (rows.length < 2) return null; // 구간이 하나뿐이면 아래 요약줄로 충분하다
+        type Row = { label: string; v: { lo: number; hi: number } };
+        const rows = (
+          [
+            { label: "프리", v: openIdx > 0 ? seg(0, openIdx) : null },
+            { label: "정규", v: seg(regFrom, regTo) },
+            { label: "애프터", v: closeIdx >= 0 ? seg(closeIdx, points.length) : null },
+          ] as { label: string; v: { lo: number; hi: number } | null }[]
+        ).filter((r): r is Row => r.v !== null);
+        /* 구간이 하나면 그 줄이 곧 하루다 — 같은 값을 두 번 적지 않는다 */
+        if (rows.length >= 2) rows.push({ label: "하루", v: { lo: low, hi: high } });
         return (
           <div className="intraday-segs">
             {rows.map((r) => (
-              <span key={r.label} className="intraday-seg">
+              <span key={r.label} className={`intraday-seg${r.label === "하루" ? " all" : ""}`}>
                 <i>{r.label}</i>
-                <b className={signOf(r.v!.lo - base)}>{fmtNum(r.v!.lo)}</b>
+                <b className={signOf(r.v.lo - base)}>{fmtNum(r.v.lo)}</b>
                 <em>~</em>
-                <b className={signOf(r.v!.hi - base)}>{fmtNum(r.v!.hi)}</b>
+                <b className={signOf(r.v.hi - base)}>{fmtNum(r.v.hi)}</b>
+                <small>
+                  <u className={signOf(r.v.lo - base)}>{pct(r.v.lo)}</u>
+                  <em>~</em>
+                  <u className={signOf(r.v.hi - base)}>{pct(r.v.hi)}</u>
+                </small>
               </span>
             ))}
           </div>
         );
       })()}
 
+      {/*
+        **점 두 개와 기준선** (2026-10-21). 위의 표는 **띠**(저~고)고 이건 **한 시각의
+        값**이다 — 둘을 섞어 적던 것을 갈랐다.
+
+        여태 이 줄에 있던 하루 고·저는 위 「하루」 줄로 옮겼다. 같은 숫자를 두 군데
+        적어 두면 어느 쪽이 무슨 범위인지가 흐려지고, 실제로 그래서 맨 위 머리줄과
+        어긋나 보였다.
+      */}
       <div className="intraday-legend">
         {[
-          { label: "시가", value: open },
-          { label: "고가", value: high },
-          { label: "저가", value: low },
-        ].map((it) => {
-          // 가격만으로는 몇 % 움직인 자리인지 감이 안 오므로 괄호로 등락률을 붙인다
-          const r = base > 0 ? ((it.value - base) / base) * 100 : null;
-          return (
-            <span key={it.label}>
-              {it.label}{" "}
-              <strong className={signOf(it.value - base)}>
-                {fmtNum(it.value)}
-                {r !== null && ` (${r > 0 ? "+" : ""}${r.toFixed(2)}%)`}
-              </strong>
-            </span>
-          );
-        })}
+          { label: "시가", value: open, hint: `${fmtHm(points[0].time)} 첫 체결` },
+          { label: "지금", value: last, hint: `${fmtHm(points[points.length - 1].time)} 봉 종가` },
+        ].map((it) => (
+          <span key={it.label} title={it.hint}>
+            {it.label}{" "}
+            <strong className={signOf(it.value - base)}>
+              {fmtNum(it.value)} ({pct(it.value)})
+            </strong>
+          </span>
+        ))}
         <span className="intraday-base">
           전일종가 <strong>{fmtNum(base)}</strong>
         </span>
       </div>
       <div className="table-note">
-        3분봉 종가 기준 · 점선은 전일종가 · 어두운 구간은 정규장 밖(프리·애프터)
+        3분봉 · 저·고는 봉 안에서 찍은 값 · 괄호는 전일종가 대비 · 점선은 전일종가 ·
+        어두운 구간은 정규장 밖(프리·애프터)
       </div>
     </div>
   );

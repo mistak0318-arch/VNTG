@@ -2571,20 +2571,37 @@ body.col-resizing { cursor: row-resize; }
   height: 130px;
 }
 /*
- * 구간별 저~고 (2026-10-20) — 프리 · 정규 · 애프터를 **한 줄에 하나씩**.
+ * 구간별 저~고 (2026-10-20) — 프리 · 정규 · 애프터 · 하루를 **한 줄에 하나씩**.
  * 하루 고·저 하나만 적으면 어느 장에서 찍은 값인지 못 읽는다.
+ *
+ * **다섯 칸 격자** (2026-10-21 — 벤티지: "좀 더 이해하기 쉽게 간략하게").
+ * `라벨 | 저 | ~ | 고 | (저% ~ 고%)` 가 구간마다 세로로 맞아야 눈으로 견줄 수 있다.
+ * 그래서 `.intraday-seg` 를 `display: contents` 로 둬서 **자식이 직접 격자 칸**이 된다 —
+ * 줄마다 따로 flex 를 쓰면 숫자 자릿수가 다를 때 칸이 어긋난다.
+ *
+ * ⚠️ `display: contents` 라 `.intraday-seg` 자신에는 배경·여백이 안 먹는다.
+ *    강조는 `.intraday-seg.all > i` 처럼 **자식 선택자**로 한다.
  */
 .intraday-segs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 14px;
+  display: grid;
+  grid-template-columns: auto auto auto auto 1fr;
+  align-items: baseline;
+  gap: 3px 6px;
   margin-top: 8px;
+  width: max-content;
+  max-width: 100%;
   font-size: 0.78rem;
 }
 .intraday-seg {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
+  display: contents;
+}
+/* 하루 줄 — 구간들의 합이므로 한 단계 진하게 둬서 「요약」으로 읽히게 */
+.intraday-seg.all > i {
+  background: var(--border);
+  color: var(--text);
+}
+.intraday-seg.all > b {
+  font-weight: 700;
 }
 .intraday-seg i {
   font-style: normal;
@@ -2613,6 +2630,10 @@ body.col-resizing { cursor: row-resize; }
 }
 .intraday-seg small::before { content: "("; color: var(--muted); }
 .intraday-seg small::after { content: ")"; color: var(--muted); }
+/* 괄호 안의 두 % — `u` 는 색을 입히는 자리일 뿐이라 밑줄을 뗀다 */
+.intraday-seg small u {
+  text-decoration: none;
+}
 
 .intraday-legend {
   display: flex;
@@ -2682,6 +2703,11 @@ body.col-resizing { cursor: row-resize; }
   }
   .intraday-base {
     margin-left: 0;
+  }
+  /* 다섯 칸이 375px 안에 들어가야 한다 — 가로 스크롤이 생기면 표가 아니다 */
+  .intraday-segs {
+    gap: 2px 5px;
+    font-size: 0.72rem;
   }
 }
 
@@ -3263,17 +3289,14 @@ body.col-resizing { user-select: none; cursor: col-resize; }
   border-top: 1px solid var(--border);
   padding-top: 2px;
   /*
-   * **글자만큼은 자리를 준다** (2026-10-20). 이름 뒤에 등락률 괄호가 붙으면서
-   * 비율 폭(프리는 차트의 8%쯤)으로는 통째로 잘리게 됐다 — 위의 `overflow: hidden`.
-   * 비율은 넓을 때만 뜻이 있고, 좁아지면 글자가 이긴다.
+   * **비율이 이긴다** (2026-10-21). 10/20 에는 `min-width: max-content` 로 글자를
+   * 이기게 뒀는데(등락률 괄호가 잘려서), 그 바람에 **이름이 음영 밖으로 밀려났다** —
+   * 눈금이어야 할 줄이 눈금을 잃었다. 숫자를 아래 표로 내렸으니 다시 비율을 지킨다.
+   * `min-width: 0` 이라야 flex 가 `width: %` 아래로 줄여 준다(기본값 auto 는 안 준다).
    */
-  min-width: max-content;
+  min-width: 0;
+  text-overflow: clip;
   padding-inline: 3px;
-}
-/* 이름 뒤 등락률 — 이름보다 한 단계 흐리게, 줄바꿈 없이 */
-.intraday-session i {
-  font-style: normal;
-  opacity: 0.8;
 }
 .intraday-session.main {
   color: var(--text);
