@@ -177,6 +177,16 @@ export function ChartPanel({
    * KRX/NXT 만 보고 싶으면 셀렉터로 고른다(칸마다 기억).
    */
   const [venue, setVenue] = useState<Venue>(() => saved().venue ?? "all");
+  /** 일봉 거래소를 **손수** 고른 적이 있나 — 위 일회성 이행이 다시 끼어들지 않게 */
+  const markDailyVenueChosen = () => {
+    if (viewKey) {
+      try {
+        localStorage.setItem(`${viewKey}.venueDailyV2`, "1");
+      } catch {
+        /* 사생활 모드 등 — 못 적어도 화면은 돈다 */
+      }
+    }
+  };
   /**
    * **일·주·월봉의 거래소는 따로 기억한다** (2026-09-11 — 벤티지: "NXT로 설정을 넣고 해도
    * NXT 시세가 나타나지 않습니다").
@@ -191,7 +201,38 @@ export function ChartPanel({
    * 공식 종가와 다르다」는 사정이었는데, 그건 **판독 줄이 KRX 일봉을 따로 받아** 푼다
    * (아래 `curVenue === "krx"` 가드). 보는 눈은 통합이 맞다.
    */
-  const [dailyVenue, setDailyVenue] = useState<Venue>(() => saved().venueDaily ?? "all");
+  /*
+   * **일·주·월봉은 KRX 로** (2026-10-22 — 벤티지: "이제 KRX가 메인이잖아 KRX로 가는게
+   * 맞겠어").
+   *
+   * 9/11 에 「차트 나올때는 기본 통합으로」로 바꿨던 것을 되돌린다. 그때 이유는 「하루의
+   * 전부는 KRX 정규장 + NXT 프리·애프터」였고 그건 지금도 사실이다 — 10/22 실측으로
+   * NXT 가 거래대금의 31~45% 다. 바뀐 것은 **무엇을 기준값이라 부르나**다.
+   *
+   * 통합 일봉은 **시가가 NXT 프리(08:00) 시가**가 된다. 10/22 삼성전기 실측:
+   *
+   *     KRX   시 1,182,000   첫 봉 09:00
+   *     NXT   시 1,197,000   첫 봉 08:00
+   *     통합  시 1,197,000   첫 봉 08:00
+   *
+   * 그래서 통합으로 보면 시가·등락률이 증권사·네이버·HTS 어디와도 안 맞는 제3의 숫자가
+   * 된다. 벤티지가 「실제 등락률과 안 맞는다」고 한 자리가 이것이다. 일봉의 시가·종가는
+   * **공식 기준값**이고 그 기준은 KRX 다.
+   *
+   * ⚠️ **분봉은 통합 그대로 둔다**(`venue`). 장중에 궁금한 것은 「지금 어디서 얼마에
+   * 체결되나」지 공식 기준값이 아니고, 프리마켓은 NXT 에만 있어서 KRX 로 보면 08~09 시가
+   * 통째로 빈다. 두 자리를 따로 기억하게 해 둔 것이 이 때문이다.
+   */
+  const [dailyVenue, setDailyVenue] = useState<Venue>(() => {
+    const v = saved().venueDaily;
+    /*
+     * 옛 설정을 **한 번만** 끌어올린다 (2026-10-22). 기본값만 바꾸면 이미 "all" 이
+     * 저장된 기기는 그대로라, 정작 고쳐 달라던 화면이 안 고쳐진다. 그 뒤로 벤티지가
+     * 손수 통합을 고르면 `venueDailyV2` 가 서서 다시는 안 건드린다.
+     */
+    if (viewKey && v === "all" && !localStorage.getItem(`${viewKey}.venueDailyV2`)) return "krx";
+    return v ?? "krx";
+  });
   /**
    * 지금 보고 있는 구간(거래일 수).
    *
@@ -582,7 +623,14 @@ export function ChartPanel({
         className="period-select"
         value={curVenue}
         /* (2026-09-11) 분봉과 일·주·월봉의 거래소를 따로 기억한다 — 위 dailyVenue 주석 */
-        onChange={(e) => (isIntraday ? setVenue : setDailyVenue)(e.target.value as Venue)}
+        onChange={(e) => {
+          if (isIntraday) setVenue(e.target.value as Venue);
+          else {
+            /* 손수 고른 뒤로는 위의 일회성 이행이 끼어들지 않는다 */
+            markDailyVenueChosen();
+            setDailyVenue(e.target.value as Venue);
+          }
+        }}
         title={VENUES.find((v) => v.key === curVenue)?.hint}
       >
         {VENUES.map((v) => (

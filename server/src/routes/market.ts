@@ -33,7 +33,7 @@ import { themeStrength } from "../themeStrength.js";
 /* 대세 테마 분석 — 기간별 흐름 (2026-10-08) */
 import { themeTrend, themeTrendOverview, TREND_DAYS } from "../themeTrend.js";
 import { marketThermo, themeRotation, usOvernight } from "../marketLens.js";
-import { buildCloses, closesProgress, loadCloses, regularCloseOf } from "../dailyCloses.js";
+import { buildCloses, closesProgress, loadBars, loadCloses, regularCloseOf } from "../dailyCloses.js";
 import { themeLinks } from "../themeLinks.js";
 import {
   fetchAllThemes,
@@ -58,6 +58,48 @@ import { futuresFlow } from "../naverFuturesFlow.js";
 import { intradayFlow, type FlowMarket } from "../naverIntradayFlow.js";
 import { strengthDay } from "../strengthDay.js";
 import { themeFlow } from "../themeFlow.js";
+
+/**
+ * **날짜별 줄의 종가·전일대비를 KRX 로 덮는다** (2026-10-22 — 벤티지: "이제 KRX가
+ * 메인이잖아 KRX로 가는게 맞겠어 … 다른데도 그런데 있는지 찾고 고치자고").
+ *
+ * 수급·거래상세·체결강도·프로그램 TR 은 `_AL`(통합)로 부른다. **그건 옳다** — 외국인이
+ * NXT 에서 산 것도 산 것이고, 통합이라야 키움 앱과 자리수까지 맞는다(2026-08-26 실측).
+ *
+ * 문제는 그 응답에 **날짜별 시세가 같이 실려 온다**는 것이다. 화면은 그걸 「그날 종가·
+ * 등락률」로 적는데, 통합 종가는 **공식 종가가 아니다.** 10/22 실측으로 다섯 TR
+ * (`ka10059`·`ka10060`·`ka10015`·`ka10047`·`ka90013`)이 전부 같은 날 KRX 와 갈렸다:
+ *
+ *     20261019  KRX 1,220,000  vs  통합 1,219,000
+ *
+ * 수급은 통합으로 두고 **시세만 KRX 로 덮는다.** 재료는 이미 들고 있는 일봉 캐시라
+ * **조회가 늘지 않는다**(`dailyCloses` 는 KRX 기준으로 쌓인다).
+ *
+ * ⚠️ 일봉에 없는 날은 **건드리지 않는다.** 캐시가 못 따라온 오늘치까지 지우면 멀쩡하던
+ * 줄이 빈다 — 「틀린 값」을 고치려다 「없는 값」을 만들면 안 된다.
+ */
+async function overlayKrxCloses(
+  rows: Record<string, unknown>[],
+  bareCode: string,
+  opts: { dateKey?: string; priceKey?: string; diffKey?: string } = {},
+): Promise<void> {
+  const dateKey = opts.dateKey ?? "dt";
+  const priceKey = opts.priceKey ?? "cur_prc";
+  const diffKey = opts.diffKey ?? "pred_pre";
+  const bars = await loadBars(bareCode);
+  if (bars.length === 0) return;
+  const idx = new Map(bars.map((b, i) => [b.d, i]));
+  for (const r of rows) {
+    const i = idx.get(String(r[dateKey] ?? ""));
+    if (i === undefined || i <= 0) continue; // 첫 봉은 전일이 없어 전일대비를 못 낸다
+    const close = bars[i].c;
+    const prev = bars[i - 1].c;
+    if (!(close > 0) || !(prev > 0)) continue;
+    r[priceKey] = String(close);
+    /* 부호를 살려 둔다 — 화면이 `cur_prc - pred_pre` 로 전일종가를 되짚는다 */
+    if (diffKey in r) r[diffKey] = String(close - prev);
+  }
+}
 
 const MRKCOND_RESOURCE = "/api/dostk/mrkcond";
 const CHART_RESOURCE = "/api/dostk/chart";
@@ -443,6 +485,12 @@ export function createMarketRouter(client: KiwoomClient): Router {
         nextKey = more.nextKey;
       }
       data.stk_invsr_orgn_chart = rows;
+      /*
+       * 수급은 통합, 시세는 KRX — `overlayKrxCloses` 머리말.
+       * **종목 상세의 「투자자 수급」 탭이 이 길로 온다.** 벤티지가 일별 표의 등락률이
+       * 실제와 안 맞는다고 한 자리다.
+       */
+      await overlayKrxCloses(rows, req.params.code.replace(/_(AL|NX)$/i, ""));
       res.json(data);
     } catch (err) {
       next(err);
@@ -776,11 +824,17 @@ export function createMarketRouter(client: KiwoomClient): Router {
   // 과거 날짜를 넣으면 최신 데이터가 안 나오므로 오늘을 넘겨야 한다.
   router.get("/daily-detail/:code", async (req, res, next) => {
     try {
-      const { data } = await client.request(STKINFO_RESOURCE, "ka10015", {
+      const { data } = await client.request<Record<string, unknown>>(STKINFO_RESOURCE, "ka10015", {
         // 통합(_AL) — 거래 비중·수급이 키움 앱(통합)과 같아야 한다
         stk_cd: alCode(req.params.code),
         strt_dt: todayYyyymmdd(),
       });
+      /* 거래 비중은 통합, 종가는 KRX — `overlayKrxCloses` 머리말 */
+      await overlayKrxCloses(
+        (data.daly_trde_dtl as Record<string, unknown>[]) ?? [],
+        req.params.code.replace(/_(AL|NX)$/i, ""),
+        { priceKey: "close_pric" },
+      );
       res.json(data);
     } catch (err) {
       next(err);
@@ -798,10 +852,14 @@ export function createMarketRouter(client: KiwoomClient): Router {
   router.get("/strength/:code", async (req, res, next) => {
     try {
       if (req.query.mode === "daily") {
-        const { data } = await client.request(MRKCOND_RESOURCE, "ka10047", {
+        const { data } = await client.request<Record<string, unknown>>(MRKCOND_RESOURCE, "ka10047", {
           // 통합(_AL) — 체결강도도 전체 체결 기준
           stk_cd: alCode(req.params.code),
         });
+        await overlayKrxCloses(
+          (data.cntr_str_daly as Record<string, unknown>[]) ?? [],
+          req.params.code.replace(/_(AL|NX)$/i, ""),
+        );
         res.json(data);
         return;
       }
@@ -860,6 +918,8 @@ export function createMarketRouter(client: KiwoomClient): Router {
         nextKey = more.nextKey;
       }
       data.stk_invsr_orgn = rows;
+      /* 수급은 통합, 시세는 KRX — 위 `overlayKrxCloses` 머리말 */
+      await overlayKrxCloses(rows, req.params.code.replace(/_(AL|NX)$/i, ""));
       res.json(data);
     } catch (err) {
       next(err);
@@ -869,12 +929,16 @@ export function createMarketRouter(client: KiwoomClient): Router {
   // 종목별 프로그램매매 추이 (ka90013) - 일자별 프로그램 순매수 금액/수량
   router.get("/program/:code", async (req, res, next) => {
     try {
-      const { data } = await client.request(MRKCOND_RESOURCE, "ka90013", {
+      const { data } = await client.request<Record<string, unknown>>(MRKCOND_RESOURCE, "ka90013", {
         // 통합(_AL) — 프로그램도 NXT 몫 포함 (실측: _AL 로 값이 온다)
         stk_cd: alCode(req.params.code),
         date: todayYyyymmdd(),
         amt_qty_tp: "1", // 1:금액(백만)
       });
+      await overlayKrxCloses(
+        (data.stk_daly_prm_trde_trnsn as Record<string, unknown>[]) ?? [],
+        req.params.code.replace(/_(AL|NX)$/i, ""),
+      );
       res.json(data);
     } catch (err) {
       next(err);
