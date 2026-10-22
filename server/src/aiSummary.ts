@@ -61,6 +61,26 @@ function fmt(n: number): string {
   return n.toLocaleString("ko-KR");
 }
 
+/**
+ * **금액은 값마다 단위를 붙인다** (2026-10-22 — 벤티지: "오늘 외국인은 코스피에서
+ * 3896억을 팔았어. 전수 재 검사 해라 로직 좀").
+ *
+ * 10/22 석간이 「외국인은 코스피에서 **36억 9,200만 원**을 팔았고」라고 썼다. 원시값을
+ * 찍어 보니 `frgnr_netprps: "-3896"` — **억원이 맞았고 데이터는 멀쩡했다.** AI 가 그
+ * 숫자를 **백만원으로 읽어** 100 배 작게 적은 것이다. 그날 네 값(코스피 외인·기관,
+ * 코스닥 외인·기관)이 전부 같은 비율로 틀어져 있었으니 우연이 아니다.
+ *
+ * 왜 그랬나 — 단위가 **블록 제목에만** 있었다. 「[투자자 순매수, 억원]」 아래로
+ * `-3,692` 같은 맨 숫자가 줄줄이 오면, 제목 한 줄과 숫자 수십 개 사이에서 제목이 진다.
+ *
+ * **이게 두 번째다.** 9월에 관심종목 블록이 같은 병을 앓았고(한미반도체 외인 5일
+ * −4,300억이 「−434,168억원」으로 나갔다) 그때는 그 블록만 `eok()` 로 고쳤다. 블록
+ * 하나씩 고치는 방식이 틀렸던 것이다 — 금액이면 **어디서든** 값에 단위가 붙어야 한다.
+ */
+function eokAmt(n: number): string {
+  return `${n.toLocaleString("ko-KR")}억`;
+}
+
 function pct(n: number): string {
   return `${n > 0 ? "+" : ""}${n.toFixed(2)}%`;
 }
@@ -210,10 +230,11 @@ export async function buildDigest(
 
   const flow = (flowSec?.data ?? null) as MarketFlow | null;
   if (flow && traded) {
-    lines.push("\n[투자자 순매수, 억원]");
-    lines.push(`코스피: 외국인 ${fmt(flow.kospi.foreign)} / 기관 ${fmt(flow.kospi.institution)} / 개인 ${fmt(flow.kospi.individual)}`);
-    lines.push(`  (기관 세부) 금융투자 ${fmt(flow.kospi.financialInvestment)} / 투신 ${fmt(flow.kospi.investmentTrust)} / 연기금 ${fmt(flow.kospi.pensionFund)} / 사모 ${fmt(flow.kospi.privateFund)} / 보험 ${fmt(flow.kospi.insurance)}`);
-    lines.push(`코스닥: 외국인 ${fmt(flow.kosdaq.foreign)} / 기관 ${fmt(flow.kosdaq.institution)} / 개인 ${fmt(flow.kosdaq.individual)}`);
+    /* 값마다 「억」 — 제목에만 적으면 AI 가 백만원으로 읽는다 (`eokAmt` 머리말) */
+    lines.push("\n[투자자 순매수 — 숫자에 붙은 「억」이 단위다. 환산하지 마라]");
+    lines.push(`코스피: 외국인 ${eokAmt(flow.kospi.foreign)} / 기관 ${eokAmt(flow.kospi.institution)} / 개인 ${eokAmt(flow.kospi.individual)}`);
+    lines.push(`  (기관 세부) 금융투자 ${eokAmt(flow.kospi.financialInvestment)} / 투신 ${eokAmt(flow.kospi.investmentTrust)} / 연기금 ${eokAmt(flow.kospi.pensionFund)} / 사모 ${eokAmt(flow.kospi.privateFund)} / 보험 ${eokAmt(flow.kospi.insurance)}`);
+    lines.push(`코스닥: 외국인 ${eokAmt(flow.kosdaq.foreign)} / 기관 ${eokAmt(flow.kosdaq.institution)} / 개인 ${eokAmt(flow.kosdaq.individual)}`);
   }
 
   /**
@@ -475,8 +496,11 @@ const SYSTEM_RULES = `너는 한국 주식시장 데이터를 정리해 주는 �
 - 한국어로, 군더더기 없이. 아래 항목만, 이 순서로 쓴다.
 - **한글·숫자·기본 문장부호만 써라.** 일본어·한자를 섞지 마라 — 실제 발행분에
   「시장の 폭」이 나간 적이 있다. 섹션 제목은 아래 틀의 표기 그대로 쓴다.
+- **숫자에 붙은 단위가 전부다. 다른 단위로 바꾸지 마라.** 재료가 「-3,896억」이면
+  그대로 「3,896억 원 순매도」다. 「36억 9,200만 원」처럼 풀어 쓰면 **100배 틀린다** —
+  10/22 석간이 실제로 그렇게 나갔다. 만원·백만원으로 환산하는 일은 **절대** 없다.
 - 금액은 **조·억으로 끊어 써라** — 「1조 1,635억 원」이지 「11,635억 원」이 아니다.
-  1조 미만이면 억으로만 쓴다.
+  1조 미만이면 억으로만 쓴다. 억 단위 숫자가 10,000을 넘을 때만 조로 바꾼다.
 - **분량 제한은 반드시 지켜라. 항목마다 최대 5문장, 전체 한글 2,600자를 넘기지 마라.**
   넘길 것 같으면 항목을 줄이지 말고 **문장을 줄여라.** 마지막 체크포인트 구획까지
   반드시 다 쓰고 끝내야 한다 — 중간에 잘리면 그 리포트는 쓸 수 없다.

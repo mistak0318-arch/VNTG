@@ -780,8 +780,15 @@ export function sizeRotation(days: SectorFlowDay[], window = 5): SizeFlow[] {
 
 // ---------------------------------------------------------------- 리포트용
 
+/**
+ * **값마다 「억」을 붙인다** (2026-10-22).
+ *
+ * 단위를 블록 제목에만 적어 두면 AI 가 숫자를 제 멋대로 환산한다 — 10/22 석간이
+ * 「전기전자에서 5일 누적 329억 5,200만 원」이라 썼는데 실제 값은 3,295 **억**이었다.
+ * 자세한 사정은 `aiSummary.ts` 의 `eokAmt` 머리말.
+ */
 function fmt(n: number): string {
-  return `${n > 0 ? "+" : ""}${Math.round(n).toLocaleString("ko-KR")}`;
+  return `${n > 0 ? "+" : ""}${Math.round(n).toLocaleString("ko-KR")}억`;
 }
 
 /**
@@ -791,7 +798,7 @@ function fmt(n: number): string {
 export function toSectorFlowDigest(days: SectorFlowDay[]): string {
   if (days.length < 2) return "";
 
-  const lines: string[] = ["\n[업종별 자금 흐름 — 최근 5일 누적, 단위 억원]"];
+  const lines: string[] = ["\n[업종별 자금 흐름 — 최근 5일 누적. 숫자에 붙은 「억」이 단위다. 환산하지 마라]"];
 
   const foreign = sectorFlowStats(days, "foreign", 5);
   const top = foreign.slice(0, 5);
