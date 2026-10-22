@@ -101,6 +101,40 @@ async function overlayKrxCloses(
   }
 }
 
+/**
+ * **일봉의 종가를 정규장 기준으로 덮는다** (2026-10-22 — 벤티지: "아직도 안
+ * 맞잖아 차트에 21일 주가 종가랑 수급에 나와있는 종가를 봐봐").
+ *
+ * `ka10081` 은 **KRX 로 불러도 애프터(16:00~20:00)가 섞인 값**을 준다. 9/14 부터
+ * 애프터가 KRX 에서 열리기 때문이다. 10/21 삼성전기 실측:
+ *
+ *     ka10081 KRX   종가 1,184,000   ← 애프터 종가
+ *     정규장 종가           1,168,000   ← 증권사·네이버가 적는 값
+ *
+ * 그래서 차트 툴팁이 전일(10/20)을 1,125,000(애프터)으로 잡고 **시·고·저 등락률까지
+ * 통째로 밀렸다** — 종가 +5.24%, 고가 +8.00% 처럼 어디서도 못 보는 숫자가 나왔다.
+ *
+ * `dailyCloses` 의 `DayBar` 는 **`c` 의 뜻이 정규장 종가로 고정**돼 있다(2026-09-12,
+ * 애프터마켓 개편 때 신호등 표본·백테스트와의 연속성 때문에 그렇게 못박았다). 그걸로
+ * 덮으면 차트가 수급 표·증권사와 같은 말을 한다. 캐시라 **조회가 늘지 않는다.**
+ *
+ * ⚠️ **종가만 덮는다.** `DayBar` 에서 뜻이 고정된 것은 `c` 하나고, `o`·`h`·`l` 이
+ *    정규장 것이라는 보장은 어디에도 없다. 실측(10/21 삼성전기)으로 TR 의 시·고·저는
+ *    이미 맞았다 — 시 1,182,000 · 고 1,215,000 · 저 1,155,000, 셋 다 증권사와 같다.
+ *    맞는 값을 보장 없는 값으로 갈아치우면 고치는 게 아니라 옮기는 것이다.
+ * ⚠️ 캐시에 없는 날(오늘치가 아직 안 쌓인 장중)은 건드리지 않는다.
+ */
+async function overlayKrxCloseBars(rows: Record<string, unknown>[], bareCode: string): Promise<void> {
+  const bars = await loadBars(bareCode);
+  if (bars.length === 0) return;
+  const byDate = new Map(bars.map((b) => [b.d, b]));
+  for (const r of rows) {
+    const b = byDate.get(String(r.dt ?? ""));
+    if (!b || !(b.c > 0)) continue;
+    r.cur_prc = String(b.c);
+  }
+}
+
 const MRKCOND_RESOURCE = "/api/dostk/mrkcond";
 const CHART_RESOURCE = "/api/dostk/chart";
 const STKINFO_RESOURCE = "/api/dostk/stkinfo";
@@ -407,11 +441,21 @@ export function createMarketRouter(client: KiwoomClient): Router {
     try {
       const baseDt = typeof req.query.base_dt === "string" ? req.query.base_dt : todayYyyymmdd();
       // noAl — 차트는 화면에 KRX/NXT/통합 셀렉터가 있어 코드 접미를 화면이 정한다
-      const { data } = await client.request(CHART_RESOURCE, "ka10081", {
+      const { data } = await client.request<Record<string, unknown>>(CHART_RESOURCE, "ka10081", {
         stk_cd: req.params.code,
         base_dt: baseDt,
         upd_stkpc_tp: "1", // 수정주가 반영
       }, { noAl: true });
+      /*
+       * **KRX 를 골랐을 때만** 정규장 값으로 덮는다 — `overlayKrxBars` 머리말.
+       * 통합·NXT 를 일부러 고른 사람에게 KRX 값을 돌려주면 셀렉터가 거짓말이 된다.
+       */
+      if (!/_(AL|NX)$/i.test(req.params.code)) {
+        await overlayKrxCloseBars(
+          (data.stk_dt_pole_chart_qry as Record<string, unknown>[]) ?? [],
+          req.params.code,
+        );
+      }
       res.json(data);
     } catch (err) {
       next(err);
