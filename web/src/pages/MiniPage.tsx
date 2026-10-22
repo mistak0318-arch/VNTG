@@ -100,14 +100,22 @@ export function MiniPage({
    * 바뀌었다. 종목을 고르는 길이 둘로 갈렸으면 **양쪽 다 알려야** 한다.
    */
   const { focus, publish } = useStockFocus();
+  /*
+   * **연동은 끌 수 있다** (2026-10-22 — 벤티지: "미니창에서 종목검색할때 연동모드
+   * 키고 끌 수 있는 옵션"). 설정 > 미니창에서 고른다. 기본은 켬.
+   *
+   * ⚠️ 양쪽을 **같은 스위치**로 막는다 — 내보내기만 끄면 본창에서 고른 종목이 미니창을
+   * 계속 끌고 다녀서, 「저 혼자 보기」가 되지 않는다.
+   */
+  const linked = cfg.link;
   const openPopup = (code: string, name: string) => {
     setPopupStock({ code, name });
-    publish(code, name);
+    if (linked) publish(code, name);
   };
   /* 종목검색 화면에서 고른 것도 같이 알린다 — 미니창의 본업이 이쪽이다 */
   const selectAndPublish = (code: string, name: string) => {
     onSelect(code, name);
-    publish(code, name);
+    if (linked) publish(code, name);
   };
   /*
    * 반대 방향도 — **다른 창이 고른 종목을 미니창이 따라간다.**
@@ -117,7 +125,9 @@ export function MiniPage({
   const seenFocusAt = useRef(focus?.at);
   useEffect(() => {
     if (!focus || seenFocusAt.current === focus.at) return;
+    /* 연동을 꺼도 **받은 시각은 기록**한다 — 안 그러면 다시 켜는 순간 묵은 종목이 한 번 튄다 */
     seenFocusAt.current = focus.at;
+    if (!linked) return;
     onSelect(focus.code, focus.name);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus?.at]);

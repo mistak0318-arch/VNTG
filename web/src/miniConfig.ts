@@ -106,6 +106,21 @@ export interface MiniConfig {
    * (`#/mini?screen=order`). 같은 창 이름이라 미니창이 이미 떠 있으면 그 창이 주문으로 바뀐다.
    */
   orderHotkey: Hotkey;
+  /**
+   * **창 연동** (2026-10-22 — 벤티지: "미니창에서 종목검색할때 연동모드 키고 끌 수
+   * 있는 옵션 넣을 수 있게 설정에 넣어줄래?").
+   *
+   * 켜면 미니창에서 고른 종목이 다른 창에도 퍼지고, 다른 창이 고른 종목을 미니창이
+   * 따라간다(`useStockFocus`). 끄면 **미니창이 저 혼자 본다.**
+   *
+   * 왜 끄고 싶은가 — 미니창의 쓸모는 「본창을 안 떠나고 곁눈질」인데, 연동이 켜져
+   * 있으면 미니창에서 뭘 하나 찾아볼 때마다 **본창까지 끌려간다.** 보던 자리를 잃지
+   * 않으려고 연 창이 보던 자리를 뺏는 셈이다.
+   *
+   * 기본은 **켬** — 9/8 에 「종목 연동이 안 된다」고 해서 붙인 기능이고, 평소에는
+   * 그쪽이 맞다.
+   */
+  link: boolean;
 }
 
 const KEY = "vntg.mini";
@@ -116,6 +131,7 @@ const DEFAULT: MiniConfig = {
   hotkey: "ctrl-m",
   boardHotkey: "ctrl-b",
   orderHotkey: "tap-o",
+  link: true,
 };
 
 export function readMiniConfig(): MiniConfig {
@@ -138,6 +154,8 @@ export function readMiniConfig(): MiniConfig {
       orderHotkey: MINI_HOTKEYS.some((h) => h.key === saved.orderHotkey)
         ? (saved.orderHotkey as Hotkey)
         : DEFAULT.orderHotkey,
+      /* 저장된 적 없으면 켬 — 옛 설정을 읽어도 하던 대로 동작해야 한다 */
+      link: saved.link !== false,
     };
   } catch {
     return DEFAULT;

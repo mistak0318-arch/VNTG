@@ -21620,3 +21620,15 @@ tr.gv-strong td:first-child { color: var(--text); }
 /* 종목 상세 큰 숫자 옆의 당일 봉 (2026-09-22) — 숫자와 같은 줄, 가운데 맞춤 */
 .ph-price .daycandle { display: inline-block; vertical-align: middle; margin-left: 12px; }
 .daycandle-lg .dcd-wick { stroke-width: 1.6; }
+
+/* 미니창 「창 연동」 토글 (2026-10-22) — 체크박스와 설명이 한 줄로 붙어야 읽힌다 */
+.mini-link-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 0.8667rem;
+}
+.mini-link-toggle input {
+  cursor: pointer;
+}

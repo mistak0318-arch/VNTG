@@ -40,9 +40,6 @@
   --row-hover: rgba(43, 41, 36, 0.05);
   --row-hover-line: rgba(43, 41, 36, 0.2);
 
-  --nt-top-h: 44px;
-  --nt-head-h: 58px;
-  --nt-foot-h: 46px;
   /* PC 에서 사이드바가 옆에 붙어 있으면 그만큼 비운다 — excel.css 와 같은 규칙 */
   --nt-left: 200px;
   --nt-right: 0px;
@@ -95,115 +92,9 @@
   filter: grayscale(1);
 }
 
-/* 본문 — 위아래 껍데기만큼 비운다. 옆 여백은 메모처럼 넉넉히 */
-/* 맨 윗줄(검색·알림·시계)이 머리줄 밑 여백을 갖는다 — 본문에 두면 윗줄이 껍데기 아래로 들어가 안 보였다 (2026-09-10) */
-:root[data-theme="note"] .top-strip {
-  padding-top: calc(var(--nt-top-h) + var(--nt-head-h) + 8px);
-  background: var(--bg);
-}
-:root[data-theme="note"] .main-inner {
-  padding-top: 8px;
-  padding-bottom: calc(var(--nt-foot-h) + 20px);
-}
 
-/* ── 껍데기 ─────────────────────────────────────────────────────── */
-:root[data-theme="note"] .nt-top,
-:root[data-theme="note"] .nt-head,
-:root[data-theme="note"] .nt-foot {
-  position: fixed;
-  left: var(--nt-left);
-  right: var(--nt-right);
-  /* 메뉴 서랍(40)보다 아래, 본문(1)보다 위 — 엑셀 껍데기와 같은 층 */
-  z-index: 30;
-  background: var(--bg);
-  font-family: var(--app-font);
-}
-:root[data-theme="note"] .nt-top {
-  top: 0;
-  height: var(--nt-top-h);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--border);
-}
-:root[data-theme="note"] .nt-back,
-:root[data-theme="note"] .nt-done {
-  background: none;
-  border: 0;
-  padding: 6px 4px;
-  font: inherit;
-  font-size: 1rem;
-  color: #c0653f;
-  cursor: pointer;
-}
-:root[data-theme="note"] .nt-done {
-  font-weight: 700;
-}
-:root[data-theme="note"] .nt-top-title {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--text);
-}
-:root[data-theme="note"] .nt-head {
-  top: var(--nt-top-h);
-  height: var(--nt-head-h);
-  padding: 8px 18px 0;
-}
-:root[data-theme="note"] .nt-title {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: var(--text);
-  line-height: 1.3;
-}
-:root[data-theme="note"] .nt-stamp {
-  font-size: 0.72rem;
-  color: var(--muted);
-  margin-top: 2px;
-}
-:root[data-theme="note"] .nt-foot {
-  bottom: 0;
-  height: var(--nt-foot-h);
-  display: flex;
-  align-items: center;
-  justify-content: space-around;
-  border-top: 1px solid var(--border);
-  padding-bottom: env(safe-area-inset-bottom);
-}
-/*
-  시트가 떠 있으면 바닥 도구줄을 내린다 (2026-10-16) — 그것이 z30 이라 시트(z20) 안의
-  **하단 탭 줄을 덮고 있었다.** 까닭은 `useSheetBack.markSheets`.
-  위 머리줄(메모/완료·제목)은 그대로 둔다 — 위장은 그쪽이 한다.
-*/
-:root[data-theme="note"][data-sheet="1"] .nt-foot { display: none; }
-/*
-  **제목 줄도 치운다** (2026-10-16 — 벤티지: "윗줄 메모도 원래 화면 나오게 하자,
-  의미 없는 글자 말고").
 
-  「10월 16일 메모 / 2026년 10월 16일 08:17」은 **순전히 장식**이다. 시트가 떠 있는 동안
-  그 58px 는 아무 일도 안 하면서 종목 화면을 그만큼 밀어 내린다.
 
-  ⚠️ 치우면 본문 여백도 같이 당겨야 한다 — 안 그러면 글자만 사라지고 **빈 띠**가 남아
-  더 이상하다. 「숨긴다」와 「자리를 돌려준다」는 다른 일이다.
-
-  ⚠️ **머리줄도 같이 치운다** (2026-10-16 두 번째 — 벤티지: "맨 위에 저것도 치우자,
-  안 보인다"). 처음엔 「완료가 위장을 끄는 유일한 손잡이니 남긴다」고 적었는데, 그 줄이
-  종목 머리(정규장 종가·등락률)를 **그대로 덮고 있었다.** 손잡이를 지키려다 정작 보려던
-  숫자를 가린 셈이다.
-
-  **나갈 길은 안 막힌다** — 숨기는 것은 **시트가 떠 있는 동안뿐**이라, 시트를 닫으면
-  그 자리에 다시 선다. 「영영 못 나간다」와 「지금은 안 보인다」는 다른 말이다.
-*/
-:root[data-theme="note"][data-sheet="1"] .nt-head,
-:root[data-theme="note"][data-sheet="1"] .nt-top { display: none; }
-
-:root[data-theme="note"] .nt-tool {
-  font-size: 1.15rem;
-  color: #c0653f;
-  opacity: 0.85;
-  cursor: default;
-  user-select: none;
-}
 
 /* ── 뺀 것들 — 위장은 여기서 생긴다 ─────────────────────────────── */
 
@@ -291,10 +182,7 @@
   border-color: var(--border);
 }
 
-/* 시스 플로팅 단추 — 메모 앱에 없는 물건이다 */
-:root[data-theme="note"] .sys-fab {
-  display: none !important;
-}
+
 
 /* 좁은 화면의 인앱 탭 띠는 메모에 없다 — 종이색으로 눌러 두고 글자만 남긴다 */
 @media (max-width: 899px) {
@@ -302,21 +190,7 @@
     background: var(--bg);
     border-bottom: 1px solid var(--border);
   }
-  /* 폰: 본문 전체가 껍데기 머리줄만큼 내려오고(엑셀과 같은 문법), 윗줄은 그 바로 밑에 붙박이. 시계는 메모 앱에 없는 물건이라 뺀다 */
-  :root[data-theme="note"] .main {
-    padding-top: calc(var(--nt-top-h) + var(--nt-head-h));
-  }
-  :root[data-theme="note"] .top-strip {
-    top: calc(var(--nt-top-h) + var(--nt-head-h));
-    padding: 6px 14px;
-    border-bottom: 1px solid var(--border);
-  }
-  /* 위 두 줄을 치운 만큼 본문도 올라온다 (2026-10-16) — 위 `.nt-head` 주석 참조 */
-  :root[data-theme="note"][data-sheet="1"] .main { padding-top: 0; }
-  :root[data-theme="note"][data-sheet="1"] .top-strip { top: 0; }
-  :root[data-theme="note"] .top-strip .mobile-header {
-    display: none;
-  }
+
   :root[data-theme="note"] .main-inner {
     padding-left: 14px;
     padding-right: 14px;

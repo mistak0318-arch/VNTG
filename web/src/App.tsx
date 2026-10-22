@@ -78,7 +78,6 @@ import { applyOrder, parseSection, useMenuPrefs } from "./useMenuOrder";
 import { useScreenLock } from "./useScreenLock";
 import { ScreenLock } from "./components/ScreenLock";
 import { ExcelChrome } from "./components/ExcelChrome";
-import { NoteChrome } from "./components/NoteChrome";
 import { useAppearance } from "./useAppearance";
 import { BoardPage } from "./pages/BoardPage";
 import { CornerToggle } from "./components/CornerToggle";
@@ -480,7 +479,12 @@ export default function App() {
       /* 사생활 보호 창 — 이번 세션에만 적용되고 만다 */
     }
   }, [wideStock]);
-  const disguised = excel || note;
+  /*
+   * ⚠️ **note 는 더 이상 여기 없다** (2026-10-22). 이 플래그는 「동그란 메뉴 단추를
+   * 감출 만큼 위장인가」를 뜻하는데, 메모 모드는 껍데기를 걷어내면서 **평소 화면 구성
+   * 그대로**가 됐다. 메뉴 단추까지 감추면 메모 모드를 끄러 갈 길이 사라진다.
+   */
+  const disguised = excel;
   /* 창들을 한 프로그램처럼 묶는다 — 꺼져 있으면 아무 일도 안 한다 */
   const focus = useStockFocus();
   /* 첫 클릭에 소리 장치를 깨운다 — 자동재생 정책 때문에 사용자 몸짓 안에서여야 한다 (2026-09-08) */
@@ -1169,13 +1173,22 @@ export default function App() {
           onMenu={() => setNavOpen(true)}
         />
       )}
-      {/* 메모 껍데기 — 「‹ 폴더」가 메뉴, 「완료」가 위장 해제 */}
-      {note && (
-        <NoteChrome
-          onMenu={() => setNavOpen(true)}
-          onExit={() => appearance.set({ theme: prevTheme.current ?? "dark" })}
-        />
-      )}
+      {/*
+        **메모 모드의 껍데기는 걷어냈다** (2026-10-22 — 벤티지: "메모모드 들어가면 탭이
+        안보이니깐 답답하다 맨위에 저 메모라고 쓴거 지우고 그냥 메모모드에서도 다른데랑
+        똑같이 화면구성 나오게 해줘 색감만 메모모드인걸로 하고 말야").
+
+        「‹ 폴더 / 메모 / 완료」 머리줄과 제목 줄이 102px 를 먹으면서 **인앱 탭 띠를
+        그대로 덮고 있었다.** 10/16 에 시트가 떠 있는 동안만 치웠는데, 가려지는 것은
+        시트일 때만이 아니었다.
+
+        남는 것은 **색감**(`html` 에 grayscale + 종이 톤)뿐이다. 위장의 값어치 대부분은
+        거기서 나오고 — 폰을 곁눈질해서 알아보는 것은 빨강·파랑 숫자판이지 머리줄 글자가
+        아니다 — 가짜 머리줄은 **쓰던 길을 막는 값**만 치르고 있었다.
+
+        나가는 길은 메뉴의 「메모 모드 끄기」다. 이제 탭 띠·모바일 헤더·메뉴 단추가 평소대로
+        서 있으므로 그 길이 늘 열려 있다(아래 `disguised` 에서 note 를 뺀 것도 그 때문).
+      */}
 
       {/*
         메뉴 여는 동그란 버튼.

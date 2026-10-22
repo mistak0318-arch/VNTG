@@ -113,6 +113,38 @@ export function MiniConfigPanel() {
         </span>
       </div>
 
+      {/*
+        **창 연동 켜고 끄기** (2026-10-22 — 벤티지: "미니창에서 종목검색할때 연동모드
+        키고 끌 수 있는 옵션 넣을 수 있게 설정에 넣어줄래?").
+
+        미니창의 쓸모는 「본창을 안 떠나고 곁눈질」인데, 연동이 켜져 있으면 미니창에서
+        뭘 하나 찾아볼 때마다 **본창까지 끌려간다** — 보던 자리를 잃지 않으려고 연 창이
+        보던 자리를 뺏는 셈이다. 끄면 미니창이 저 혼자 본다.
+      */}
+      <div className="appearance-row">
+        <span className="appearance-label">창 연동</span>
+        <label className="mini-link-toggle">
+          <input
+            type="checkbox"
+            checked={cfg.link}
+            onChange={(e) => update({ ...cfg, link: e.target.checked })}
+          />
+          <span>미니창에서 고른 종목을 다른 창과 맞춘다</span>
+        </label>
+        <span className="pt-n">
+          {cfg.link ? (
+            <>
+              미니창에서 종목을 고르면 <b>본창·보드도 같이</b> 바뀌고, 반대로 본창에서 고른
+              종목을 미니창이 따라갑니다.
+            </>
+          ) : (
+            <>
+              미니창이 <b>저 혼자</b> 봅니다 — 본창은 보던 자리에 그대로 있습니다.
+            </>
+          )}
+        </span>
+      </div>
+
       <div className="table-note">
         단축키는 <b>본창 어디서든</b> 창을 띄웁니다. 조합키(
         {hotkeyLabel("ctrl-m")} 등)는 화면잠금과 같은 방식이라 입력창에 커서가 있어도

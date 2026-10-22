@@ -7,7 +7,9 @@ import { TabScroller } from "../components/TabScroller";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { useTabActive } from "../tabActive";
 import { useMarketOpen } from "../useLive";
+import { createPortal } from "react-dom";
 import { UsBridgeBlock } from "../components/UsBridgeBlock";
+import { YahooChartSheet, type ChartTarget } from "../components/overview/YahooChartSheet";
 
 /**
  * 테마 DB — **네이버 테마를 우리 눈금으로 다시 그린다.**
@@ -603,6 +605,19 @@ function ThemeSheet({
   onClose: () => void;
   onSelectStock: (code: string, name: string) => void;
 }) {
+  /**
+   * **미국 테마면 해외 상세로** (2026-10-22 — 벤티지: "미국테마에서 각 종목 클릭하면
+   * 해외주식상세랑 연결되야 하는데 지금은 국내주식 상세랑 연결되어 있네").
+   *
+   * 미국 테마의 `code` 는 **티커**(NVDA)지 6자리 종목코드가 아니다. 그걸 국내 상세로
+   * 넘기면 키움에 없는 코드를 묻게 되어 빈 화면만 뜬다.
+   *
+   * 판단은 **테마 키**로 한다 — 서버가 `us:${code}` 로 짓는다(`themeStrength.ts`).
+   * 부르는 쪽에서 시장을 넘겨받는 편이 깔끔해 보이지만, 이 시트는 기간 보드에서도
+   * 열리고 거기 줄은 **국내·ETF·미국이 섞여 있다.** 넘겨받을 수 있는 시장이 없다.
+   */
+  const isUs = t.key.startsWith("us:");
+  const [usChart, setUsChart] = useState<ChartTarget | null>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -688,7 +703,11 @@ function ThemeSheet({
             <button
               key={s.code}
               className="tdb-stock"
-              onClick={() => onSelectStock(s.code, s.name)}
+              onClick={() =>
+                isUs
+                  ? setUsChart({ kind: "usStock", symbol: s.code, label: s.name, hintRate: s.changeRate })
+                  : onSelectStock(s.code, s.name)
+              }
               title={s.desc || undefined}
             >
               <span className="tdb-stock-h">
@@ -706,8 +725,20 @@ function ThemeSheet({
           ))}
         </div>
 
-        <div className="table-note">종목을 누르면 상세가 열립니다.</div>
+        <div className="table-note">
+          종목을 누르면 {isUs ? "해외종목 상세" : "상세"}가 열립니다.
+        </div>
       </div>
+      {/*
+        해외 상세는 이 시트 **위**에 뜬다. `overlay` 안쪽에 두면 바깥 `onClick={onClose}`
+        가 먼저 먹어 테마 시트까지 같이 닫힌다 — portal 로 body 에 붙인다
+        (`UsBridgeBlock` 과 같은 방식).
+      */}
+      {usChart &&
+        createPortal(
+          <YahooChartSheet target={usChart} onClose={() => setUsChart(null)} />,
+          document.body,
+        )}
     </div>
   );
 }
