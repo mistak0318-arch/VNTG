@@ -6445,6 +6445,14 @@ export interface ThemeStrength {
   tradeValue: number;
   /** 테마 전체 시가총액 합계(억원, 어림값) — MAP 타일 크기이자 표 정렬 기준 */
   marketCap: number;
+  /**
+   * **기간 값이 어림인가** (2026-10-22 — 서버 `themeStrength.ts` 참고).
+   *
+   * 없거나 false = 일봉으로 낸 값. true = 우리가 적어 둔 일별 등락률을 곱한 값이라
+   * 기록이 빠진 날만큼 어긋난다. 실측으로 KODEX 200선물인버스2X 가 기록 누적 +52.8%,
+   * 실제 20일 +32.47% 였다 — 어느 기간에도 없는 숫자가 화면에 나갔다.
+   */
+  approx?: boolean;
   /** 5거래일 누적(%). 기록이 모자라면 null */
   w1: number | null;
   /** 20거래일 누적(%). 기록이 모자라면 null */

@@ -112,6 +112,16 @@ export interface ThemeStrength {
    */
   m3: number | null;
   /**
+   * **이 기간 값이 어림인가** (2026-10-22).
+   *
+   * `false`/없음 = 일봉으로 낸 값(정확). `true` = **우리가 적어 둔 일별 등락률을
+   * 곱한 값**이라, 기록이 빠진 날만큼 어긋난다. 해외 테마는 일봉이 없어 늘 어림이고,
+   * ETF 는 일봉 수집 대상 밖인 것(해외 지수형)만 어림이다.
+   *
+   * 섞어 놓고 말 안 하면 어느 쪽을 보고 있는지 알 길이 없다 — 화면이 「≈」를 붙인다.
+   */
+  approx?: boolean;
+  /**
    * 60거래일 누적(%) — 일봉 캐시가 70일치를 들고 있어 바로 나온다.
    * 20일은 이번 파동을, 60일은 「이 테마가 원래 오던 자리인가」를 말한다.
    */
@@ -166,6 +176,28 @@ async function record(rows: ThemeStrength[], traded: boolean, market: Market): P
 }
 
 /** 최근 N일 누적(%) — 하루치 등락률을 곱해서 이어 붙인다 */
+/**
+ * ETF 한 종목의 기간 등락률 — **일봉이 있으면 일봉, 없으면 기록 누적(어림)**.
+ *
+ * 돌려주는 `approx` 는 「이 셋은 어림값이다」라는 뜻이고, 화면이 그걸 적는다.
+ * 섞어 놓고 말 안 하면 둘 중 어느 것을 보고 있는지 알 길이 없다.
+ */
+function etfPeriods(
+  bars: number[] | undefined,
+  series: number[],
+): { w1: number | null; m1: number | null; m60: number | null; approx: boolean } {
+  const byBars = { w1: cumOf(bars, 5), m1: cumOf(bars, 20), m60: cumOf(bars, 60) };
+  if (byBars.w1 !== null || byBars.m1 !== null || byBars.m60 !== null) {
+    return { ...byBars, approx: false };
+  }
+  return {
+    w1: cumulative(series, 5),
+    m1: cumulative(series, 20),
+    m60: cumulative(series, 60),
+    approx: true,
+  };
+}
+
 function cumulative(series: number[], n: number): number | null {
   if (series.length < n) return null;
   const win = series.slice(-n);
@@ -267,6 +299,8 @@ export async function themeStrength(
        * 그 기준을 적는다 — 나란히 놓인 숫자가 같은 날 것처럼 읽히면 안 된다.
        */
       const c = cumTheme(closes, t.stocks.map((s) => s.code));
+      /* 일봉으로 덮은 자리는 어림이 아니다 — 하나라도 덮였으면 표시를 거둔다 */
+      if (c.w1 !== null || c.m1 !== null || c.m60 !== null) row.approx = false;
       if (c.w1 !== null) row.w1 = c.w1;
       if (c.m1 !== null) row.m1 = c.m1;
       if (c.m60 !== null) row.m60 = c.m60;
@@ -335,10 +369,26 @@ export async function themeStrength(
          */
         tradeValue: Math.round(e.marketCap ?? 0),
         marketCap: Math.round(e.marketCap ?? 0),
-        /* 주간·월간은 기록이 쌓여야 나온다. 3개월은 네이버가 주는 별도 값이다 */
-        w1: cumulative(series, 5),
-        m1: cumulative(series, 20),
-        m60: cumulative(series, 60),
+        /*
+         * **일봉이 있으면 일봉으로** (2026-10-22 — 벤티지: "대세테마 로직도 한 번 더
+         * 로직 점검 좀 해봐 5일 20일 등락률이 실제랑 안 맞는거 같네").
+         *
+         * 여태 ETF 는 `cumulative(series, N)` 뿐이었다 — **우리가 매일 적어 둔 그날
+         * 등락률을 N 개 곱한 값**이다. 기록이 하루라도 빠지면 그만큼 어긋나는데,
+         * 어긋난 티가 안 난다. 실측(10/22) KODEX 200선물인버스2X:
+         *
+         *     기록 누적  +52.8%        ← 화면에 이렇게 나가고 있었다
+         *     실제 일봉  5일 +7.37% · 20일 +32.47% · 60일 +2.00%
+         *
+         * 어느 기간에도 없는 숫자다. ETF 는 **종목 하나가 곧 테마**라 일봉만 있으면
+         * 정확히 낼 수 있다. 국내 테마가 이미 `cumTheme` 로 그렇게 한다.
+         *
+         * ⚠️ 일봉이 없는 ETF 가 많다(859 중 앞 300 개에서 177 개). 해외 지수를 담는
+         * ETF 는 우리 일봉 수집 대상 밖이다. 그때는 기록 누적으로 물러서되 **`approx`
+         * 를 세워** 화면이 어림값임을 말하게 한다 — 틀린 값을 맞는 값처럼 내보내는
+         * 것이 제일 나쁘다.
+         */
+        ...etfPeriods(closes[e.code], series),
         m3: e.m3,
         group: ETF_TABS[e.tab] ?? "기타",
         stocks: [
@@ -506,9 +556,15 @@ function build(
     hit10: hitsOf(withToday, 10),
     tradeValue: Math.round(stocks.reduce((n, s) => n + (s.tradeValue ?? 0), 0)),
     marketCap: Math.round(stocks.reduce((n, s) => n + (s.marketCap ?? 0), 0)),
+    /*
+     * ⚠️ 여기 셋은 **기록 누적**이다 — 일봉이 아니다. 해외 테마가 이 길로 오는데,
+     * 해외주식 일봉은 종목당 1콜이라 6,100 종목을 매일 받을 수 없다. 국내 테마는
+     * 아래에서 `cumTheme`(일봉)이 덮으므로 이 값이 남지 않는다.
+     */
     w1: cumulative(series, 5),
     m1: cumulative(series, 20),
     m60: cumulative(series, 60),
+    approx: true,
     m3: null,
     stocks: stocks.sort((a, b) => (b.changeRate ?? -99) - (a.changeRate ?? -99)),
   };

@@ -78,6 +78,22 @@ function pct(v: number | null): string {
   return v === null ? "—" : `${v > 0 ? "+" : ""}${v.toFixed(2)}%`;
 }
 
+/**
+ * **어림값에는 「≈」를 붙인다** (2026-10-22 — 벤티지: "5일 20일 등락률이 실제랑 안
+ * 맞는거 같네").
+ *
+ * 기간 값은 두 가지 방식으로 나온다. 일봉이 있으면 **그 종목의 N 거래일 전 종가 대비**
+ * (정확), 없으면 **우리가 적어 둔 일별 등락률을 곱한 값**(어림)이다. 해외 테마는 일봉이
+ * 없어 늘 어림이고, ETF 는 해외 지수형이 어림이다.
+ *
+ * 둘을 같은 칸에 같은 모양으로 적으면 **어느 쪽을 보고 있는지 알 길이 없다.** 실측으로
+ * KODEX 200선물인버스2X 가 어림 +52.8%, 실제 20일 +32.47% 였다.
+ */
+function pctOf(t: ThemeStrength, v: number | null): string {
+  if (v === null) return "—";
+  return `${t.approx ? "≈" : ""}${pct(v)}`;
+}
+
 export function ThemeDbPage({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
   const [tab, setTab] = useState<ThemeTab>("kr");
   const tabOrder = useCardOrder(
@@ -493,7 +509,7 @@ function ThemeMap({
                   {pct(t.changeRate)}
                 </td>
                 <td className={`num ${t.w1 === null ? "" : signClass(t.w1)}`} data-l="5일">
-                  {pct(t.w1)}
+                  {pctOf(t, t.w1)}
                 </td>
                 <td
                   className={`num ${
@@ -503,12 +519,12 @@ function ThemeMap({
                   }`}
                   data-l={market === "etf" ? "3개월" : "20일"}
                 >
-                  {pct(market === "etf" ? t.m3 : t.m1)}
+                  {market === "etf" ? pct(t.m3) : pctOf(t, t.m1)}
                 </td>
                 {/* 60일 — 20일이 「이번 파동」이라면 이건 「원래 오던 자리인가」다 */}
                 {market !== "etf" && (
                   <td className={`num ${t.m60 === null ? "" : signClass(t.m60)}`} data-l="60일">
-                    {pct(t.m60)}
+                    {pctOf(t, t.m60)}
                   </td>
                 )}
                 {market !== "etf" && (
@@ -666,6 +682,7 @@ function ThemeSheet({
             <span className="tdb-chip">
               5일 누적{" "}
               <b className={signClass(t.w1)}>
+                {t.approx ? "≈" : ""}
                 {t.w1 > 0 ? "+" : ""}
                 {t.w1.toFixed(1)}%
               </b>
@@ -675,6 +692,7 @@ function ThemeSheet({
             <span className="tdb-chip">
               20일 누적{" "}
               <b className={signClass(t.m1)}>
+                {t.approx ? "≈" : ""}
                 {t.m1 > 0 ? "+" : ""}
                 {t.m1.toFixed(1)}%
               </b>
