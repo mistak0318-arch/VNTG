@@ -1,3 +1,4 @@
+import { joEok } from "./aiSummary.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -788,7 +789,8 @@ export function sizeRotation(days: SectorFlowDay[], window = 5): SizeFlow[] {
  * 자세한 사정은 `aiSummary.ts` 의 `eokAmt` 머리말.
  */
 function fmt(n: number): string {
-  return `${n > 0 ? "+" : ""}${Math.round(n).toLocaleString("ko-KR")}억`;
+  /* 조·억으로 끊어서 — AI 에게 환산을 시키지 않는다 (`aiSummary.joEok` 머리말) */
+  return `${n > 0 ? "+" : ""}${joEok(n)}`;
 }
 
 /**
@@ -798,7 +800,15 @@ function fmt(n: number): string {
 export function toSectorFlowDigest(days: SectorFlowDay[]): string {
   if (days.length < 2) return "";
 
-  const lines: string[] = ["\n[업종별 자금 흐름 — 최근 5일 누적. 숫자에 붙은 「억」이 단위다. 환산하지 마라]"];
+  /*
+   * **기간도 줄마다 적는다** (2026-10-23). 제목에 「최근 5일 누적」이 있는데도 10/23
+   * 석간이 규모별 5일 누적을 **오늘 문장에 붙여** 썼다 — 「외국인이 1조 900억을
+   * 순매도한 가운데 … 대형주 중심의 외국인 순매수(+1조 1,710억)」. 그러면 오늘
+   * 순매도이면서 대형주는 샀다는, 앞뒤가 안 맞는 말이 된다.
+   *
+   * 단위 때와 **똑같은 병**이다 — 제목 한 줄은 그 아래 숫자 수십 개에 진다.
+   */
+  const lines: string[] = ["\n[업종별 자금 흐름 — 아래는 **전부 최근 5일 누적**이다. 오늘 수치가 아니다]"];
 
   const foreign = sectorFlowStats(days, "foreign", 5);
   const top = foreign.slice(0, 5);
@@ -806,8 +816,8 @@ export function toSectorFlowDigest(days: SectorFlowDay[]): string {
 
   const arrow = (c: number | null) => (c === null || c === 0 ? "" : c > 0 ? ` (순위 ${c}단계↑)` : ` (${-c}단계↓)`);
 
-  lines.push(`외국인 순매수 상위: ${top.map((s) => `${s.label} ${fmt(s.sum)}${arrow(s.rankChange)}`).join(", ")}`);
-  lines.push(`외국인 순매도 상위: ${bottom.map((s) => `${s.label} ${fmt(s.sum)}`).join(", ")}`);
+  lines.push(`외국인 5일 누적 순매수 상위: ${top.map((s) => `${s.label} ${fmt(s.sum)}${arrow(s.rankChange)}`).join(", ")}`);
+  lines.push(`외국인 5일 누적 순매도 상위: ${bottom.map((s) => `${s.label} ${fmt(s.sum)}`).join(", ")}`);
 
   const streaks = sectorStreaks(days, "foreign").filter((s) => Math.abs(s.streak) >= 3).slice(0, 5);
   if (streaks.length > 0) {
@@ -826,19 +836,19 @@ export function toSectorFlowDigest(days: SectorFlowDay[]): string {
   const sell = sectorConsensus(days, { window: 5, minAgree: 3, side: -1 }).slice(0, 3);
   if (buy.length > 0) {
     lines.push(
-      `주체 합의 매수(개인 제외): ${buy.map((c) => `${c.label} ${c.agree}개 주체 ${fmt(c.total)}`).join(", ")}`,
+      `5일 누적 주체 합의 매수(개인 제외): ${buy.map((c) => `${c.label} ${c.agree}개 주체 ${fmt(c.total)}`).join(", ")}`,
     );
   }
   if (sell.length > 0) {
     lines.push(
-      `주체 합의 매도: ${sell.map((c) => `${c.label} ${c.agree}개 주체 ${fmt(c.total)}`).join(", ")}`,
+      `5일 누적 주체 합의 매도: ${sell.map((c) => `${c.label} ${c.agree}개 주체 ${fmt(c.total)}`).join(", ")}`,
     );
   }
 
   const splits = institutionSplits(days).slice(0, 3);
   if (splits.length > 0) {
     lines.push(
-      `기관 내부 이견(연기금 vs 투신): ${splits
+      `기관 내부 이견 5일 누적(연기금 vs 투신): ${splits
         .map((s) => `${s.label} 연기금 ${fmt(s.pension)} / 투신 ${fmt(s.trust)}`)
         .join(", ")} — 방향이 갈리는 업종은 변곡 후보로만 보고 단정하지 말 것`,
     );
@@ -846,7 +856,7 @@ export function toSectorFlowDigest(days: SectorFlowDay[]): string {
 
   const sizes = sizeRotation(days);
   if (sizes.length > 0) {
-    lines.push(`규모별 외국인: ${sizes.map((s) => `${s.label} ${fmt(s.foreign)}`).join(", ")}`);
+    lines.push(`규모별 외국인 5일 누적: ${sizes.map((s) => `${s.label} ${fmt(s.foreign)}`).join(", ")}`);
   }
 
   return lines.join("\n");

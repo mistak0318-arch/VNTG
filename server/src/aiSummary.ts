@@ -78,7 +78,33 @@ function fmt(n: number): string {
  * 하나씩 고치는 방식이 틀렸던 것이다 — 금액이면 **어디서든** 값에 단위가 붙어야 한다.
  */
 function eokAmt(n: number): string {
-  return `${n.toLocaleString("ko-KR")}억`;
+  return joEok(n);
+}
+
+/**
+ * **조·억으로 끊어서 준다** (2026-10-23 — 벤티지: "아직도 데일리 리포트 단위가 안맞네").
+ *
+ * 10/22 에 값마다 「억」을 붙였는데도 10/23 석간이 **기관 순매수 7,696억을 「779억」**
+ * 이라 썼다. 열 배다. 단위는 붙어 있었으니 이번엔 **환산하다 자릿수를 흘린 것**이다 —
+ * 출력 규칙의 「금액은 조·억으로 끊어 써라」를 AI 가 제 손으로 적용하면서.
+ *
+ * 그래서 **환산할 일 자체를 없앤다.** 재료를 이미 끊어진 모양으로 주면 AI 가 할 일은
+ * 옮겨 적는 것뿐이다:
+ *
+ *     -11,028억   →   -1조 1,028억
+ *
+ * 산수를 시키지 않는 것이 「틀리지 마라」고 적는 것보다 낫다. 같은 자리에서 두 번
+ * 틀렸으면 지시를 더 쓸 게 아니라 **시킬 일을 줄여야 한다.**
+ */
+export function joEok(n: number): string {
+  const sign = n < 0 ? "-" : "";
+  const a = Math.abs(Math.round(n));
+  if (a >= 10_000) {
+    const jo = Math.floor(a / 10_000);
+    const rest = a % 10_000;
+    return rest === 0 ? `${sign}${jo}조억`.replace("조억", "조") : `${sign}${jo}조 ${rest.toLocaleString("ko-KR")}억`;
+  }
+  return `${sign}${a.toLocaleString("ko-KR")}억`;
 }
 
 function pct(n: number): string {
