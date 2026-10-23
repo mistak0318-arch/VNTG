@@ -519,7 +519,9 @@ export async function leaderScan(
         tradeValue: totalValue,
         members: all.length,
         rising,
-        breadth: all.length > 0 ? (rising / all.length) * 100 : 0,
+        /* 정수로 — 저장분(`prevBreadth`)은 이미 반올림돼 있어서, 안 맞추면 화면에
+           「78% → 77.77777777777779%」처럼 한쪽만 소수점이 길게 나간다 (2026-10-23) */
+        breadth: all.length > 0 ? Math.round((rising / all.length) * 100) : 0,
         leaders: picks.slice(0, 5),
         streak,
         carryOver,
@@ -561,7 +563,7 @@ export async function leaderScan(
     if (!isRealSector(name) || all.length < cfg.minMembers) continue;
     const totalValue = all.reduce((a, x) => a + x.value, 0);
     sectorStatsAll[name] = {
-      breadth: all.length > 0 ? (all.filter((x) => x.rate > 0).length / all.length) * 100 : 0,
+      breadth: all.length > 0 ? Math.round((all.filter((x) => x.rate > 0).length / all.length) * 100) : 0,
       weightedRate: totalValue > 0 ? all.reduce((a, x) => a + x.rate * x.value, 0) / totalValue : 0,
       members: all.length,
     };

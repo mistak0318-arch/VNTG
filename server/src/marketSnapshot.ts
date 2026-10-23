@@ -1,4 +1,4 @@
-import { fixSector } from "./sectorFix.js";
+import { fixSector, isBroadSector } from "./sectorFix.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -294,8 +294,24 @@ async function build(client: KiwoomClient): Promise<MarketSnapshot> {
          * 먼저 온 것을 유지하면 SK하이닉스 업종이 「종합(KOSPI)」로 굳어버린다 —
          * **산업 쪽을 이긴 것으로 친다.**
          */
+        /*
+         * **더 구체적인 업종이 이긴다** (2026-10-23 — `sectorFix.isBroadSector` 머리말).
+         *
+         * 예전엔 「먼저 온 진짜 업종이 이긴다」였는데, 거래소 분류에는 **「제조업」·
+         * 「금융업」 같은 대분류가 소분류와 나란히** 있고 업종 목록이 오는 순서가 그날그날
+         * 달라서, 같은 종목의 업종이 **날마다 바뀌었다**(삼성전기 10/21 전기/전자 →
+         * 10/22 제조). 주도주의 「강한 섹터」가 흔들린 까닭이 이것이다.
+         */
         const had = byCode.get(code);
-        if (had && (isRealSector(had.sector) || !isRealSector(t.name))) continue;
+        if (had) {
+          /* 새로 온 것이 지수 묶음이면 볼 것도 없다 */
+          if (!isRealSector(t.name)) continue;
+          const hadReal = isRealSector(had.sector);
+          /* 이미 소분류를 들고 있으면 그대로 */
+          if (hadReal && !isBroadSector(had.sector)) continue;
+          /* 둘 다 대분류면 먼저 온 쪽을 둔다 — 바꿔 봐야 더 나을 게 없다 */
+          if (hadReal && isBroadSector(fixSector(code, t.name))) continue;
+        }
         byCode.set(code, {
           code,
           name: r.name,
