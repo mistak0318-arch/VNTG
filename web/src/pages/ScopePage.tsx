@@ -575,33 +575,30 @@ export function ScopePage({ onSelectStock }: { onSelectStock: (code: string, nam
   const sort = useSortableTable(shown);
 
   /*
-   * **끌어서 순서 바꾸기** (2026-10-25 — 벤티지: "현미경 메뉴에서 드래그 해서 순서
-   * 바꾸는 기능 좀 넣어줘 종목끼리").
+   * **순서 편집 — 위아래 버튼** (2026-10-26 — 벤티지: "현미경 순서 안 바뀌는데 차라리
+   * 편집 메뉴 줘서 위아래로 바꿀 수 있게나 해줘").
    *
-   * 현미경 목록은 관심종목의 **「현미경」 그룹**이다(`scope.ts`). 그래서 순서도 그 그룹의
-   * 순서고, 이미 있는 `watchReorder` 를 그대로 쓴다 — 현미경 전용 순서를 따로 두면
-   * 관심종목 화면과 **같은 묶음이 두 순서**를 갖게 된다.
+   * 10/25 에 `<tr draggable>` 로 붙였는데 **실제로는 안 끌렸다.** 표 행의 드래그는
+   * 칸 안의 단추·링크(주문으로·상세·빼기)가 먼저 손을 채가서, 줄을 잡으려면 빈 자리를
+   * 정확히 눌러야 한다 — 되는 자리를 찾아 헤매는 기능은 없는 기능이다.
    *
-   * ⚠️ **정렬 중에는 못 끈다.** 등락률로 정렬해 놓고 줄을 옮기면, 화면은 정렬 순서대로
-   * 다시 그려져 **끈 자리에 안 남는다** — 끌었는데 아무 일도 안 일어난 것처럼 보인다.
-   * 그때는 머리줄을 눌러 정렬을 풀라고 알려 준다.
+   * 버튼은 **어디를 눌러야 하는지가 보이고** 폰에서도 된다. 평소에는 안 보이다가
+   * 「순서 편집」을 켜면 첫 칸에 ▲▼ 가 생긴다 — 늘 띄워 두면 열세 칸짜리 표가 한 칸 더
+   * 좁아지는데, 순서는 자주 바꾸는 값이 아니다.
+   *
+   * ⚠️ **정렬 중에는 못 켠다.** 등락률로 정렬해 놓고 옮기면 화면은 정렬 순서대로 다시
+   * 그려져 **옮긴 자리에 안 남는다** — 눌렀는데 아무 일도 안 일어난 것처럼 보인다.
    */
-  const dragging = useRef<string | null>(null);
-  const [overCode, setOverCode] = useState<string | null>(null);
-  const canDrag = sort.sortKey === null;
+  const [editing, setEditing] = useState(false);
+  const canEdit = sort.sortKey === null;
 
-  const dropOn = async (target: string) => {
-    const from = dragging.current;
-    dragging.current = null;
-    setOverCode(null);
-    if (!from || from === target) return;
+  const move = async (code: string, dir: -1 | 1) => {
     const next = rows.slice();
-    const i = next.findIndex((r) => r.code === from);
-    const j = next.findIndex((r) => r.code === target);
-    if (i < 0 || j < 0) return;
-    const [moved] = next.splice(i, 1);
-    next.splice(j, 0, moved);
-    setRows(next); // 손을 떼는 순간 자리에 있어야 한다 — 서버 응답을 기다리지 않는다
+    const i = next.findIndex((r) => r.code === code);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= next.length) return;
+    [next[i], next[j]] = [next[j], next[i]];
+    setRows(next); // 누르는 즉시 자리에 — 서버 응답을 기다리지 않는다
     try {
       await api.watchReorder("현미경", next.map((r) => r.code));
     } catch {
@@ -673,6 +670,15 @@ export function ScopePage({ onSelectStock }: { onSelectStock: (code: string, nam
           <span>기관 <b className={cls(sumToday("org"))}>{억(sumToday("org"))}</b></span>
           <span title="외국인 3일 이상 연속 순매수">외인 3일↑ <b>{fgnBuying}</b></span>
           <span className="pt-n sc-at" title={ledgerNote ? `⏱ ${ledgerNote}` : undefined}>{at ? `${at.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}` : ""}</span>
+          {/* 순서 편집 — 정렬 중에는 못 켠다(위 `move` 머리말) */}
+          <button
+            className={`filter-btn sc-edit${editing ? " on" : ""}`}
+            onClick={() => setEditing((v) => !v)}
+            disabled={!canEdit}
+            title={canEdit ? "줄을 위아래로 옮겨 순서를 바꿉니다" : "정렬을 끄면(머리줄을 한 번 더 누르면) 순서를 바꿀 수 있습니다"}
+          >
+            {editing ? "순서 편집 ✓" : "순서 편집"}
+          </button>
           <button className="refresh-btn" onClick={() => void load()} title="새로고침">↻</button>
           {/* 뉴스·텔레 며칠 안 — 시세분석과 한 값 (2026-09-10) */}
           <BuzzDaysButtons />
@@ -694,6 +700,7 @@ export function ScopePage({ onSelectStock }: { onSelectStock: (code: string, nam
           <table className="data-table sc-table">
             <thead>
               <tr>
+                {editing && <th className="sc-move-col" title="위아래로 옮기기" />}
                 <SortableTh columnKey="name" label="종목" accessor={(r) => r.name} sort={sort} />
                 <SortableTh columnKey="chg" label="현재가" accessor={(r) => low(r.changeRate)} sort={sort} className="num" />
                 <SortableTh columnKey="since" label="담은 뒤" accessor={(r) => low(r.sinceRet)} sort={sort} className="num" />
@@ -720,27 +727,7 @@ export function ScopePage({ onSelectStock }: { onSelectStock: (code: string, nam
               {sort.sorted.map((r) => (
                 <tr
                   key={r.code}
-                  draggable={canDrag}
-                  onDragStart={() => {
-                    dragging.current = r.code;
-                  }}
-                  onDragEnd={() => {
-                    dragging.current = null;
-                    setOverCode(null);
-                  }}
-                  onDragOver={(e) => {
-                    if (!canDrag || !dragging.current) return;
-                    e.preventDefault();
-                    setOverCode(r.code);
-                  }}
-                  onDragLeave={() => setOverCode((c) => (c === r.code ? null : c))}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    void dropOn(r.code);
-                  }}
-                  className={`sc-row${open === r.code ? " on" : ""}${canDrag ? " drag" : ""}${
-                    overCode === r.code ? " over" : ""
-                  }`}
+                  className={`sc-row${open === r.code ? " on" : ""}`}
                   onClick={() => {
                     setOpen(open === r.code ? null : r.code);
                     /*
@@ -762,6 +749,30 @@ export function ScopePage({ onSelectStock }: { onSelectStock: (code: string, nam
                     세 줄 (2026-09-09 밤 — 벤티지 "3줄이니까 무지개 이런 마크들도 밑에 내리고"):
                     ① 이름·코드 ② 시장·업종 ③ 마크·뉴스·텔레그램. 오른쪽 정렬을 지킨다.
                   */}
+                  {editing && (
+                    /*
+                      ⚠️ `stopPropagation` — 줄을 누르면 펼쳐지고 종목 연동까지 나간다.
+                      순서를 옮기려다 매번 상세가 펼쳐지면 못 쓴다.
+                    */
+                    <td className="sc-move" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        className="sc-move-btn"
+                        title="위로"
+                        disabled={rows.findIndex((x) => x.code === r.code) === 0}
+                        onClick={() => void move(r.code, -1)}
+                      >
+                        ▲
+                      </button>
+                      <button
+                        className="sc-move-btn"
+                        title="아래로"
+                        disabled={rows.findIndex((x) => x.code === r.code) === rows.length - 1}
+                        onClick={() => void move(r.code, 1)}
+                      >
+                        ▼
+                      </button>
+                    </td>
+                  )}
                   <td className="sc-name">
                     <b>{r.name}</b>
                     <span className="pt-n"> {r.code}</span>

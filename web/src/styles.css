@@ -21772,11 +21772,25 @@ tr.gv-strong td:first-child { color: var(--text); }
   .rtc-level { font-size: 1.3rem; }
 }
 
-/* 현미경 — 끌어서 순서 바꾸기 (2026-10-25) */
-.sc-row.drag { cursor: grab; }
-.sc-row.drag:active { cursor: grabbing; }
-/* 떨어질 자리를 윗선으로 — 줄 전체를 칠하면 어디에 끼는지가 안 보인다 */
-.sc-row.over > td { box-shadow: inset 0 2px 0 var(--blue); }
+/* 현미경 — 순서 편집 (2026-10-26, 드래그를 버튼으로 바꿈) */
+.sc-edit.on { border-color: var(--blue); color: var(--blue); }
+.sc-move-col { width: 1.9rem; }
+.sc-move { padding: 0 !important; vertical-align: middle; }
+.sc-move-btn {
+  display: block;
+  width: 1.7rem;
+  padding: 1px 0;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 0.62rem;
+  line-height: 1.2;
+  cursor: pointer;
+}
+.sc-move-btn + .sc-move-btn { margin-top: 2px; }
+.sc-move-btn:disabled { opacity: 0.3; cursor: default; }
+.sc-move-btn:not(:disabled):hover { border-color: var(--blue); color: var(--blue); }
 
 /* 조건식 자동 실행 설정 (2026-10-26) */
 .ca-cfg { display: flex; flex-direction: column; gap: 10px; }
