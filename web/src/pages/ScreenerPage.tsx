@@ -1,4 +1,13 @@
 ﻿import { PAGE_SIZES, PAGE_SIZE_DEFAULT } from "../components/Pager";
+
+/**
+ * 실시간 오버레이를 얹을 줄 수의 상한.
+ *
+ * 서버 `/api/realtime/latest` 가 **읽기 전용일 때 120개까지** 받는다(`sub=0`). 더 보내도
+ * 조용히 잘리므로 여기서 같은 수로 자른다 — 어디서 끊기는지 한 자리에 적어 둬야
+ * 「300 조회에서 뒤쪽은 왜 안 움직이냐」에 답할 수 있다.
+ */
+const RT_OVERLAY_MAX = 120;
 import { useSubscribedCodes } from "../useSubscribedCodes";
 import { useViewingCodes } from "../useViewingCodes";
 import { diffFromRate } from "../krxTick";
@@ -853,7 +862,63 @@ export function ScreenerPage({
    * 필터가 걸렸으면 그 100 은 **거른 뒤의 100** 이다(위 `capped` 참고). 정렬은
    * 자른 뒤에 하므로, 열 이름을 눌러도 표에 담긴 종목은 그대로고 순서만 바뀐다.
    */
-  const sort = useSortableTable(capped);
+  /*
+   * 실시간 오버레이 (2026-08-25) — **현재가·등락률을 1.5초로.**
+   *
+   * 순위 조회는 10초마다지만 가격은 그보다 빨리 움직인다. 거래대금 상위는 스케줄러가
+   * 이미 웹소켓으로 물고 있으므로(낮 국면 190종목) **읽기 전용**으로 최신값만 얹는다 —
+   * 키움 호출도, 구독 정원도 안 는다. 값이 없는 줄(구독 밖)은 REST 값 그대로다.
+   *
+   * ⚠️ 통합일 때만. KRX/NXT 를 콕 집어 보는 중이면 실시간(통합 최신가)을 덮는 게
+   * 거짓말이 된다 — 그 화면은 그 거래소의 값을 보겠다는 뜻이다.
+   *
+   * ## 정렬보다 **먼저** 얹는다 (2026-10-26)
+   *
+   * 벤티지: "등락률별로 정렬하려고 보니까 이게 먹지도 않네" — 프리장 08:33.
+   *
+   * 안 먹은 게 아니라 **다른 숫자로 세우고 있었다.** 칸에 보이는 등락률은 이 오버레이가
+   * 얹은 실시간 값인데, 정렬은 `r.flu_rt`(조회가 준 값)를 봤다. `/api/rank/market-cap` 의
+   * `flu_rt` 는 시황 스냅샷의 `changeRate` 라, 프리장엔 **어제 것**이다(같은 줄의
+   * 거래대금 7.5조가 10/23 하루치인 것도 같은 까닭). 그래서 화면에는 -0.27 / 0.00 /
+   * +0.39 가 아무 순서로 늘어섰다 — 어제 등락률순으로는 맞게 서 있었던 것이다.
+   *
+   * 고치는 자리는 비교 함수가 아니라 **줄 그 자체**다. 얹은 값을 줄에 넣고 나면 칸·요약·
+   * 정렬이 전부 같은 숫자를 본다. `rateOf` 가 "등락률을 꺼내는 단 하나의 자리"라고
+   * 적어 둔 그 뜻이 정렬에는 닿지 않고 있었다.
+   *
+   * ⚠️ 구독 대상이 `shown`(보는 쪽)에서 `capped`(거른 전부)로 바뀌었다. 정렬은 쪽을
+   * 나누기 **전**에 하므로, 보는 쪽만 실시간이면 그 쪽만 제 값으로 서고 나머지는 옛 값으로
+   * 서서 **쪽을 넘길 때마다 순서가 달라진다.** 서버 상한이 120개라(`sub=0`) 그 위는
+   * 조회 값 그대로이고, 그 줄은 **화면에도 조회 값이 뜨므로** 보는 것과 세우는 것은 여전히
+   * 같다. 조회가 100 이면(기본) 전부 덮인다.
+   */
+  const liveOn = (!data?.spec.exchange || exchange === "3") && krxOverlayLive();
+  const rt = useRealtime(
+    liveOn ? capped.slice(0, RT_OVERLAY_MAX).map((r) => `0B:${r.code}`) : [],
+    1500,
+    { readOnly: true },
+  );
+  const liveOf = (code: string): { price: number; rate: number | null } | null => {
+    if (!liveOn) return null;
+    if (!rt.healthy) return null;
+    const v = rt.values[`0B:${code}`];
+    /* (2026-09-11 저녁) 90 → 30 으로 줄였다가 되돌렸다. 조용한 종목이 30초마다 실시간↔조회로 깜빡였다.
+     * 스트림이 죽는 것은 이제 `rt.healthy` 가 서버 `beat` 로 35초 안에 잡는다 — 그게 진짜 안전장치다 */
+    if (!v || Date.now() - v.at > 90_000) return null;
+    const p = fid(v, "10");
+    if (p === null || p === 0) return null;
+    return { price: Math.abs(p), rate: fid(v, "12") };
+  };
+  /*
+   * 얹은 값을 **줄에 넣는다.** 이 뒤로는 `flu_rt`·`cur_prc` 가 곧 화면에 뜨는 값이라,
+   * 머리 칸을 눌러 세우면 보이는 대로 선다. 실시간이 없는 줄은 손대지 않는다.
+   */
+  const cappedLive = capped.map((r) => {
+    const lv = liveOf(r.code);
+    if (!lv) return r;
+    return { ...r, cur_prc: lv.price, ...(lv.rate == null ? {} : { flu_rt: lv.rate }) };
+  });
+  const sort = useSortableTable(cappedLive);
   /*
    * **조회를 옮기면 정렬은 원래 순서로** (2026-09-23 — 벤티지: "최근조회 탭에서는 조회순으로 보여줘야지
    * 거래대금 순으로 정렬하니깐 내가 최근에 조회한게 밑으로 내려가네"). 머리를 눌러 건 정렬이 훅에 남아
@@ -881,18 +946,6 @@ export function ScreenerPage({
    */
   const buzz = useBuzz(shown.map((r) => r.code));
 
-  /*
-   * 실시간 오버레이 (2026-08-25) — **이 쪽 줄들의 현재가·등락률을 1.5초로.**
-   *
-   * 순위 조회는 10초마다지만 가격은 그보다 빨리 움직인다. 거래대금 상위는 스케줄러가
-   * 이미 웹소켓으로 물고 있으므로(낮 국면 190종목) **읽기 전용**으로 최신값만 얹는다 —
-   * 키움 호출도, 구독 정원도 안 는다. 값이 없는 줄(구독 밖)은 REST 값 그대로다.
-   *
-   * ⚠️ 통합일 때만. KRX/NXT 를 콕 집어 보는 중이면 실시간(통합 최신가)을 덮는 게
-   * 거짓말이 된다 — 그 화면은 그 거래소의 값을 보겠다는 뜻이다.
-   */
-  // KRX 정규장 밖(NXT 프리·애프터)엔 오버레이를 끈다 — KRX 0% 가 통합 값을 덮어 「왜 0이냐」가 됐다
-  const liveOn = (!data?.spec.exchange || exchange === "3") && krxOverlayLive();
   /*
    * NXT 서브 줄은 **정규장(09:00~15:30)엔 숨긴다** (2026-08-26 — 「정규장 돌아가는데
    * 나타났다 사라졌다 헷갈린다」). 목록은 통합 숫자 하나면 되고, NXT 가 궁금하면
@@ -925,18 +978,6 @@ export function ScreenerPage({
    */
   const viNow = useViNow(liveOn);
   const viToday = useViToday();
-  const rt = useRealtime(liveOn ? shown.map((r) => `0B:${r.code}`) : [], 1500, { readOnly: true });
-  const liveOf = (code: string): { price: number; rate: number | null } | null => {
-    if (!liveOn) return null;
-    if (!rt.healthy) return null;
-    const v = rt.values[`0B:${code}`];
-    /* (2026-09-11 저녁) 90 → 30 으로 줄였다가 되돌렸다. 조용한 종목이 30초마다 실시간↔조회로 깜빡였다.
-     * 스트림이 죽는 것은 이제 `rt.healthy` 가 서버 `beat` 로 35초 안에 잡는다 — 그게 진짜 안전장치다 */
-    if (!v || Date.now() - v.at > 90_000) return null;
-    const p = fid(v, "10");
-    if (p === null || p === 0) return null;
-    return { price: Math.abs(p), rate: fid(v, "12") };
-  };
 
   /*
    * 등락률을 꺼내는 **단 하나의 자리**. 표의 칸과 위의 요약이 여기만 본다.
