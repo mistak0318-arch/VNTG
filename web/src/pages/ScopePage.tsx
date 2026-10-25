@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTabTitle } from "../tabTitle";
 import { api, type ScopeDetail, type ScopeFlow, type ScopeRow, fmtKst, kstYmd } from "../api";
 import { useTabActive } from "../tabActive";
@@ -574,6 +574,41 @@ export function ScopePage({ onSelectStock }: { onSelectStock: (code: string, nam
   );
   const sort = useSortableTable(shown);
 
+  /*
+   * **끌어서 순서 바꾸기** (2026-10-25 — 벤티지: "현미경 메뉴에서 드래그 해서 순서
+   * 바꾸는 기능 좀 넣어줘 종목끼리").
+   *
+   * 현미경 목록은 관심종목의 **「현미경」 그룹**이다(`scope.ts`). 그래서 순서도 그 그룹의
+   * 순서고, 이미 있는 `watchReorder` 를 그대로 쓴다 — 현미경 전용 순서를 따로 두면
+   * 관심종목 화면과 **같은 묶음이 두 순서**를 갖게 된다.
+   *
+   * ⚠️ **정렬 중에는 못 끈다.** 등락률로 정렬해 놓고 줄을 옮기면, 화면은 정렬 순서대로
+   * 다시 그려져 **끈 자리에 안 남는다** — 끌었는데 아무 일도 안 일어난 것처럼 보인다.
+   * 그때는 머리줄을 눌러 정렬을 풀라고 알려 준다.
+   */
+  const dragging = useRef<string | null>(null);
+  const [overCode, setOverCode] = useState<string | null>(null);
+  const canDrag = sort.sortKey === null;
+
+  const dropOn = async (target: string) => {
+    const from = dragging.current;
+    dragging.current = null;
+    setOverCode(null);
+    if (!from || from === target) return;
+    const next = rows.slice();
+    const i = next.findIndex((r) => r.code === from);
+    const j = next.findIndex((r) => r.code === target);
+    if (i < 0 || j < 0) return;
+    const [moved] = next.splice(i, 1);
+    next.splice(j, 0, moved);
+    setRows(next); // 손을 떼는 순간 자리에 있어야 한다 — 서버 응답을 기다리지 않는다
+    try {
+      await api.watchReorder("현미경", next.map((r) => r.code));
+    } catch {
+      /* 저장이 실패하면 다음 새로고침에 원래 순서로 돌아온다 — 조용히 되돌리지 않는다 */
+    }
+  };
+
   const load = useCallback(async () => {
     setError(null);
     try {
@@ -685,7 +720,27 @@ export function ScopePage({ onSelectStock }: { onSelectStock: (code: string, nam
               {sort.sorted.map((r) => (
                 <tr
                   key={r.code}
-                  className={`sc-row${open === r.code ? " on" : ""}`}
+                  draggable={canDrag}
+                  onDragStart={() => {
+                    dragging.current = r.code;
+                  }}
+                  onDragEnd={() => {
+                    dragging.current = null;
+                    setOverCode(null);
+                  }}
+                  onDragOver={(e) => {
+                    if (!canDrag || !dragging.current) return;
+                    e.preventDefault();
+                    setOverCode(r.code);
+                  }}
+                  onDragLeave={() => setOverCode((c) => (c === r.code ? null : c))}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    void dropOn(r.code);
+                  }}
+                  className={`sc-row${open === r.code ? " on" : ""}${canDrag ? " drag" : ""}${
+                    overCode === r.code ? " over" : ""
+                  }`}
                   onClick={() => {
                     setOpen(open === r.code ? null : r.code);
                     /*

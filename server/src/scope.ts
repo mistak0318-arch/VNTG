@@ -348,7 +348,28 @@ async function todayFlow(client: KiwoomClient, code: string): Promise<ScopeRow["
 
 async function scopeItems(): Promise<WatchItem[]> {
   const items = await listWatchlist();
-  return items.filter((i) => !i.divider && (i.groups ?? []).includes(SCOPE_GROUP));
+  return (
+    items
+      .filter((i) => !i.divider && (i.groups ?? []).includes(SCOPE_GROUP))
+      /*
+       * **그룹 순서대로** (2026-10-25 — 벤티지: "현미경 메뉴에서 드래그 해서 순서 바꾸는
+       * 기능 좀 넣어줘 종목끼리").
+       *
+       * `reorderWatch` 는 배열을 다시 늘어놓지 않고 **`order[그룹]` 에 자리를 적는다** —
+       * 한 종목이 여러 그룹에 속하니 배열 하나로는 그룹마다 다른 순서를 담을 수 없다.
+       * 그런데 여기서는 그 칸을 안 읽고 저장 순서를 그대로 썼다. 그래서 순서를 바꿔
+       * 저장해도(`PUT /api/watchlist/reorder` 가 200 을 돌려줘도) **현미경 목록은
+       * 꿈쩍도 안 했다.** 드래그를 붙이기 전에 이것부터 고쳐야 했다.
+       *
+       * 자리가 없는 종목(담기만 하고 옮긴 적 없는 것)은 뒤로 보낸다 — 0 으로 두면
+       * 새로 담은 것이 맨 위로 튀어 올라 애써 맞춘 순서를 흐트러뜨린다.
+       */
+      .sort(
+        (a, b) =>
+          (a.order?.[SCOPE_GROUP] ?? Number.MAX_SAFE_INTEGER) -
+          (b.order?.[SCOPE_GROUP] ?? Number.MAX_SAFE_INTEGER),
+      )
+  );
 }
 
 export async function scopeList(client: KiwoomClient): Promise<{ rows: ScopeRow[]; ledgerNote: string | null }> {

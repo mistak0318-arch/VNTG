@@ -21771,3 +21771,9 @@ tr.gv-strong td:first-child { color: var(--text); }
   .rtc-idx { margin-left: 0; width: 100%; }
   .rtc-level { font-size: 1.3rem; }
 }
+
+/* 현미경 — 끌어서 순서 바꾸기 (2026-10-25) */
+.sc-row.drag { cursor: grab; }
+.sc-row.drag:active { cursor: grabbing; }
+/* 떨어질 자리를 윗선으로 — 줄 전체를 칠하면 어디에 끼는지가 안 보인다 */
+.sc-row.over > td { box-shadow: inset 0 2px 0 var(--blue); }
