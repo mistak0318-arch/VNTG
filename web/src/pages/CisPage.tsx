@@ -340,6 +340,14 @@ export function CisPage({ onSelectStock }: { onSelectStock?: (code: string, name
   const [profiles, setProfiles] = useState<CisProfile[]>([]);
   const [config, setConfig] = useState<CisConfig | null>(null);
   const [creed, setCreed] = useState<CisCreed | null>(null);
+  /** 신조를 접어 뒀나 — 기본은 펼침 (2026-10-26, 위 주석) */
+  const [creedOpen, setCreedOpen] = useState(() => {
+    try {
+      return localStorage.getItem("vntg.cis.creedOpen") !== "0";
+    } catch {
+      return true;
+    }
+  });
   const [ruleLabels, setRuleLabels] = useState<Record<string, CisRuleLabel>>({});
   const [aiReady, setAiReady] = useState(false);
   const [aiModels, setAiModels] = useState<
@@ -382,12 +390,35 @@ export function CisPage({ onSelectStock }: { onSelectStock?: (code: string, name
 
       {/*
         시스의 신조 (2026-09-02 밤) — 벤티지: "CIS일지에 박제해둬. 내가 보고 항상
-        되새김할 수 있게." 접히지 않고 계좌·탭보다 위에 늘 있다. 글은 서버
-        `CIS_CREED` 한 곳에서 온다 — AI 자기소개와 후보 고르는 순서가 같은 글을 쓴다.
+        되새김할 수 있게." 글은 서버 `CIS_CREED` 한 곳에서 온다 — AI 자기소개와 후보
+        고르는 순서가 같은 글을 쓴다.
+
+        **접을 수 있게** (2026-10-26 — 벤티지: "항해일지 위에 있는 설명도 접었다 펼 수
+        있게 좀 해주고"). 처음엔 「접히지 않고 늘 있다」로 못박았는데, 폰에서 이 글이
+        한 화면을 다 먹어 **계좌 넷이 스크롤 아래로 밀렸다.** 되새기라고 둔 글이 정작
+        보러 온 것을 가린 셈이다.
+
+        ⚠️ **기본은 펼침**이다. 박제해 두라던 뜻이 거기 있다 — 접는 것은 벤티지가
+        고르는 것이고, 고른 뒤에는 그 선택을 기억한다(이 기기에만).
       */}
       {creed && (
-        <div className="cis-creed" title={creed.short}>
-          <b>{creed.title}</b>
+        <details
+          className="cis-creed"
+          title={creed.short}
+          open={creedOpen}
+          onToggle={(e) => {
+            const v = (e.currentTarget as HTMLDetailsElement).open;
+            setCreedOpen(v);
+            try {
+              localStorage.setItem("vntg.cis.creedOpen", v ? "1" : "0");
+            } catch {
+              /* 사생활 모드 — 기억 못 해도 화면은 돈다 */
+            }
+          }}
+        >
+          <summary>
+            <b>{creed.title}</b>
+          </summary>
           <ol>
             {creed.steps.map((s) => (
               <li key={s.n}>
@@ -399,7 +430,7 @@ export function CisPage({ onSelectStock }: { onSelectStock?: (code: string, name
               </li>
             ))}
           </ol>
-        </div>
+        </details>
       )}
 
       {config && !config.enabled && (

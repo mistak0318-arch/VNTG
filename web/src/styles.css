@@ -13428,12 +13428,30 @@ button.tpb-row:hover { background: var(--panel-2); }
   border-radius: 10px;
   background: color-mix(in srgb, var(--cis-gold) 6%, transparent);
 }
+/* `details` 가 되면서 제목이 summary 안으로 들어갔다 (2026-10-26) */
+.cis-creed > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cis-creed > summary::-webkit-details-marker { display: none; }
+/* 접힘 표시는 직접 그린다 — 기본 삼각형은 테마마다 색이 제각각이다 */
+.cis-creed > summary::before {
+  content: "▾";
+  font-size: 0.7rem;
+  color: var(--cis-gold);
+  transition: transform 0.12s;
+}
+.cis-creed:not([open]) > summary::before { transform: rotate(-90deg); }
+.cis-creed > summary > b,
 .cis-creed > b {
   display: block;
   font-size: 0.86rem;
   letter-spacing: -0.01em;
-  margin-bottom: 6px;
 }
+.cis-creed[open] > summary { margin-bottom: 6px; }
 .cis-creed > b::before { content: "📜 "; }
 .cis-creed ol {
   list-style: none;
