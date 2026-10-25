@@ -786,7 +786,16 @@ export function PriceHeader({
               <>
                 <span className="ph-label" title="KRX+NXT 통합 거래대금">거래대금</span>
                 <span className="ph-row">
-                  <span className="ph-value">{total === null ? "-" : eok(total)}</span>
+                  {/*
+                    **거래대금만 한 단계 크게** (2026-10-26 — 벤티지: "거래대금도 좀 강조
+                    표시를 좀 해주고").
+
+                    격자에 칸이 열 개 넘게 깔리는데 숫자가 전부 같은 크기라, 정작 제일
+                    먼저 보는 **돈**이 회전율·상장주식수와 구분되지 않았다. 2026-10-14 에
+                    이 칸을 맨 앞으로 옮긴 것도 같은 이유였는데 — 자리만 옮기고 **무게는
+                    안 줬다.**
+                  */}
+                  <span className="ph-value ph-lead">{total === null ? "-" : eok(total)}</span>
                 </span>
                 {krxValue !== null && krxValue > 0 && (
                   <span className="ph-row">

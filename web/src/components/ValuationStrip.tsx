@@ -234,6 +234,12 @@ export function ValuationStrip({
           </span>
         )}
 
+        {/*
+          행 사이 선은 **제 칸을 쓴다**(`.val-sep`). 칸마다 `border-bottom` 을 주면
+          밑줄맞춤 때문에 칸 높이가 달라 선이 어긋난다 — 자세한 사정은 styles.css.
+        */}
+        <span className="val-sep" />
+
         <span className="val-rowlab" title="주가 ÷ 주당순이익. 분모가 어느 기간의 이익이냐에 따라 값이 크게 달라집니다">
           PER
         </span>
@@ -244,6 +250,8 @@ export function ValuationStrip({
             {c.key === "past" && secLine(sec, "per")}
           </span>
         ))}
+
+        <span className="val-sep" />
 
         <span className="val-rowlab" title="주가 ÷ 주당순자산. 1 보다 낮으면 장부가 아래">
           PBR

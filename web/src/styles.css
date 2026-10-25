@@ -2169,6 +2169,21 @@ body.col-resizing { cursor: row-resize; }
   /* 숫자 안에서는 안 끊는다 — 「1,590,」 / 「000」 으로 갈라지면 안 된다 */
   white-space: nowrap;
 }
+/*
+ * **격자에서 한 칸만 크게** (2026-10-26 — 벤티지: "거래대금도 좀 강조 표시를 좀 해주고").
+ *
+ * 칸이 열 개를 넘는데 숫자가 전부 0.8667rem 이라 **어느 것부터 볼지가 없었다.** 거래대금은
+ * 이 격자에서 제일 먼저 읽혀야 하는 값이다 — 주식 수만 보면 80만주가 1,800억인 종목과
+ * 8억인 종목이 똑같이 생긴다(이 칸을 맨 앞으로 옮길 때 적어 둔 그대로다).
+ *
+ * 색은 건드리지 않는다. 이 격자에서 색은 **오르내림**이 쓰는 자리라, 거기에 「중요하다」를
+ * 섞으면 빨강이 두 가지 뜻을 갖는다. 크기와 굵기만으로 세운다.
+ */
+.ph-value.ph-lead {
+  font-size: 1.12rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
 
 /* ---------------- 개별종목분석 페이지 ---------------- */
 .analysis-title h2 {
@@ -7767,10 +7782,23 @@ button.nav-group-toggle {
  *    최근 4분기이므로 거기에만 무게를 준다 — 셋이 똑같이 생기면 어느 것을 봐야 할지
  *    매번 벤티지가 골라야 한다.
  */
+/*
+ * **띠가 아니라 칸이다** (2026-10-26 — 벤티지: "그 밑에 PER·시가총액 나타나 있는 부분도
+ * 라인을 좀 만들어서 눈에 좀 잘 구분될 수 있게 … 지금도 역시 눈에 잘 안 띄거든").
+ *
+ * 10-25 에 위쪽 선 하나를 긋고 시가총액을 키웠는데, 바로 위 `.ph-grid` 가 **테두리 있는
+ * 칸들**이라 그 아래 이 영역만 선 없이 떠 보였다. 선 한 줄로는 「여기부터 다른 것」이라는
+ * 말밖에 못 하고, 안에서 PER·PBR·시가총액이 서로 갈리지는 않는다.
+ *
+ * 격자와 **같은 모양**으로 맞춘다 — 테두리·모서리·바탕을 `.ph-grid` 에서 그대로 가져오고,
+ * 안은 행마다 가로선으로 가른다. 그러면 위아래가 한 식구로 읽히면서도 줄이 안 뭉갠다.
+ */
 .val-strip {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
+  margin-top: 7px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  overflow: hidden;
 }
 .val-grid {
   display: grid;
@@ -7786,9 +7814,49 @@ button.nav-group-toggle {
    */
   grid-template-columns: auto repeat(3, minmax(68px, auto));
   align-items: baseline;
-  gap: 3px 14px;
+  /*
+   * ⚠️ **칸 사이를 gap 으로 벌리면 가로선이 끊긴다** — 선은 칸마다 긋는 것이라 gap 자리에
+   * 14px 짜리 구멍이 생긴다. `.ph-cell` 이 선을 gap 에서 칸으로 옮긴 것과 같은 이유로,
+   * 여기서도 **간격을 칸 안쪽 padding 으로** 만든다.
+   */
+  gap: 0;
   width: max-content;
   max-width: 100%;
+  padding: 0.3rem 0.5rem 0;
+}
+/* 간격은 칸 안쪽에서 — 첫 칸(라벨)만 왼쪽을 안 민다 */
+.val-grid > * { padding: 3px 0 4px 14px; }
+.val-grid > .val-rowlab,
+.val-grid > .val-note,
+.val-grid > .val-sep { padding-left: 0; }
+/*
+ * **가로선은 칸이 아니라 행에 긋는다.**
+ *
+ * 처음엔 칸마다 `border-bottom` 을 줬는데 선이 안 보였다. 값이 있긴 했다 — 안 이어졌을
+ * 뿐이다. 이 격자는 `align-items: baseline` 이라 같은 행이라도 칸 높이가 제각각이고
+ * (업종 평균이 붙은 칸 39px, 옆칸 26·25px), 그러면 **칸마다 그은 선이 계단처럼 어긋나**
+ * 선으로 읽히지 않는다. 숫자를 밑줄로 맞추는 성질과 칸마다 긋는 선은 같이 못 간다.
+ *
+ * 그래서 선 전용 칸을 행 사이에 한 줄 끼운다(`grid-column: 1 / -1`). 높이 1px +
+ * 같은 색 그림자 한 겹 — 위 `.ph-cell` 이 쓰는 두 겹과 같은 수를 써야 두 영역의 선이
+ * 같은 굵기로 보인다.
+ */
+.val-sep {
+  grid-column: 1 / -1;
+  height: 1px;
+  padding: 0;
+  /*
+   * 좌우로 **카드 밖까지** 늘리고 `.val-strip` 의 `overflow: hidden` 이 잘라낸다.
+   * 격자가 `width: max-content` 라 선을 격자 폭에 맞추면 넓은 화면에서 내용이 끝나는
+   * 자리(≈340px)에서 끊기는데, 바로 밑 시가총액 띠는 카드 끝까지 간다 — 두 선의 길이가
+   * 달라 **한 칸 안의 선으로 안 읽힌다.** 격자를 100% 로 늘리는 길은 막혀 있다: 남는
+   * 자리를 먹을 칸을 하나 더 두면 각 행이 네 칸만 채우므로 다음 행 라벨이 그 빈 칸으로
+   * 올라붙는다(바로 위 `.val-grid` 주석의 그 문제).
+   */
+  margin: 3px -50vw 2px;
+  background: var(--border);
+  box-shadow: 0 1px 0 var(--border);
+  align-self: stretch;
 }
 .val-rowlab {
   font-size: 0.8rem;
@@ -7864,6 +7932,7 @@ button.nav-group-toggle {
 .val-loss {
   font-size: 0.8rem;
   color: var(--muted);
+  padding: 0.3rem 0.5rem 0;
 }
 /* 시가총액 — 이 띠에서 제일 먼저 읽혀야 할 값 (2026-10-25) */
 .val-cap {
@@ -7875,12 +7944,19 @@ button.nav-group-toggle {
   margin-left: 2px;
 }
 
+/*
+ * 시가총액 줄 — **제 칸으로** 둔다. 위 격자와 선으로 갈리고 바탕이 한 톤 달라야
+ * 「이건 값(PER·PBR)이 아니라 몸집」이라는 게 눈으로 먼저 읽힌다.
+ */
 .val-foot {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 4px 14px;
-  margin-top: 8px;
+  margin-top: 0;
+  padding: 0.3rem 0.5rem;
+  border-top: 1px solid var(--border);
+  background: var(--panel-2);
   font-size: 0.8rem;
   color: var(--muted);
 }
@@ -7900,8 +7976,10 @@ button.nav-group-toggle {
 @media (max-width: 480px) {
   .val-grid {
     grid-template-columns: auto repeat(3, minmax(52px, 1fr));
-    gap: 2px 6px;
+    gap: 0;
   }
+  /* 좁으면 칸 사이를 줄인다 — 선 칸은 빼야 padding 이 선을 두껍게 만들지 않는다 */
+  .val-grid > *:not(.val-sep) { padding: 2px 0 3px 6px; }
   .val-v.lead { font-size: 1rem; }
   .val-src { margin-left: 0; width: 100%; }
 }
