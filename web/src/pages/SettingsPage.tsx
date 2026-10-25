@@ -26,6 +26,7 @@ import { LeaderConfigPanel } from "../components/LeaderConfigPanel";
 import { TelegramOverviewPanel } from "../components/TelegramOverviewPanel";
 import { SubTabOrderPanel } from "../components/SubTabOrderPanel";
 import { MiniConfigPanel } from "../components/MiniConfigPanel";
+import { CondAutoConfigPanel } from "../components/CondAutoConfigPanel";
 import { LoginSettingsPanel } from "../components/LoginSettingsPanel";
 import { BuzzConfigPanel } from "../components/BuzzConfigPanel";
 import { NaverSyncPanel } from "../components/NaverSyncPanel";
@@ -194,6 +195,18 @@ export function SettingsPage() {
         hint="미니창 상단 버튼 1~7에 어떤 화면을 물릴지, 미니창·보드 새창을 여는 단축키를 정합니다."
       >
         <MiniConfigPanel />
+      </CollapsibleCard>
+      )}
+
+      {/* 조건식 자동 실행 (2026-10-26) — 분석 탭. 돌리는 일은 9/16 부터 있었고 손잡이가 없었다 */}
+      {tab === "analysis" && (
+      <CollapsibleCard
+        id="condAuto"
+        scope="global"
+        title="조건식 자동 실행"
+        hint="⏰ 켜 둔 조건식을 마감 뒤 한 바퀴 돌려 새로 걸린 종목만 알립니다. 켜고 끄기·돌릴 시각을 정합니다."
+      >
+        <CondAutoConfigPanel />
       </CollapsibleCard>
       )}
 

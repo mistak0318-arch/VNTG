@@ -127,6 +127,7 @@ import { startRealtimeScheduler } from "./realtimeHub.js";
 import { healthFileState, startHealthFile } from "./healthFile.js";
 import { startBrokerAuto } from "./brokerAuto.js";
 import { startAfterCloseScheduler } from "./afterClose.js";
+import { startCondAutoScheduler } from "./condAutoConfig.js";
 import { syncScoreBands } from "./scoreBandSync.js";
 import { closeStaleRuns } from "./dailyStore.js";
 import { createSignalRouter } from "./routes/signal.js";
@@ -501,6 +502,8 @@ startBrokerAuto(client);
  * 신호등 분석이랑 슈퍼신호등 한번 돌려야 하는 거 아냐?"
  */
 startAfterCloseScheduler(client);
+/* 조건식 자동 — `fixed` 모드일 때만 실제로 일한다 (2026-10-26) */
+startCondAutoScheduler(client);
 
 /*
  * **점수대 그룹 자가 치유** (2026-09-01) — 서버가 뜰 때 한 번.

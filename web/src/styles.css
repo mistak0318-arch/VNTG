@@ -21777,3 +21777,16 @@ tr.gv-strong td:first-child { color: var(--text); }
 .sc-row.drag:active { cursor: grabbing; }
 /* 떨어질 자리를 윗선으로 — 줄 전체를 칠하면 어디에 끼는지가 안 보인다 */
 .sc-row.over > td { box-shadow: inset 0 2px 0 var(--blue); }
+
+/* 조건식 자동 실행 설정 (2026-10-26) */
+.ca-cfg { display: flex; flex-direction: column; gap: 10px; }
+.ca-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ca-row > span:not(.ca-k):not(.ca-time):not(.ca-saving) { display: flex; flex-direction: column; gap: 2px; }
+.ca-row small { color: var(--muted); font-size: 0.78rem; line-height: 1.5; }
+.ca-k { font-size: 0.85rem; color: var(--muted); min-width: 72px; }
+.ca-time { display: inline-flex; align-items: center; gap: 4px; font-size: 0.85rem; }
+.ca-time input {
+  width: 3.2rem; text-align: right; padding: 3px 6px;
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 5px; color: var(--text);
+}
+.ca-saving { font-size: 0.78rem; color: var(--muted); }

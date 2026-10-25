@@ -2259,6 +2259,10 @@ export const api = {
    * 않아 「덩치 ≥ 3000」이 3천억인지 3천만원인지 알 수 없었다.
    */
   condFields: () => getJson<{ fields: CondField[] }>("/api/signal/cond/fields"),
+  /** 조건식 자동 실행 설정 (2026-10-26) — 켜고 끄기·언제 돌릴지. 방은 텔레그램 동향에서 */
+  condAutoConfig: () => getJson<CondAutoConfig>("/api/signal/cond/auto-config"),
+  condAutoConfigSave: (next: Partial<CondAutoConfig>) =>
+    putJson<CondAutoConfig>("/api/signal/cond/auto-config", next),
   condPresets: () => getJson<{ presets: CondPreset[] }>("/api/signal/cond/presets"),
   condPresetSave: (name: string, query: CondQuery) =>
     postJson<{ presets: CondPreset[] }>("/api/signal/cond/presets", { name, query }),
@@ -4291,6 +4295,14 @@ export interface CondField {
   cost?: string;
 }
 
+/** 조건식 자동 실행 설정 — 서버 `condAutoConfig.ts` */
+export interface CondAutoConfig {
+  enabled: boolean;
+  /** pipeline = 마감 정리 안에서 · fixed = 정한 시각에 따로 */
+  mode: "pipeline" | "fixed";
+  hour: number;
+  minute: number;
+}
 export interface CondPreset {
   id: string;
   name: string;

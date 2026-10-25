@@ -7,6 +7,7 @@ import { regimeCheck } from "./regimeWatch.js";
 import { startEnroll } from "./signalTrack.js";
 import { buildStockMarks, loadStockMarks, marksProgress } from "./stockMarks.js";
 import { runAutoPresets } from "./condAuto.js";
+import { getCondAutoConfig } from "./condAutoConfig.js";
 import { doneToday, markToday } from "./dayMark.js";
 import { recordAfterReaction } from "./afterReaction.js";
 import { auditNote, runNaverAudit } from "./naverAudit.js";
@@ -739,6 +740,14 @@ export async function runAfterClose(
    */
   if (want("condAuto"))
     await step("condAuto", "조건식 자동 실행 (조회 0회)", async () => {
+      /*
+       * **설정으로 끄거나 시각을 옮길 수 있다** (2026-10-26, `condAutoConfig.ts`).
+       * `fixed` 를 고르면 여기서는 안 돌고 그 시각에 따로 돈다 — 두 번 돌면 「새로
+       * 걸린 종목」이 첫 회차에 다 소모되어 두 번째가 늘 조용해진다.
+       */
+      const cfg = await getCondAutoConfig();
+      if (!cfg.enabled) return "꺼 둠 (설정 > 조건식 자동)";
+      if (cfg.mode === "fixed") return `이 회차에서는 건너뜀 — ${String(cfg.hour).padStart(2, "0")}:${String(cfg.minute).padStart(2, "0")} 에 따로 돕니다`;
       const f = await loadStockMarks();
       const r = await runAutoPresets(client, f?.day ?? "");
       const parts = [`${r.ran}식 돌림`];

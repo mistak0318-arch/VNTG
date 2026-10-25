@@ -9,6 +9,7 @@ import {
   startScreen,
 } from "../signalScreen.js";
 import { evaluateMarket, verifyMarketSignal } from "../marketSignal.js";
+import { getCondAutoConfig, saveCondAutoConfig } from "../condAutoConfig.js";
 import {
   exitSuperEntry,
   getActiveSuper,
@@ -431,6 +432,26 @@ export function createSignalRouter(client: KiwoomClient): Router {
    *
    * ⚠️ `/cond/:id` 보다 먼저 둔다 — 뒤에 두면 "fields" 를 작업 id 로 먹는다.
    */
+  /**
+   * 조건식 자동 실행 설정 (2026-10-26) — 켜고 끄기 · 언제 돌릴지.
+   * **어느 방으로 보낼지는 여기서 안 정한다** — 「signal」 채널의 방 배정이 그 자리고,
+   * 텔레그램 동향 화면이 이미 맡고 있다(`condAutoConfig.ts` 머리말).
+   */
+  router.get("/cond/auto-config", async (_req, res, next) => {
+    try {
+      res.json(await getCondAutoConfig());
+    } catch (e) {
+      next(e);
+    }
+  });
+  router.put("/cond/auto-config", async (req, res, next) => {
+    try {
+      res.json(await saveCondAutoConfig(req.body ?? {}));
+    } catch (e) {
+      next(e);
+    }
+  });
+
   router.get("/cond/fields", (_req, res) => {
     res.json({ fields: COND_FIELDS });
   });
