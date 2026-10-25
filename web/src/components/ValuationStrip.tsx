@@ -264,7 +264,15 @@ export function ValuationStrip({
 
       {/* 아랫줄 — 띠 하나로 「얼마짜리 회사인가」가 끝나야 한다 */}
       <div className="val-foot">
-        <span>
+        {/*
+          **시가총액은 크게** (2026-10-25 — 벤티지: "시가총액도 눈에 좀 들어오게 하고").
+
+          이 띠에서 PER·PBR 은 「비싼가」를 말하고 시총은 「얼마짜리 회사인가」를 말한다.
+          뒤쪽이 먼저 와야 앞쪽이 뜻을 갖는다 — 2,477억짜리의 PER 173 배와 90조짜리의
+          PER 173 배는 완전히 다른 이야기다. 그런데 배당·목표주가와 같은 크기로 줄
+          끝에 섞여 있어서 눈에 안 걸렸다.
+        */}
+        <span className="val-cap">
           시가총액 <b>{eok(mac)}</b>
         </span>
         {out?.dividendYield !== null && out?.dividendYield !== undefined && out.dividendYield > 0 && (

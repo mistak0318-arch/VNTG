@@ -2082,7 +2082,22 @@ body.col-resizing { cursor: row-resize; }
   padding: 0.22rem 0.45rem;
   align-content: start;
   /* 선을 gap 에서 칸으로 옮겼다 — 마지막 줄의 남는 자리가 회색 덩어리가 안 된다 */
-  box-shadow: 1px 0 0 var(--border), 0 1px 0 var(--border);
+  /*
+   * **선을 또렷하게** (2026-10-25 — 벤티지: "구분선 좀 넣어서 눈에 좀 잘들어오게 좀
+   * 해줘. 글자랑 숫자들이 떠다니는 느낌이라 눈에 잘 안들어온다").
+   *
+   * 선은 원래도 있었는데 `--border`(#223040)가 패널 바탕과 거의 붙어 보여서, 칸이
+   * 열 개 넘게 깔리면 **경계가 사라지고 숫자만 떠다닌다.** 저·시·고 미니표와
+   * 「애프터 종가 / 전일종가 / 회전율」이 한 덩어리로 읽히던 게 그래서다.
+   *
+   * 색을 바꾸는 대신 **같은 선을 두 겹**으로 깐다 — 테마(다크·라이트·메모·엑셀)마다
+   * 색을 따로 정하지 않아도 되고, 어느 바탕에서든 한 톤 진해진다.
+   */
+  box-shadow:
+    1px 0 0 var(--border),
+    0 1px 0 var(--border),
+    inset -1px -1px 0 var(--border);
+  padding: 0.3rem 0.5rem;
 }
 /*
  * 시·고·저 미니표 (2026-10-14) — 한 칸 안에 3열 × 2행.
@@ -2115,7 +2130,13 @@ body.col-resizing { cursor: row-resize; }
 .ph-ohl-grid > .ph-ex { align-self: center; }
 
 .ph-label {
+  /*
+   * 라벨이 흐리면 값이 **어디에 속한 숫자인지** 눈이 못 붙잡는다. 칸이 열 개를 넘으니
+   * 라벨은 「작지만 또렷」해야 한다 — 크기는 그대로 두고 글자만 세운다 (2026-10-25).
+   */
   color: var(--muted);
+  font-weight: 600;
+  letter-spacing: -0.2px;
   white-space: nowrap;
   font-size: 0.7333rem;
   /* 라벨 높이를 고정해야 **첫 값 줄이 칸마다 나란히** 선다 */
@@ -7844,6 +7865,16 @@ button.nav-group-toggle {
   font-size: 0.8rem;
   color: var(--muted);
 }
+/* 시가총액 — 이 띠에서 제일 먼저 읽혀야 할 값 (2026-10-25) */
+.val-cap {
+  font-size: 0.95rem;
+}
+.val-cap b {
+  font-size: 1.12rem;
+  font-weight: 700;
+  margin-left: 2px;
+}
+
 .val-foot {
   display: flex;
   flex-wrap: wrap;
@@ -21639,4 +21670,104 @@ tr.gv-strong td:first-child { color: var(--text); }
   height: 84px;
   display: block;
   margin: 4px 0 2px;
+}
+
+/* ═══ 데일리 리포트 맨 위 한 장 (2026-10-25) — `ReportTopCard` 머리말 ═══ */
+.rtc {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+.rtc-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+}
+/* 판정 — 이 카드에서 제일 큰 글자. 다른 건 다 이것의 근거다 */
+.rtc-verdict {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+}
+.rtc-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  align-self: center;
+  background: var(--muted);
+}
+.rtc-verdict.green .rtc-dot { background: #27c07f; }
+.rtc-verdict.yellow .rtc-dot { background: #e8b931; }
+.rtc-verdict.red .rtc-dot { background: var(--red); }
+.rtc-level { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.5px; }
+.rtc-score { font-size: 1.05rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.rtc-idx { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-left: auto; }
+.rtc-idx-one { display: inline-flex; align-items: baseline; gap: 5px; }
+.rtc-idx-one em { font-style: normal; font-size: 0.8rem; color: var(--muted); }
+.rtc-idx-one b { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.rtc-idx-one i { font-style: normal; font-size: 0.8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* 판정 게이지 — 눈금 둘이 빨강/노랑/초록 경계다 */
+.rtc-gauge {
+  position: relative;
+  height: 7px;
+  margin: 10px 0 8px;
+  border-radius: 4px;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+.rtc-gauge-fill { position: absolute; inset: 0 auto 0 0; border-radius: 4px; background: var(--muted); }
+.rtc-gauge-fill.green { background: #27c07f; }
+.rtc-gauge-fill.yellow { background: #e8b931; }
+.rtc-gauge-fill.red { background: var(--red); }
+.rtc-gauge-tick { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--bg); opacity: 0.85; }
+.rtc-summary { font-size: 0.9rem; line-height: 1.55; color: var(--text); margin-bottom: 12px; }
+
+.rtc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+.rtc-box {
+  background: var(--panel-2);
+  border-radius: 9px;
+  padding: 10px 12px;
+}
+.rtc-box-h { font-size: 0.75rem; color: var(--muted); margin-bottom: 8px; }
+
+/* 수급 좌우 막대 — 0 이 가운데. 세 주체가 같은 자를 쓴다 */
+.rtc-flow { display: flex; flex-direction: column; gap: 6px; }
+.rtc-flow-row { display: grid; grid-template-columns: 46px 1fr auto; align-items: center; gap: 8px; }
+.rtc-flow-k { font-size: 0.8rem; color: var(--muted); }
+.rtc-flow-track { position: relative; height: 13px; border-radius: 3px; background: var(--panel); }
+.rtc-flow-zero { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--border); }
+.rtc-flow-bar { position: absolute; top: 2px; bottom: 2px; border-radius: 2px; min-width: 2px; }
+.rtc-flow-bar.buy { background: var(--red); }
+.rtc-flow-bar.sell { background: var(--blue); }
+.rtc-flow-v { font-size: 0.82rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* 시장의 폭 — 길이가 곧 「몇이 같이 갔나」 */
+.rtc-breadth-track { display: flex; height: 13px; border-radius: 3px; overflow: hidden; background: var(--panel); }
+.rtc-bd.up { background: var(--red); }
+.rtc-bd.flat { background: var(--muted); opacity: 0.45; }
+.rtc-bd.down { background: var(--blue); }
+.rtc-breadth-legend {
+  display: flex; align-items: baseline; gap: 10px;
+  margin-top: 7px; font-size: 0.78rem; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.rtc-breadth-legend em { font-style: normal; }
+.rtc-breadth-legend em.up { color: var(--red); }
+.rtc-breadth-legend em.down { color: var(--blue); }
+.rtc-breadth-legend b { margin-left: auto; font-size: 0.95rem; }
+.rtc-breadth-legend b.up { color: var(--red); }
+.rtc-breadth-legend b.down { color: var(--blue); }
+
+@media (max-width: 560px) {
+  .rtc { padding: 12px; }
+  .rtc-idx { margin-left: 0; width: 100%; }
+  .rtc-level { font-size: 1.3rem; }
 }

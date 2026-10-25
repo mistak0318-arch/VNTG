@@ -45,6 +45,7 @@ import { ReportGlance } from "../components/report/ReportGlance";
 import { RefreshBar } from "../components/RefreshBar";
 import { ReviewPanel } from "../components/ReviewPanel";
 import { useSection } from "../useSection";
+import { ReportTopCard } from "../components/report/ReportTopCard";
 import { WatchStar } from "../useWatchedCodes";
 import { Unveil } from "../components/Unveil";
 
@@ -489,6 +490,18 @@ export function DailyReportPage({
       {/* 뼈대 먼저, 한 번에 (2026-09-23 전수) — 한눈·요약·섹션 스무 개가 각자 도착하며 밀어내던 것. 판(edition)을 바꾸면 다시 */}
       <Unveil wait={800} resetKey={edition} bars={[72, 120, 160, 200, 160]}>
       <ReportGlance idx={idx} g={g} f={f} />
+
+      {/*
+        **맨 위 한 장** (2026-10-25 — 벤티지: "눈에 확 들어오지를 않아").
+
+        섹션이 스물다섯 개라 결론이 없었다. 「오늘 어떤 장인가 · 돈이 어디로 가나」를
+        먼저 한 장으로 말하고, 아래 스물다섯은 그 근거가 된다. 자세한 사정은
+        `ReportTopCard` 머리말.
+
+        ⚠️ 순서 설정(`orderedSections`) 밖에 둔다 — 이건 섹션이 아니라 **리포트의 머리**다.
+        벤티지가 순서를 어떻게 바꾸든 결론이 맨 위에 있어야 한다.
+      */}
+      <ReportTopCard indices={indices.data ?? null} flow={flow.data ?? null} />
 
       {/* 읽어주기 — 출근길에 AI 정리를 귀로. 브라우저 내장 음성이라 키·비용이 없다 */}
       <ReportTts edition={edition} />
