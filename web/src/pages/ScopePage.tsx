@@ -591,6 +591,40 @@ export function ScopePage({ onSelectStock }: { onSelectStock: (code: string, nam
    */
   const [editing, setEditing] = useState(false);
   const canEdit = sort.sortKey === null;
+  /*
+   * **손잡이만 끈다** (2026-10-26 — 벤티지: "순서 편집 메뉴 할 때 다른 데처럼 드래그로
+   * 변경할 수 있게는 못하나?").
+   *
+   * 10/25 에 줄 전체(`<tr draggable>`)를 끌게 했더니 안 움직였다. 칸 안의 단추·링크가
+   * 손을 먼저 채가서, 줄을 잡으려면 빈 자리를 정확히 눌러야 했기 때문이다.
+   *
+   * 그래서 **끄는 자리를 하나로 못박는다** — 편집 모드의 ⠿ 손잡이. `draggable` 은 그
+   * 손잡이에만 걸고, 줄은 **받기만** 한다(`onDragOver`/`onDrop`). 손잡이에는 단추가
+   * 없으니 가로채일 것도 없다.
+   *
+   * ▲▼ 는 그대로 둔다 — 폰에는 드래그가 없다시피 하다.
+   */
+  const dragCode = useRef<string | null>(null);
+  const [overCode, setOverCode] = useState<string | null>(null);
+
+  const dropOn = async (target: string) => {
+    const from = dragCode.current;
+    dragCode.current = null;
+    setOverCode(null);
+    if (!from || from === target) return;
+    const next = rows.slice();
+    const i = next.findIndex((r) => r.code === from);
+    const j = next.findIndex((r) => r.code === target);
+    if (i < 0 || j < 0) return;
+    const [moved] = next.splice(i, 1);
+    next.splice(j, 0, moved);
+    setRows(next);
+    try {
+      await api.watchReorder("현미경", next.map((r) => r.code));
+    } catch {
+      /* 저장 실패는 다음 새로고침에 제자리로 — 조용히 되돌리지 않는다 */
+    }
+  };
 
   const move = async (code: string, dir: -1 | 1) => {
     const next = rows.slice();
@@ -727,7 +761,20 @@ export function ScopePage({ onSelectStock }: { onSelectStock: (code: string, nam
               {sort.sorted.map((r) => (
                 <tr
                   key={r.code}
-                  className={`sc-row${open === r.code ? " on" : ""}`}
+                  onDragOver={(e) => {
+                    if (!editing || !dragCode.current) return;
+                    e.preventDefault();
+                    setOverCode(r.code);
+                  }}
+                  onDragLeave={() => setOverCode((c) => (c === r.code ? null : c))}
+                  onDrop={(e) => {
+                    if (!editing) return;
+                    e.preventDefault();
+                    void dropOn(r.code);
+                  }}
+                  className={`sc-row${open === r.code ? " on" : ""}${
+                    editing && overCode === r.code ? " over" : ""
+                  }`}
                   onClick={() => {
                     setOpen(open === r.code ? null : r.code);
                     /*
@@ -755,6 +802,24 @@ export function ScopePage({ onSelectStock }: { onSelectStock: (code: string, nam
                       순서를 옮기려다 매번 상세가 펼쳐지면 못 쓴다.
                     */
                     <td className="sc-move" onClick={(e) => e.stopPropagation()}>
+                      {/* 끄는 자리는 여기 하나뿐 — 단추가 없으니 가로채일 것도 없다 */}
+                      <span
+                        className="sc-grip"
+                        draggable
+                        title="끌어서 옮기기"
+                        onDragStart={(e) => {
+                          dragCode.current = r.code;
+                          /* 없으면 파이어폭스가 드래그를 아예 시작하지 않는다 */
+                          e.dataTransfer.setData("text/plain", r.code);
+                          e.dataTransfer.effectAllowed = "move";
+                        }}
+                        onDragEnd={() => {
+                          dragCode.current = null;
+                          setOverCode(null);
+                        }}
+                      >
+                        ⠿
+                      </span>
                       <button
                         className="sc-move-btn"
                         title="위로"

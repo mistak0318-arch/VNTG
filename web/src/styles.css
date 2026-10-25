@@ -21791,6 +21791,21 @@ tr.gv-strong td:first-child { color: var(--text); }
 .sc-move-btn + .sc-move-btn { margin-top: 2px; }
 .sc-move-btn:disabled { opacity: 0.3; cursor: default; }
 .sc-move-btn:not(:disabled):hover { border-color: var(--blue); color: var(--blue); }
+/* 끄는 손잡이 — 줄 전체가 아니라 여기만 (2026-10-26) */
+.sc-grip {
+  display: block;
+  width: 1.7rem;
+  margin-bottom: 2px;
+  text-align: center;
+  color: var(--muted);
+  cursor: grab;
+  user-select: none;
+  line-height: 1.1;
+}
+.sc-grip:active { cursor: grabbing; }
+.sc-grip:hover { color: var(--blue); }
+/* 떨어질 자리 — 줄 전체를 칠하면 어디에 끼는지가 안 보인다 */
+.sc-row.over > td { box-shadow: inset 0 2px 0 var(--blue); }
 
 /* 조건식 자동 실행 설정 (2026-10-26) */
 .ca-cfg { display: flex; flex-direction: column; gap: 10px; }
