@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { MarketPulsePanel } from "../components/MarketPulsePanel";
 import { MoneyNowPanel } from "../components/MoneyNowPanel";
-import { BriefingPage } from "./BriefingPage";
+import { BriefingExtras } from "./BriefingPage";
 import { LeaderScanPanel } from "../components/LeaderScanPanel";
 import { EventPlayPanel } from "../components/EventPlayPanel";
 import { CloseBetPanel } from "../components/CloseBetPanel";
@@ -48,13 +48,22 @@ export const FLOW_TABS: { key: FlowTab; label: string }[] = [
    * 메뉴 이름도 「돈의 흐름」으로. 판정 띠 · 돈이 가는 곳 · 사는 손 · 내 계좌 · 시간대 플랜 — 30초에 「지금 돈이
    * 어디로 가고 나는 뭘 하나」. 나머지 탭은 파고드는 근거로 뒤에 남는다(브리핑·맥박·로테이션·자금흐름·수출).
    */
-  { key: "now", label: "지금" },
   /*
-   * 마켓 브리핑과 합쳤다 (2026-08-28 — 「시황분석하는 메뉴가 너무 많아」).
-   * 브리핑(훑고 끝내는 결론)이 첫 탭, 나머지(파고드는 근거)가 뒤를 잇는다.
-   * 메뉴 하나가 「지금 시장이 어떤가 → 왜 그런가」를 순서대로 답한다.
+   * **브리핑을 여기로 합쳤다** (2026-10-26 — 벤티지: "지금이랑 브리핑이랑 합치라고").
+   *
+   * 2026-08-28 에 마켓 브리핑을 이 메뉴로 끌고 왔고, 09-17 에 「지금」을 첫 탭으로
+   * 놓았다. 그 둘이 결국 **같은 숫자를 두 번** 말하고 있었다 — 수급·등락·거래대금·
+   * 지수·테마가 「지금」의 판정 타일과 「브리핑」의 섹션에 나란히 있었다.
+   *
+   * 브리핑에만 있던 다섯(AI 한 줄·바깥 온도계·지금 무슨 얘기·관심종목 히트맵·
+   * 라이브 티커)만 「지금」으로 올리고 탭을 없앰다. 중복은 타일 쪽만 남긴다 —
+   * 타일은 판정의 근거라 지우면 「왜 그 판정인가」가 사라진다.
+   *
+   * ⚠️ `BriefingPage` 는 **안 지웠다.** 되돌리려면 아래 한 줄을 다시 살리고
+   * `now` 탭의 꽂이를 빼면 된다(「미국↔국내」를 숨긴 것과 같은 방식).
    */
-  { key: "briefing", label: "브리핑" },
+  { key: "now", label: "지금" },
+  // { key: "briefing", label: "브리핑" },
   { key: "pulse", label: "맥박" },
   /*
    * 로테이션 (2026-08-28, 테마 DB 개편) — **돈의 자리바꿈**을 본다.
@@ -265,8 +274,13 @@ export function MarketFlowPage({ onSelectStock }: { onSelectStock?: (code: strin
       </nav>
 
       <div key={`${tab}-${reloadKey}`}>
-        {tab === "now" && <MoneyNowPanel onSelectStock={onSelectStock} />}
-        {tab === "briefing" && <BriefingPage onSelectStock={onSelectStock ?? (() => {})} />}
+        {tab === "now" && (
+          <MoneyNowPanel
+            onSelectStock={onSelectStock}
+            headSlot={<BriefingExtras part="head" onSelectStock={onSelectStock ?? (() => {})} />}
+            tailSlot={<BriefingExtras part="tail" onSelectStock={onSelectStock ?? (() => {})} />}
+          />
+        )}
         {tab === "pulse" && <MarketPulsePanel onSelectStock={onSelectStock} />}
         {tab === "rotation" && (
           <>

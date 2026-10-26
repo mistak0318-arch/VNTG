@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api, type MoneyAccountRow, type MoneyBuyerRow, type MoneyNow, type MoneyWhereTheme, type ReportPicks } from "../api";
 
 /**
@@ -102,7 +102,21 @@ function AccountLine({ r, onSelectStock }: { r: MoneyAccountRow; onSelectStock?:
   );
 }
 
-export function MoneyNowPanel({ onSelectStock }: { onSelectStock?: (code: string, name: string) => void }) {
+export function MoneyNowPanel({
+  onSelectStock,
+  headSlot,
+  tailSlot,
+}: {
+  onSelectStock?: (code: string, name: string) => void;
+  /**
+   * 판정 띠 **바로 뒤**에 끼울 것 (2026-10-26 — 브리핑 탭을 여기로 합치면서).
+   * AI 한 줄·바깥 온도계·「지금 무슨 얘기」가 들어온다 — 「지금 어떤 장인가」를
+   * 읽고 바로 따라오는 말들이라 거기 붙는다.
+   */
+  headSlot?: ReactNode;
+  /** 맨 끝 — 관심종목 히트맵·라이브 티커처럼 곡눈질하는 것 */
+  tailSlot?: ReactNode;
+}) {
   const [data, setData] = useState<MoneyNow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -257,6 +271,8 @@ export function MoneyNowPanel({ onSelectStock }: { onSelectStock?: (code: string
         )}
         <div className="mnw-advice">🕒 {data.slot.advice}</div>
       </section>
+
+      {headSlot}
 
       {/*
         ②' **오늘의 특이사항 종목** (2026-10-21 — 벤티지: "마켓브리핑의 지금 탭에 외국인
@@ -464,6 +480,7 @@ export function MoneyNowPanel({ onSelectStock }: { onSelectStock?: (code: string
         {data.plan.note && <div className="table-note">{data.plan.note}</div>}
       </section>
       {data.errors.length > 0 && <div className="pt-n">못 받은 재료: {data.errors.join(" · ")}</div>}
+      {tailSlot}
     </div>
   );
 }

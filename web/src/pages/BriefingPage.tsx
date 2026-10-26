@@ -82,12 +82,19 @@ function Thermometer({
   global,
   usMajor,
   onIndex,
+  compact = false,
 }: {
   indices: IndexCard[] | null;
   global: GlobalQuote[] | null;
   usMajor: UsMajorResult | null;
   /** 지수를 누르면 — 시황 대시보드와 같은 상세 시트를 연다 (2026-08-29) */
   onIndex: (code: string) => void;
+  /**
+   * **바깥 반쪽만** (2026-10-26). 「지금」 하나로 합치면서, 코스피·코스닥과 상승/하락 바는
+   * 판정 띠의 타일(지수 · 오른 종목 비율)이 이미 같은 값을 말한다. 같은 숫자를 두 번
+   * 보여 주지 않으려고 그 둘만 뺀다 — 환율·미선물·VIX·금리·유가는 거기 없으므로 남긴다.
+   */
+  compact?: boolean;
 }) {
   const kospi = indices?.find((i) => i.code === "001");
   const kosdaq = indices?.find((i) => i.code === "101");
@@ -114,7 +121,8 @@ function Thermometer({
         두 줄을 만들어 아래를 밀어냈다(2026-08-26). 온도계는 한 줄이 목표다.
       */}
       {/* 눌러서 상세 — 시황 대시보드의 지수 타일과 같은 시트다 (2026-08-29) */}
-      {[
+      {!compact &&
+        [
         { label: "코스피", card: kospi, code: "001" },
         { label: "코스닥", card: kosdaq, code: "101" },
       ].map(({ label, card, code }) => (
@@ -137,7 +145,7 @@ function Thermometer({
         상승/하락 컬러바 — 이 줄의 심장이다. 지수는 대형주 몇 개로도 움직이지만
         **몇 종목이 오르고 있는가**는 못 속인다. 바의 빨강 몫이 곧 시장의 체온이다.
       */}
-      {total > 0 && (
+      {!compact && total > 0 && (
         <span className="bf-breadth" title={`상승 ${rising} · 하락 ${falling} (코스피+코스닥)`}>
           <span className="bf-breadth-bar">
             <i style={{ width: `${upShare}%` }} />
@@ -453,6 +461,117 @@ export function BriefingPage({
       )}
 
     </div>
+  );
+}
+
+/* ── 「지금」에 꽂는 브리핑 조각 (2026-10-26) ── */
+
+/**
+ * **브리핑에만 있던 것들** — 벤티지: "지금이랑 브리핑이랑 합치라".
+ *
+ * 두 탭은 같은 숫자를 두 번 말하고 있었다 — 수급·등락·거래대금·지수·테마가 「지금」의
+ * 판정 타일과 「브리핑」의 섹션에 나란히 있었다. 그래서 브리핑 탭을 없애고, **거기에만 있던
+ * 다섯**만 「지금」으로 올렸다:
+ *
+ *   head  AI 한 줄 · 바깥 온도계(환율·미선물·VIX·금리·유가) · 지금 무슨 얘기가 도나
+ *   tail  관심종목 히트맵 · 라이브 티커(VI·공시·시그널)
+ *
+ * 둘로 나눈 이유는 **읽는 순서** 때문이다. AI 한 줄은 판정 바로 다음에 와야 뜻이 있고,
+ * 티커는 구석에 있어야 한다(브리핑 머릻말에 적어 둔 그대로다). 두 조각은 **서로 다른 조회**를
+ * 쓰므로 나눠 달아도 중복으로 받는 게 없다.
+ *
+ * ⚠️ `BriefingPage` 는 **그대로 두었다.** 탭에서만 빠졌을 뿐이라, 되돌리려면
+ * `FLOW_TABS` 에 한 줄만 다시 넣으면 된다 — 지우면 되살리는 게 일이 된다.
+ */
+export function BriefingExtras({
+  part,
+  onSelectStock,
+}: {
+  part: "head" | "tail";
+  onSelectStock: (code: string, name: string) => void;
+}) {
+  if (part === "head") return <BriefingExtrasHead onSelectStock={onSelectStock} />;
+  return <BriefingExtrasTail onSelectStock={onSelectStock} />;
+}
+
+function BriefingExtrasHead({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
+  /* 대시보드·브리핑과 **같은 섹션 캐시**다 — 이 조각 때문에 키움·야후 호출은 한 건도 안 늘어난다 */
+  const indices = useSection<IndexCard[]>("indices", 15_000);
+  const global = useSection<GlobalQuote[]>("global", 20_000);
+  const usMajor = useSection<UsMajorResult>("usMajor", 20_000);
+  const [brief, setBrief] = useState<{ date: string; label: string; text: string } | null>(null);
+  const [indexDetail, setIndexDetail] = useState<string | null>(null);
+
+  useEffect(() => {
+    let dead = false;
+    /* AI 한 줄은 실패하면 그냥 안 보인다 — 에러를 화면에 내지 않는다 */
+    void api
+      .briefingBrief()
+      .then((r) => !dead && setBrief(r.brief))
+      .catch(() => undefined);
+    return () => {
+      dead = true;
+    };
+  }, []);
+
+  return (
+    <>
+      {brief && (
+        <div className="bf-brief bf-brief-top">
+          {brief.text}
+          <i className="bf-brief-src">
+            {brief.date} {brief.label} 리포트에서 — 새 AI 호출 없음
+          </i>
+        </div>
+      )}
+      {/* 바깥 반쪽만 — 코스피·코스닥과 상승/하락 바는 위 판정 타일이 이미 말한다 */}
+      <Thermometer
+        compact
+        indices={indices.data}
+        global={global.data}
+        usMajor={usMajor.data}
+        onIndex={setIndexDetail}
+      />
+      <TopicPulseBlock window="now" onSelectStock={onSelectStock} />
+      {indexDetail && <IndexDetailSheet code={indexDetail} onClose={() => setIndexDetail(null)} />}
+    </>
+  );
+}
+
+function BriefingExtrasTail({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
+  const [events, setEvents] = useState<BriefingEvent[] | null>(null);
+  const [eventDay, setEventDay] = useState<string | null>(null);
+  const [heat, setHeat] = useState<{ traded: boolean; tiles: BriefingTile[] } | null>(null);
+
+  const loadOwn = useCallback(() => {
+    void api
+      .briefingTimeline()
+      .then((r) => {
+        setEvents(r.items);
+        setEventDay(r.eventDay ?? null);
+      })
+      .catch(() => undefined);
+    void api.briefingHeat().then(setHeat).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    loadOwn();
+    /* 브리핑과 같은 30초 — 이벤트는 놓치면 아까운 값이지만 초 단위로 볼 값은 아니다 */
+    const t = setInterval(() => {
+      if (document.visibilityState === "visible") loadOwn();
+    }, 30_000);
+    return () => clearInterval(t);
+  }, [loadOwn]);
+
+  return (
+    <>
+      <section className="card mnw-card">
+        <h3>관심종목</h3>
+        <WatchHeatGrid heat={heat} onSelectStock={onSelectStock} />
+      </section>
+      {/* 티커는 제 `section.bf-ticker` 를 들고 있다 — 카드로 두 번 감지 않는다 */}
+      <LiveTicker events={events} eventDay={eventDay} onSelectStock={onSelectStock} />
+    </>
   );
 }
 
