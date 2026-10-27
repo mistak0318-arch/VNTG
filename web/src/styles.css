@@ -2931,8 +2931,43 @@ body.col-resizing { cursor: row-resize; }
 .bf-theme-click:hover { background: var(--panel-hover, rgba(128, 128, 128, 0.08)); border-radius: 4px; }
 
 /* AI 한 줄 */
-.bf-brief { font-size: 0.8rem; line-height: 1.65; background: var(--panel-2); border-radius: 0.4rem; padding: 0.6rem 0.7rem; }
-.bf-brief-src { display: block; font-style: normal; font-size: 0.68rem; color: var(--muted); margin-top: 0.35rem; }
+/*
+ * **AI 요약 띠** (2026-10-27 — 벤티지: "석간리포트에서 발췌해온 텍스트 좀
+ * 강조해서 표시 좀 해줘라").
+ *
+ * 0.8rem 회색 박스 한 겹이었다. 위에는 판정 카드가 세로선·타일로 서 있고 아래는
+ * 온도계가 줄지어 있는데, 정작 **여기만 먼바닥**이라 다섯 줄짜리 문단이 통째로
+ * 묻혔다. 글을 키우고 왼쪽에 악센트를 세워 「읽으라고 둔 글」임을 먼저 알리게 한다.
+ *
+ * 악센트 색은 `--cyan` 이다. 판정 카드가 이미 빨강·파랑·주황을 **판정의 뜻**으로
+ * 쓰고 있어서, 거기에 같은 색을 또 쓰면 「이 요약이 어떤 판정」이라는 없는 뜻이 생긴다.
+ */
+.bf-brief {
+  font-size: 0.9333rem;
+  line-height: 1.75;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--cyan);
+  border-radius: 0.4rem;
+  padding: 0.65rem 0.8rem;
+}
+/* 머리표 — 문단 위에 한 줄로. 읽기 전에 「누가 쓴 글인지」를 알려 준다 */
+.bf-brief-tag {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  color: var(--cyan);
+  margin-bottom: 0.25rem;
+}
+.bf-brief-body { display: block; }
+/* 문장 속 숫자 — 굵기로 세우고, 부호가 붙은 것만 색을 입힌다 */
+.bf-brief-n {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.bf-brief-src { display: block; font-style: normal; font-size: 0.68rem; color: var(--muted); margin-top: 0.45rem; }
 
 /* ---------------- 종목 한 장 요약 ---------------- */
 .ss { margin-bottom: 0.6rem; }

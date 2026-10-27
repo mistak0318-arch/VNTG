@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState, type ReactNode } from "react";
 import { TopicPulseBlock } from "../components/TopicPulse";
 import {
   api,
@@ -58,6 +58,50 @@ import { Unveil } from "../components/Unveil";
 function cls(n: number | null | undefined): string {
   if (n === null || n === undefined || !Number.isFinite(n) || n === 0) return "";
   return n > 0 ? "positive" : "negative";
+}
+
+/**
+ * **AI 발췌 속 숫자에 무게를 준다** (2026-10-27 — 벤티지: "석간리포트에서
+ * 발췌해온 텍스트 좀 강조해서 표시 좀 해줘라").
+ *
+ * 다섯 줄짜리 문단이 한 덩어리로 들어오면 눈이 멈춤 데가 없다. 그런데 여기서 실제로
+ * 읽히는 것은 **숫자**다 — 「코스피 +3.09%」, 「외국인 8,200억 순매수」,
+ * 「5일 누적 -2조 5,932억」. 그 네만 잡아도 문단의 뜻은 거의 다 온다.
+ *
+ * 부호가 붙은 숫자만 색을 입힌다(빨강=올람·파랑=내림 — 이 앱 전체의 문법).
+ * 부호 없는 숫자는 굵기만 준다 — 「17.4조」 같은 규모는 오르내림이 아니다.
+ *
+ * ⚠️ 정규식은 **기울어 잡지 않는다.** 못 잡으면 그냥 평범한 글자로 남을 뿐이고,
+ * 원문은 한 글자도 안 바뀜다 — AI 가 쓴 문장을 화면이 고쳐 쓰면 그건 다른 글이 된다.
+ */
+/*
+ * 첫 갈래가 「…조 …억」을 **한 덩어리로** 잡는다. 나눔 걸어 보고 붙였다 — 「-2조 5,932억」이
+ * 「-2조」과 「5,932억」으로 갈라 **앞부분만 파랑하고 뒷부분은 색이 없었다.** 한 금액은
+ * 한 덩어리여야 부호가 그 금액 전체에 걸린다.
+ *
+ * 날짜는 안 걸린다 — 단위가 붙어야 잡으므로 `2026-10-27`·`10/27`·`5일` 은 그대로 남는다(실측).
+ */
+const NUM_RE =
+  /([+-]?\d[\d,]*(?:\.\d+)?\s*조(?:\s*\d[\d,]*\s*억)?|[+-]?\d[\d,]*(?:\.\d+)?\s*(?:%|억|만원|원|배|포인트|p))/g;
+
+function emphasize(text: string): ReactNode[] {
+  const out: ReactNode[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  NUM_RE.lastIndex = 0;
+  while ((m = NUM_RE.exec(text)) !== null) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    const tok = m[0];
+    const sign = tok.startsWith("+") ? "positive" : tok.startsWith("-") ? "negative" : "";
+    out.push(
+      <b key={`${m.index}-${tok}`} className={`bf-brief-n ${sign}`}>
+        {tok}
+      </b>,
+    );
+    last = m.index + tok.length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
 }
 
 function pct(n: number | null | undefined, digits = 2): string {
@@ -335,7 +379,8 @@ export function BriefingPage({
       */}
       {brief && (
         <div className="bf-brief bf-brief-top">
-          {brief.text}
+          <b className="bf-brief-tag">🤖 AI 요약</b>
+          <span className="bf-brief-body">{emphasize(brief.text)}</span>
           <i className="bf-brief-src">
             {brief.date} {brief.label} 리포트에서 — 새 AI 호출 없음
           </i>
@@ -518,7 +563,8 @@ function BriefingExtrasHead({ onSelectStock }: { onSelectStock: (code: string, n
     <>
       {brief && (
         <div className="bf-brief bf-brief-top">
-          {brief.text}
+          <b className="bf-brief-tag">🤖 AI 요약</b>
+          <span className="bf-brief-body">{emphasize(brief.text)}</span>
           <i className="bf-brief-src">
             {brief.date} {brief.label} 리포트에서 — 새 AI 호출 없음
           </i>
