@@ -22,6 +22,7 @@ import {
   type PublishJob,
 } from "../api";
 import { ProgressSteps } from "../components/ProgressSteps";
+import { CisRacePanel } from "../components/CisRacePanel";
 import { SimulatorTab } from "../components/SimulatorTab";
 import { SuperMark } from "../useSuperMarks";
 
@@ -432,6 +433,13 @@ export function CisPage({ onSelectStock }: { onSelectStock?: (code: string, name
           </ol>
         </details>
       )}
+
+      {/*
+        **시나리오 레이스** (2026-10-27) — 신조 바로 밑. 신조가 「어떻게 매매하나」면
+        이건 「그 설정이 맞나」라서 붙어 있어야 읽힌다. 기본은 접힘 — 매일 보는 것은
+        계좌 넷이고, 이건 궁금할 때 여는 자리다(열 때만 받아 온다).
+      */}
+      <CisRacePanel />
 
       {config && !config.enabled && (
         <div className="cis-off">

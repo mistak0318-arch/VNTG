@@ -3,6 +3,7 @@ import type { KiwoomClient } from "../kiwoomClient.js";
 import { equityOf, loadAccount, resetAccount, riskMix, saveAccount, today } from "../cisAccount.js";
 import { ACCOUNTS, ACCOUNT_IDS, profileOf, type AccountId } from "../cisAccounts.js";
 import { getCisConfig, goalProgress, rulesFor, saveCisConfig, RULE_LABEL } from "../cisConfig.js";
+import { readRaces } from "../cisScenario.js";
 import { clearJournal, listDays, loadDay } from "../cisJournal.js";
 import { listTrackLastRunDate } from "../listTrack.js";
 import { closeBetScanJob, loadCloseBetScan, runCloseBetScan } from "../closeBetScan.js";
@@ -266,6 +267,18 @@ export function createCisRouter(client: KiwoomClient): Router {
   router.get("/stats", async (req, res, next) => {
     try {
       res.json(await cisStats(acc(req.query.account)));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * **시나리오 레이스** (2026-10-27) — 마감 정리가 만들어 둔 파일을 그대로 준다.
+   * 여기서 돌리지 않는다 — 한 번에 몇 분이라 화면이 기다릴 일이 아니다.
+   */
+  router.get("/races", async (_req, res, next) => {
+    try {
+      res.json((await readRaces()) ?? { at: null, races: {}, adopted: {} });
     } catch (err) {
       next(err);
     }

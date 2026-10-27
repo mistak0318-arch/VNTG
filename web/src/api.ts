@@ -1614,6 +1614,7 @@ export const api = {
       `/api/cis/days?account=${account}&limit=${limit}`,
     ),
   cisStats: (account: string) => getJson<CisStats>(`/api/cis/stats?account=${account}`),
+  cisRaces: () => getJson<CisRaceStore>("/api/cis/races"),
   cisUsage: (account: string) =>
     getJson<{ rows: CisUsageRow[] }>(`/api/cis/usage?account=${account}`),
   cisConfig: () =>
@@ -8690,4 +8691,38 @@ export interface OrderLogRow {
   origOrdNo?: string;
   amount?: number;
   msg?: string;
+}
+
+
+/** 시나리오 레이스 — 계좌마다 축을 달리한 설정 몇 개를 같은 표본으로 돌린 결과 (2026-10-27) */
+export interface CisRaceRow {
+  id: string;
+  label: string;
+  why: string;
+  avg: number | null;
+  /** 같은 자리를 규칙 없이 20일 들고 있었으면 — 비교의 기준 */
+  hold: number | null;
+  /** avg − hold. 줄을 세우는 자는 이것이다 */
+  excess: number | null;
+  winRate: number | null;
+  trades: number;
+  payoff: number | null;
+  bothPositive: boolean;
+  bothBeatHold: boolean;
+  eligible: boolean;
+  why_not?: string;
+}
+export interface CisRaceResult {
+  account: string;
+  accountName: string;
+  at: string;
+  current: CisRaceRow | null;
+  rows: CisRaceRow[];
+  winner: CisRaceRow | null;
+  verdict: string;
+}
+export interface CisRaceStore {
+  at: string | null;
+  races: Record<string, CisRaceResult | undefined>;
+  adopted: Record<string, { from: string; label: string; edge: number; why: string; at: string } | undefined>;
 }

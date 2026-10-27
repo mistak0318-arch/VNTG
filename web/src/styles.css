@@ -21979,3 +21979,69 @@ tr.gv-strong td:first-child { color: var(--text); }
   background: var(--panel-2); border: 1px solid var(--border); border-radius: 5px; color: var(--text);
 }
 .ca-saving { font-size: 0.78rem; color: var(--muted); }
+
+
+/* ══ 시나리오 레이스 (2026-10-27) — 항해일지 신조 바로 밑 ══════════════ */
+.crp {
+  margin: 10px 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  padding: 8px 12px;
+}
+.crp > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+/* 삼각형은 직접 그린다 — 테마가 넷이라 기본 표식은 색이 제각각이 된다 */
+.crp > summary::-webkit-details-marker { display: none; }
+.crp > summary::before {
+  content: "▸";
+  color: var(--muted);
+  font-size: 0.8rem;
+  transition: transform 0.15s;
+}
+.crp[open] > summary::before { content: "▾"; }
+.crp-sum { font-size: 0.75rem; color: var(--muted); }
+.crp-acc { margin-top: 12px; }
+.crp-acc h4 {
+  margin: 0 0 6px;
+  font-size: 0.9rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+/* 자동으로 갈아끼운 줄이 있으면 계좌 이름 옆에 — 조용히 바뀌면 안 된다 */
+.crp-adopted {
+  font-style: normal;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--bg);
+  background: var(--live-on);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+/*
+ * 지금 설정 줄 — 모든 비교의 기준이라 바탕으로 못박는다.
+ *
+ * ⚠️ 고정 첫 칸(`.data-table .sticky-col`)은 제 배경을 따로 갖고 있고 그쪽이 더 세다
+ * — 그냥 두면 **줄이 첫 칸에서 끈긴다.** 같은 줄임을 끝까지 보여주려고 받아 올린다.
+ */
+.crp-cur td,
+.crp .data-table .crp-cur td.sticky-col { background: var(--panel-2); }
+.crp-tag {
+  font-style: normal;
+  font-size: 0.65rem;
+  color: var(--muted);
+  margin-left: 5px;
+}
+/* 줄을 세우는 자 — 이 칸이 이 표의 주인공이다 */
+.crp-lead { font-weight: 700; font-size: 0.8rem; }
+.crp-dim { color: var(--muted); }
+.crp-ok { color: var(--live-on); font-weight: 700; }
+.crp-no { color: var(--muted); cursor: help; }

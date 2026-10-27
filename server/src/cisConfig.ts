@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEFAULT_RULES, type CisRules } from "./cisTrader.js";
 import { profileOf } from "./cisAccounts.js";
+import { adoptedRulesFor } from "./cisScenario.js";
 import type { AiChoice } from "./aiConfig.js";
 import type { PensionMethod } from "./cisPensionRun.js";
 
@@ -239,7 +240,18 @@ export async function getCisConfig(): Promise<CisConfig> {
 export async function rulesFor(account: string): Promise<CisRules> {
   const cfg = await getCisConfig();
   const over = profileOf(account).ruleOverrides;
-  return over ? { ...cfg.rules, ...over } : cfg.rules;
+  const base = over ? { ...cfg.rules, ...over } : cfg.rules;
+  /*
+   * **시나리오 레이스가 옮긴 값은 그 위다** (2026-10-27 — 벤티지: "완전 자동화로 가자").
+   *
+   * 순서가 뜻이다: 설정 → 계좌 성격 → 레이스. 계좌 성격 **뒤**에 와야 종배의
+   * 손절 -3 같은 값도 레이스가 갈아끼울 수 있다 — 그걸 재려고 돌리는 레이스다.
+   *
+   * 옮기는 열쇠는 `ADOPTABLE_KEYS` 세 개뿐이고(파는 자리), 비중·종목 수·문턱은 그쪽에서
+   * 걸러낸다. 여기서 또 한 번 거르는 것은 파일을 손으로 고쳐도 적극 모드가 안 뒤집히게 하려는 것이다.
+   */
+  const raced = await adoptedRulesFor(account).catch(() => ({}));
+  return Object.keys(raced).length > 0 ? { ...base, ...raced } : base;
 }
 
 /** 값의 범위를 여기서 막는다 — 화면을 믿지 않는다(직접 POST 할 수도 있다) */

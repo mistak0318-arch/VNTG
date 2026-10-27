@@ -111,13 +111,40 @@ export interface CisBacktestResult {
    * 120일 표본에서 「+7.95%, 압도적」이던 조합이 **뒤쪽 절반에서 -19%p** 였다.
    *
    * 표본 날짜를 반으로 갈라 앞뒤를 따로 낸다. 한쪽만 좋으면 그건 그 구간의
-   * 성질이지 규칙의 값어치가 아니다. **둘 다 양수여야** 믿을 수 있다.
+   * 성질이지 규칙의 값어치가 아니다.
    *
    * ⚠️ 지금 표본은 80거래일 한 계절뿐이라(4~5월 하락 + 7월 반등) 이 분할도
    * 「하락장 / 반등장」을 가르는 것에 가깝다. 그것대로 뜻이 있지만 —
    * **두 개의 다른 시장에서 다 통하나**를 묻는 것이므로 오히려 까다로운 시험이다.
+   *
+   * ## 「둘 다 양수」가 아니라 「둘 다 홀드보다 낫다」 (2026-10-26 고침)
+   *
+   * 시나리오 레이스를 처음 돌리자 **모든 줄이 앞뒤✗** 였다. 규칙이 다 나쁜 줄 알았는데
+   * 기준을 같이 찍어 보니 그게 아니었다:
+   *
+   *   같은 자리를 20일 홀드  **-4.86%**
+   *   규칙대로 샀다 팔았을 때  **-0.45%**   ← 홀드보다 +4.41%p
+   *
+   * **표본 구간이 하락장이다.** 홀드가 -4.86% 인 장에서 「절대 양수」를 요구하면 어떤
+   * 롱 전략도 통과할 수 없다 — 규칙의 값어치를 묻는 게 아니라 **장이 올랐는지**를 묻는
+   * 문턱이었던 것이다. 그래서 `bothBeatHold` 를 쓴다: 앞에서도 뒤에서도 **아무것도 안
+   * 하는 것보다 나았나.** 이쪽이 규칙에게 물을 수 있는 질문이다.
+   *
+   * `bothPositive` 는 남겨 둔다 — 「이 장에서 돈을 벌었나」는 그것대로 알아야 할 사실이고,
+   * 장이 돌면 다시 뜻이 선다.
    */
-  split: { at: string; front: Stat; back: Stat; bothPositive: boolean };
+  split: {
+    at: string;
+    front: Stat;
+    back: Stat;
+    /** 앞뒤 각각 같은 자리를 20일 홀드했다면 — 비교의 기준 */
+    frontHold: Stat;
+    backHold: Stat;
+    /** 앞뒤 둘 다 절대 양수 (장이 오른 구간에서만 선다) */
+    bothPositive: boolean;
+    /** 앞뒤 둘 다 홀드보다 나음 — 하락장에서도 뜻이 서는 문턱 */
+    bothBeatHold: boolean;
+  };
   at: string;
 }
 
@@ -404,6 +431,11 @@ export async function cisBacktest(
   const backRows = trades.filter((t) => t.date >= cut);
   const front = stat(frontRows);
   const back = stat(backRows);
+  /* 같은 자리의 홀드 성적 — 앞뒤 각각. `hold20` 이 없는 거래(표본 끝)는 빠진다 */
+  const holdOf = (rows: CisTrade[]) =>
+    stat(rows.filter((t) => t.hold20 !== null).map((t) => ({ rate: t.hold20 as number, days: 20 })));
+  const frontHold = holdOf(frontRows);
+  const backHold = holdOf(backRows);
 
   return {
     rules: r,
@@ -423,8 +455,21 @@ export async function cisBacktest(
       at: cut,
       front,
       back,
+      frontHold,
+      backHold,
       /* 한쪽만 좋으면 그 구간의 성질이지 규칙의 값어치가 아니다 */
       bothPositive: front.n > 0 && back.n > 0 && front.avg > 0 && back.avg > 0,
+      /*
+       * 홀드 기준이 없는 쪽은 **비교를 못 한 것**이므로 거짓이다. 「기준이 없으니
+       * 넘었다고 치자」는 조용히 통과시키는 길이다.
+       */
+      bothBeatHold:
+        front.n > 0 &&
+        back.n > 0 &&
+        frontHold.n > 0 &&
+        backHold.n > 0 &&
+        front.avg > frontHold.avg &&
+        back.avg > backHold.avg,
     },
     at: new Date().toISOString(),
   };

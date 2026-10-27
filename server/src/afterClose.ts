@@ -17,6 +17,7 @@ import { marketPulse } from "./marketPulse.js";
 import { getTradeStats } from "./tradeStats.js";
 import { pushNotice } from "./notifyCenter.js";
 import { buildSamplesFromLedger } from "./samplesFromLedger.js";
+import { runAllRaces } from "./cisScenario.js";
 import { sendTelegram } from "./telegram.js";
 import { ensureFinance } from "./financeCache.js";
 import { closesProgress } from "./dailyCloses.js";
@@ -103,6 +104,7 @@ const STEPS: { key: string; label: string }[] = [
   { key: "trade", label: "수출입" },
   { key: "finance", label: "실적 캐시" },
   { key: "samples", label: "표본" },
+  { key: "race", label: "시나리오 레이스" },
   /*
    * **마무리 회차** (2026-09-16) — 정규 회차(15:40)에는 안 돈다. 20:10 에 따로 돈다.
    *
@@ -829,6 +831,26 @@ export async function runAfterClose(
     }, () => {
       const p = ledgerSamplesProgress();
       return p.total > 0 && p.done < p.total ? { done: p.done, total: p.total, note: `${p.obs.toLocaleString()}관측` } : null;
+    });
+
+  /*
+   * ⑩ **시나리오 레이스** (2026-10-27 — 벤티지: "완전 자동화로 가자. 내가 안 고를게").
+   *
+   * 바로 위 ⑨ 가 표본을 하루치 늘렸다 — 그 표본으로 계좌마다 시나리오 몇 개를 나란히 돌리고,
+   * 세 겹(앞뒤 둘 다 홀드 위 · 거래 25건 · 3%p 차이)을 넘은 줄이 있으면 **파는 법만** 갈아끼운다.
+   * 얼마를 걸지(비중·종목 수)와 무엇을 사는지(문턱)는 안 건드린다 — `ADOPTABLE_KEYS` 참고.
+   *
+   * 조회 0회다(표본 + 일봉 파일만 읽는다). 실패해도 파이프라인을 안 세운다 — 레이스는
+   * 고려 재료이지 오늘 장사의 전제가 아니다. 안 돌면 어제 채택이 그대로 살아 있다.
+   */
+  if (want("race"))
+    await step("race", "시나리오 레이스", async () => {
+      const st = await runAllRaces();
+      const ran = Object.values(st.races).filter((r) => r && r.rows.length > 0).length;
+      const picks = Object.entries(st.adopted);
+      return picks.length === 0
+        ? `${ran}계좌 · 갈아탈 줄 없음 (지금 설정 유지)`
+        : `${ran}계좌 · 채택 ${picks.map(([k, v]) => `${k}←${v!.label}`).join(" · ")}`;
     });
 
   /*
