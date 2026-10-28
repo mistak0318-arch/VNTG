@@ -46,10 +46,19 @@ REM whatever happens to be in flight.
 REM The server now also caps how many heavy requests run at once and sheds load
 REM near the ceiling (see index.ts) -- this number is the safety margin behind
 REM that, not the fix.  Not holding whole files in heap is the real cure.
+REM
+REM 6,144 -> 9,216 on 2026-10-29.  Measured that night: peak rss 6,054MB against
+REM a 6,144MB ceiling -- 90MB of margin.  At that point the in-process gate
+REM squeezes its concurrency from 32 down to 6, so requests queue instead of
+REM running and /api/health (which does nothing) took 11-14 seconds.  The gate
+REM was working as designed; it had no room left to work with.
+REM Box has 13,259MB of RAM and 4,320MB free, so 9,216 still leaves the OS ~4GB.
+REM This buys headroom.  The cache TTLs added the same night (signalSamples.ts,
+REM dailyCloses.ts) are the part that actually gives memory back.
 echo.>> "%LOG%"
 echo ==== %date% %time% server start ====>> "%LOG%"
 REM --expose-gc lets the recovery routine (recovery.ts) run a full GC on demand
 REM instead of waiting for V8 to get around to it.  Waiting is what turned a
 REM busy minute into a 40-second-per-request crawl.
-node --expose-gc --max-old-space-size=6144 dist\index.js >> "%LOG%" 2>&1
+node --expose-gc --max-old-space-size=9216 dist\index.js >> "%LOG%" 2>&1
 echo ==== %date% %time% server exit %errorlevel% ====>> "%LOG%"

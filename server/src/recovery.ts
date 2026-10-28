@@ -1,7 +1,8 @@
 import { memoryUsage } from "node:process";
 import v8 from "node:v8";
 import { noteLife } from "./lifecycle.js";
-import { dropSamplesCache } from "./signalSamples.js";
+import { dropSamplesCache, dropSamplesIfIdle } from "./signalSamples.js";
+import { dropClosesIfIdle } from "./dailyCloses.js";
 import { dropAccountCache } from "./orders.js";
 import { dropHantooQueue, hantooQueueDepth } from "./hantooClient.js";
 import { KiwoomClient } from "./kiwoomClient.js";
@@ -178,12 +179,58 @@ function forceGc(): number {
  * 3초마다 불린다. **이 함수 하나가 상태를 바꾸는 유일한 자리**다 —
  * 두 곳에서 재시작을 결정하면 서로 싸운다(감시자와 start-prod 가 그랬다).
  */
+/**
+ * **안 쓰는 큰 덩어리는 미리 놓는다** (2026-10-29 — 벤티지: "지금 많이 느린데 … 이유 좀
+ * 분석해줘").
+ *
+ * 이 파일의 나머지는 전부 **압박이 온 뒤**에 움직인다. 그런데 10/28 밤 실측은 그 구조의
+ * 빈틈을 보여 줬다 — 25시간 돌린 서버의 최고 rss 가 6,054MB 로 상한(6,144MB)에서
+ * **90MB** 까지 갔고, 그 지점에서 관문이 동시 32 를 6 으로 조여 요청이 줄을 섰다.
+ * 아무 일도 안 하는 `/api/health` 가 11~14초 걸린 것이 그래서다. 관문은 제 할 일을 했다.
+ * **일할 여유가 없었을 뿐이다.**
+ *
+ * 그 여유를 만드는 가장 싼 길은 **안 쓰는 것을 들고 있지 않는 것**이다. 표본(38MB 파일,
+ * 힙에서 ~234MB)과 일봉(84MB 파일, 힙에서 ~160MB)은 장이 끝나면 거의 안 쓰이면서
+ * 밤새 힙을 붙잡는다. `start-prod.cmd` 주석이 2026-10-07 에 이미 적어 둔 결론이다:
+ * "Not holding whole files in heap is the real cure."
+ *
+ * ## 왜 30분인가
+ *
+ * 다시 필요하면 **다시 읽는다** — 파싱이 수 초짜리다. 짧게 잡으면 놓았다 읽었다를
+ * 되풀이해 들고 있는 것보다 나빠진다. 장중에는 신호등·차트가 30분을 비울 일이 거의
+ * 없으므로 사실상 안 놓이고, 밤·주말에만 돌려준다 — 노리는 자리가 바로 거기다.
+ */
+const IDLE_DROP_MS = 30 * 60_000;
+let lastIdleNote = 0;
+
+function dropIdleCaches(now: number): void {
+  const freed: string[] = [];
+  if (dropSamplesIfIdle(IDLE_DROP_MS)) freed.push("검증표본");
+  const bars = dropClosesIfIdle(IDLE_DROP_MS);
+  if (bars > 0) freed.push(`일봉 ${bars}종목`);
+  if (freed.length === 0) return;
+  /* 놓은 것은 적어 둔다 — 문턱이 맞는지 나중에 이 줄로 판단한다 */
+  if (now - lastIdleNote > 60_000) {
+    lastIdleNote = now;
+    noteLife(
+      "WARN",
+      `안 쓴 캐시를 놓았다 — ${freed.join(" · ")} (${Math.round(IDLE_DROP_MS / 60_000)}분 미사용), 지금 heap ${Math.round(memoryUsage().heapUsed / 1048576)}MB`,
+    );
+  }
+}
+
 export function recoveryTick(selfExit: (why: string) => void): void {
   if (LIMIT_MB <= 0) return;
   const usedMB = Math.round(memoryUsage().heapUsed / 1048576);
   const ratio = usedMB / LIMIT_MB;
   const now = Date.now();
   const pct = Math.round(ratio * 100);
+
+  /*
+   * 압박과 **무관하게** 먼저 돈다. 아래 갈래들은 상태에 따라 일찍 `return` 하므로
+   * 여기 두지 않으면 정상일 때는 영영 안 불린다 — 정상일 때 하라고 만든 것이다.
+   */
+  dropIdleCaches(now);
 
   /* ── 내려왔다 ── */
   if (state !== "정상" && ratio <= CLEAR_AT) {
@@ -241,11 +288,45 @@ export function recoveryTick(selfExit: (why: string) => void): void {
   }
 }
 
+/**
+ * **새벽 정기 재시작** (2026-10-29 — 벤티지가 고른 셋 중 하나).
+ *
+ * 위의 캐시 놓기와 상한 올리기로도 못 막는 것이 있다: **천천히 자라는 것들**이다.
+ * 10/28 실측에서 25시간 돌린 서버의 힙이 2.1~4.3GB 를 오갔다. 어느 하나가 범인이
+ * 아니라 조금씩 쌓인 것이고, 그런 건 찾아내는 것보다 **매일 끊는 쪽**이 싸다.
+ *
+ * 04:00 을 고른 이유: 프리장(08:00)까지 네 시간이 남고, 마감 정리(15:55)와 마무리
+ * 회차(20:10)가 둘 다 끝난 뒤다. 재시작 자체는 `selfExit` 이라 OOM 즉사와 다르다 —
+ * 쓰던 응답이 마저 나가고 감시자가 다시 띄운다.
+ *
+ * ⚠️ **갓 뜬 서버는 안 건드린다**(`uptime > 2시간`). 04:00 에 배포가 겹치면 띄우자마자
+ * 다시 내리는 꼴이 되고, 그러면 되살리기와 싸운다.
+ */
+const NIGHTLY_HOUR = 4;
+let nightlyDay = "";
+
+function nightlyRestart(selfExit: (why: string) => void): void {
+  const kst = new Date(Date.now() + 9 * 3600_000);
+  const day = kst.toISOString().slice(0, 10);
+  if (nightlyDay === day) return;
+  if (kst.getUTCHours() !== NIGHTLY_HOUR) return;
+  /* 하루 한 번 — 이 분(分) 안에 여러 틱이 돌아도 한 번만 */
+  nightlyDay = day;
+  if (process.uptime() < 2 * 3600) {
+    noteLife("WARN", `새벽 재시작 건너뜀 — 뜬 지 ${Math.round(process.uptime() / 60)}분밖에 안 됐다`);
+    return;
+  }
+  const usedMB = Math.round(memoryUsage().heapUsed / 1048576);
+  noteLife("FATAL", `새벽 ${NIGHTLY_HOUR}시 정기 재시작 — ${Math.round(process.uptime() / 3600)}시간 돌았고 heap ${usedMB}/${LIMIT_MB}MB`);
+  selfExit(`새벽 ${NIGHTLY_HOUR}시 정기 재시작`);
+}
+
 /** 3초마다 돈다. 서버가 뜰 때 한 번 부른다 */
 export function startRecovery(selfExit: (why: string) => void): void {
   noteLife("START", `복구 루틴 시작 — heap 상한 ${LIMIT_MB}MB, 직접 GC ${canGc ? "가능" : "불가(--expose-gc 없음)"}`);
   setInterval(() => {
     try {
+      nightlyRestart(selfExit);
       recoveryTick(selfExit);
     } catch {
       /* 복구 루틴이 서버를 죽이면 안 된다 */

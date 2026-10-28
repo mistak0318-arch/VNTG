@@ -431,7 +431,30 @@ export function dropSamplesCache(): boolean {
   return had;
 }
 
+/**
+ * **마지막으로 쓴 때** (2026-10-29) — 안 쓰는 동안 미리 놓으려고 적어 둔다.
+ *
+ * 위 `dropSamplesCache` 는 **압박이 온 뒤**에만 불린다(`recovery.ts`, 힙 ≥ 복구 문턱).
+ * 그런데 이 덩어리는 장이 끝나면 거의 안 쓰이면서 **힙을 밤새 붙잡고 있다.** 압박이
+ * 오기를 기다릴 이유가 없다 — 안 쓰면 그냥 놓으면 된다.
+ */
+let lastUse = 0;
+
+/**
+ * 안 쓴 지 `idleMs` 를 넘었으면 놓는다. 압박과 무관하게 정상일 때 돈다.
+ *
+ * ⚠️ 다시 필요하면 **다시 읽는다**(수 초). 그래서 문턱을 짧게 잡으면 안 된다 —
+ * 놓았다 읽었다를 되풀이하는 것이 들고 있는 것보다 나쁘다.
+ */
+export function dropSamplesIfIdle(idleMs: number): boolean {
+  if (!cache || lastUse === 0) return false;
+  if (Date.now() - lastUse < idleMs) return false;
+  cache = null;
+  return true;
+}
+
 export async function loadSamples(): Promise<SampleFile | null> {
+  lastUse = Date.now();
   if (cache) return cache;
   if (loading) return loading;
   loading = (async () => {

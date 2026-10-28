@@ -128,13 +128,33 @@ let cache: Store | null = null;
  */
 let loading: Promise<Store> | null = null;
 
+/**
+ * **마지막으로 쓴 때** (2026-10-29) — 안 쓰는 동안 미리 놓으려고 적어 둔다.
+ * 자세한 사정은 `signalSamples.dropSamplesIfIdle` 머리말.
+ */
+let lastUse = 0;
+
 export async function loadCloses(): Promise<Store> {
+  lastUse = Date.now();
   if (cache) return cache;
   if (loading) return loading;
   loading = readOnce().finally(() => {
     loading = null;
   });
   return loading;
+}
+
+/**
+ * 안 쓴 지 `idleMs` 를 넘었으면 놓는다 — **이 서버에서 되찾을 수 있는 가장 큰 덩어리**다.
+ *
+ * ⚠️ 읽는 중(`loading`)이면 안 건드린다. 그 약속을 기다리는 요청들이 있다.
+ */
+export function dropClosesIfIdle(idleMs: number): number {
+  if (!cache || loading || lastUse === 0) return 0;
+  if (Date.now() - lastUse < idleMs) return 0;
+  const had = Object.keys(cache.bars ?? {}).length;
+  cache = null;
+  return had;
 }
 
 /**
