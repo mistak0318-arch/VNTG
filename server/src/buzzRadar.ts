@@ -270,6 +270,50 @@ async function readDay(day: string): Promise<DayFile> {
   }
 }
 
+/**
+ * **집계용 날짜 캐시** (2026-11-02 — 벤티지: "아까 낮에 VNTG HTS가 심하게 느렸거든").
+ *
+ * `/topic-pulse` 가 재시작 뒤 7시간 동안 33건 중 **32건이 느린 것**으로 찍혔다(평균
+ * 1,450ms). 간헐이 아니라 구조상 매번이다 — `buzzBoard` 한 번이 날짜 파일을 **아홉 개**
+ * 읽고 파싱했다: 창 몫 둘(`windowFiles`) + 기준일 일곱(`cfg.baselineDays` 기본 7).
+ * 어제는 창에도 기준일에도 들어가 **같은 파일을 두 번** 읽기까지 했다.
+ *
+ * 그런데 **지난 날짜 파일은 두 번 다시 안 바뀐다.** 매번 읽을 까닭이 없다. 바로 옆
+ * `buildDict` 가 10분 캐시를 쓰는 것과 같은 이치인데 여기만 비어 있었다.
+ *
+ * ⚠️ **쓰기 경로는 이것을 쓰면 안 된다.** `record…` 가 그날 파일을 읽어 고쳐 쓰는데,
+ * 캐시된 객체에 더하면 그사이 다른 수집이 쓴 것을 덮는다. 그래서 쓰기 쪽은 날것
+ * `readDay` 를 그대로 쓰고, 쓴 뒤에 `dropDayCache(day)` 로 이쪽을 버린다.
+ *
+ * ⚠️ 돌려주는 객체를 **고치지 말 것** — 캐시에 든 바로 그 객체다. 집계 쪽은 읽기만 한다.
+ */
+const dayCache = new Map<string, DayFile>();
+let todayCachedAt = 0;
+/** 오늘 파일은 수집이 계속 더하므로 짧게만 — 30초면 화면 한 번 여는 사이다 */
+const TODAY_TTL_MS = 30_000;
+/** 날짜 키라 하루 하나씩만 는다. 기준일이 최대 30 이라 넉넉히 */
+const DAY_CACHE_MAX = 45;
+
+/** 그날 파일을 고쳐 쓴 뒤에 부른다 — 안 부르면 집계가 옛 값을 본다 */
+function dropDayCache(day?: string): void {
+  if (day) dayCache.delete(day);
+  else dayCache.clear();
+}
+
+async function readDayCached(day: string): Promise<DayFile> {
+  const today = dayStr(kstNow());
+  const hit = dayCache.get(day);
+  if (hit && (day !== today || Date.now() - todayCachedAt < TODAY_TTL_MS)) return hit;
+  const f = await readDay(day);
+  dayCache.set(day, f);
+  if (day === today) todayCachedAt = Date.now();
+  if (dayCache.size > DAY_CACHE_MAX) {
+    const oldest = [...dayCache.keys()].sort()[0];
+    if (oldest !== today) dayCache.delete(oldest);
+  }
+  return f;
+}
+
 /** (2026-09-10 전수 점검) 날 파일에 남기는 「센 글 id」 상한 — 하루 2만 건이면 71채널이 다 떠들어도 남는다 */
 const IDS_CAP = 20_000;
 
@@ -415,6 +459,13 @@ export async function recordBuzz(messages: ChannelMessage[]): Promise<void> {
     await mkdir(DIR, { recursive: true });
     for (const [day, f] of files) {
       await writeFile(join(DIR, `${day}.json`), JSON.stringify(f), "utf-8");
+      /*
+       * **쓴 날은 집계 캐시에서 버린다** (2026-11-02). 안 버리면 방금 센 글이 화면에
+       * 안 보인다 — 오늘 것은 30초면 저절로 상하지만, **자정을 걸친 수집은 어제 파일도
+       * 고친다**(`dayOfMsg`). 어제는 「지난 날짜」라 영구 캐시 대상이므로 여기서
+       * 버리지 않으면 그 글은 다음 재시작까지 집계에 영영 안 들어간다.
+       */
+      dropDayCache(day);
     }
   } catch {
     /* 버즈 기록 실패가 수집을 막으면 안 된다 */
@@ -595,7 +646,7 @@ async function windowFiles(windowHours: number): Promise<Map<string, DayFile>> {
   const out = new Map<string, DayFile>();
   for (let i = 0; i <= Math.ceil(windowHours / 24); i += 1) {
     const day = dayStr(new Date(now.getTime() - i * 86400_000));
-    if (!out.has(day)) out.set(day, await readDay(day));
+    if (!out.has(day)) out.set(day, await readDayCached(day));
   }
   return out;
 }
@@ -630,7 +681,7 @@ export async function evaluateBuzz(windowHours = 12): Promise<BuzzResult> {
   const pastDays: DayFile[] = [];
   for (let i = 1; i <= cfg.baselineDays; i += 1) {
     const day = dayStr(new Date(now.getTime() - i * 86400_000));
-    const f = await readDay(day);
+    const f = await readDayCached(day);
     if (Object.keys(f.total).length > 0) pastDays.push(f);
   }
   const baselineDays = pastDays.length;
@@ -863,7 +914,7 @@ export async function buzzBoard(windowHours = 12): Promise<BuzzBoard> {
   const cfg = await getBuzzConfig();
   const pastDays: DayFile[] = [];
   for (let i = 1; i <= cfg.baselineDays; i += 1) {
-    const f = await readDay(dayStr(new Date(now.getTime() - i * 86400_000)));
+    const f = await readDayCached(dayStr(new Date(now.getTime() - i * 86400_000)));
     if (Object.keys(f.total).length > 0) pastDays.push(f);
   }
   const baselineDays = pastDays.length;
@@ -963,7 +1014,7 @@ export async function buzzTerm(term: string): Promise<BuzzTermDetail> {
   const days: { day: string; file: DayFile }[] = [];
   for (let i = 0; i < 14; i += 1) {
     const day = dayStr(new Date(now.getTime() - i * 86400_000));
-    days.push({ day, file: await readDay(day) });
+    days.push({ day, file: await readDayCached(day) });
   }
   const byDay = new Map(days.map((x) => [x.day, x.file]));
 
@@ -1012,7 +1063,7 @@ export async function buzzRaw(term: string): Promise<Record<string, unknown>> {
   const out: Record<string, unknown> = { term, serverNowKst: now.toISOString(), dir: DIR };
   for (let i = 0; i < 2; i += 1) {
     const day = dayStr(new Date(now.getTime() - i * 86400_000));
-    const f = await readDay(day);
+    const f = await readDayCached(day);
     out[day] = {
       total: f.total[term] ?? 0,
       byHour: f.byHour[term] ?? {},
