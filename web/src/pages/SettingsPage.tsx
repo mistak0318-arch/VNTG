@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { FONTS, FONT_SCALES, GLOBAL_KEY, useAppearance, WIDTHS } from "../useAppearance";
+import { setWideStock, useWideStock } from "../useWideStock";
 import { SIDEBAR_HOTKEYS, type Hotkey } from "../hotkey";
 import { AboutPanel } from "../components/AboutPanel";
 import { pushGlobalSnapshot, setPref } from "../prefs";
@@ -74,6 +75,8 @@ const SETTINGS_TABS: { key: SettingsTab; label: string; hint: string }[] = [
 
 export function SettingsPage() {
   const appearance = useAppearance();
+  /* 종목상세 모양 — App 과 **같은 값**을 본다 (어긋나면 `wide` prop 과 화면이 갈린다) */
+  const wide = useWideStock();
   /** 전체 설정 저장/불러오기의 결과 한 줄 */
   const [globalMsg, setGlobalMsg] = useState<string | null>(null);
   const [tab, setTab] = useState<SettingsTab>("display");
@@ -737,6 +740,39 @@ export function SettingsPage() {
           메뉴를 여러 개 열면 생기는 <b>인앱 탭바</b>를 스크롤해도 위에 붙어 따라오게
           합니다 — 긴 화면을 보다가 바로 다른 탭으로 갈아탈 수 있습니다. 「일반」이면
           맨 위에만 있고 같이 밀려 올라갑니다.
+        </div>
+
+        {/*
+          **종목상세 모양** (2026-11-05 — 벤티지: "종목상세 옷구성으로 새구성으로
+          하는거 이걸 설정안에 집어 넣으라는 얘기야").
+
+          사이드바 「도구」 칸에 있던 것을 여기로 옮겼다. 거기 둔 까닭은 읽기·엑셀과
+          같았는데(보다가 답답해서 바꾸는 것), 3주 써 보니 **날마다 쓰는 자리에 날마다
+          안 쓰는 스위치**였고, 무심코 눈린 값이 그 기기에만 남아 「회사에서만 옷 화면」이 됐다.
+        */}
+        <div className="appearance-row">
+          <span className="appearance-label">종목상세 모양</span>
+          <div className="filter-row" style={{ margin: 0 }}>
+            <button
+              className={`filter-btn ${wide ? "active" : ""}`}
+              onClick={() => setWideStock(true)}
+              title="메뉴가 위아래 두 줄로 나뉘고 한 장으로 펼쳐집니다"
+            >
+              새 모양
+            </button>
+            <button
+              className={`filter-btn ${wide ? "" : "active"}`}
+              onClick={() => setWideStock(false)}
+              title="예전 모양 — 바닥에서 올라오는 시트 한 장입니다"
+            >
+              옷 모양
+            </button>
+          </div>
+        </div>
+        <div className="table-note">
+          <b>새 모양</b>이 기본입니다 — 위는 종합·호가·체결강도…, 아래는 차트·일별상세… 두 줄로
+          나뉩니다. ⚠️ 이 값은 <b>기기마다 따로</b> 저장됩니다 — 집과 회사가 다를 수 있습니다.
+          <b>미니창과 ETF 패널 안의 상세</b>는 이 설정과 무관하게 늘 시트로 뚝니다.
         </div>
 
         <div className="appearance-row">

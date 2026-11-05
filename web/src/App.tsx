@@ -79,6 +79,7 @@ import { useScreenLock } from "./useScreenLock";
 import { ScreenLock } from "./components/ScreenLock";
 import { ExcelChrome } from "./components/ExcelChrome";
 import { useAppearance } from "./useAppearance";
+import { useWideStock } from "./useWideStock";
 import { BoardPage } from "./pages/BoardPage";
 import { CornerToggle } from "./components/CornerToggle";
 import { ScrollTopButton } from "./components/ScrollTopButton";
@@ -454,31 +455,25 @@ export default function App() {
    * 새 모양을 마음 놓고 써 본다. 기기마다 다른 값이라 로컬이다(글자 크기와 같은 층).
    */
   /*
-   * **이 모양이 기본이 됐다** (2026-10-14 — 벤티지: "지금 구현한 거 종목상세 기존 거보다
-   * 난 더 좋거든? 넓게 보기 모드 아닌 모드에서도 이 구성으로 보여주게 개편해 줄래?").
+   * **스위치는 설정 안으로, 값은 한 번 새 구성으로** (2026-11-05 — 벤티지: "종목상세
+   * 옛구성으로 새구성으로 하는거 이걸 설정안에 집어 넣으라는 얘기야. 그리고 지금은
+   * 새구성으로 고정시켜 놓고").
    *
-   * 10/12 에 「마음 놓고 써 보라」고 스위치를 달아 두 모양을 같이 뒀다. 이틀 쓰고 판정이
-   * 났으므로 **기본을 뒤집는다** — 아무것도 안 켠 사람이 새 모양을 본다.
+   * 10/12 에 「마음 놓고 써 보라」고 스위치를 달았고, 10/14 에 기본을 새 모양으로 뒤집으며
+   * **옛 모양으로 돌아가는 비상구**로 사이드바 「도구」 칸에 남겨 뒀다. 3주 지나 두 가지가
+   * 드러났다.
    *
-   * 스위치는 남긴다. 「켜는 스위치」가 아니라 **옛 모양으로 돌아가는 비상구**다 — 뭔가
-   * 깨졌을 때 장중에 돌아갈 길이 없으면 안 된다. 명시적으로 끈 사람(`"0"`)만 옛 모양이고,
-   * 한 번도 안 건드린 사람은 새 모양이다.
+   * ① **비상구가 딴 데서 터졌다.** 벤티지: "집에서는 화면 구성 이렇게 잘 나오거든? 근데
+   *    회사에서는 왜 옛날 화면으로 나오는지 모르겠다." 값이 `localStorage` 라 **기기마다
+   *    따로** 남는다 — 회사 기기에서 언젠가 눌린 `"0"` 이 거기에만 박혀 있었다. 기본값이
+   *    새 모양이어도 **명시적으로 끈 기기는 영영 옛 모양**이고, 본인은 누른 기억이 없다.
+   * ② 날마다 쓰는 자리(사이드바)에 **날마다 안 쓰는 스위치**가 나와 있었다.
+   *
+   * 그래서 스위치는 설정 › 화면으로 옮기고(`AppearancePanel`), 여기서는 **한 번만** 옛
+   * 값을 치운다. 아래 `WIDE_RESET_KEY` 가 그 「한 번」을 기억한다 — 안 그러면 설정에서
+   * 옛 모양을 고른 사람이 새로고침할 때마다 되돌려진다.
    */
-  const [wideStock, setWideStock] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem("vntg.wideStock") !== "0";
-    } catch {
-      return true;
-    }
-  });
-  useEffect(() => {
-    document.documentElement.setAttribute("data-widestock", wideStock ? "1" : "0");
-    try {
-      localStorage.setItem("vntg.wideStock", wideStock ? "1" : "0");
-    } catch {
-      /* 사생활 보호 창 — 이번 세션에만 적용되고 만다 */
-    }
-  }, [wideStock]);
+  const wideStock = useWideStock();
   /*
    * ⚠️ **note 는 더 이상 여기 없다** (2026-10-22). 이 플래그는 「동그란 메뉴 단추를
    * 감출 만큼 위장인가」를 뜻하는데, 메모 모드는 껍데기를 걷어내면서 **평소 화면 구성
@@ -1367,18 +1362,11 @@ export default function App() {
               <span className="nav-label">{focus.on ? "종목 연동 켜짐" : "종목 연동"}</span>
             </button>
             {/*
-              종목상세 넓게 보기 (2026-10-12) — 폰에서 종목 화면을 전체 화면 한 장으로.
-              여기 두는 까닭은 읽기·엑셀과 같다: 보다가 답답해서 바꾸는 것이라
-              설정 화면까지 들어갔다 오면 그 순간에 안 쓰게 된다.
+              ⚠️ **종목상세 옛/새 모양 스위치는 설정 › 화면으로 옮겼다** (2026-11-05).
+              여기 있던 까닭은 읽기·엑셀과 같았다(보다가 답답해서 바꾸는 것). 그런데 3주
+              써 보니 **날마다 쓰는 자리에 날마다 안 쓰는 스위치**였고, 무심코 눌린 값이
+              그 기기에만 남아 「회사에서만 옛 화면」이 됐다. 자세한 사정은 위 `wideStock`.
             */}
-            <button
-              className="nav-item foot-btn"
-              onClick={() => setWideStock((v) => !v)}
-              title={wideStock ? "종목상세를 예전 모양(바닥 시트)으로 — 되돌리는 길입니다" : "종목상세를 지금 모양(전체 화면 한 장)으로"}
-            >
-              <span className="nav-icon">🔳</span>
-              <span className="nav-label">{wideStock ? "종목상세 옛 모양으로" : "종목상세 새 모양으로"}</span>
-            </button>
             {/*
               읽기 모드도 **여기서 바로** (2026-10-07). 벤티지: "설정에서 읽기모드도 여기에
               넣어줘 엑셀모드 위쪽에 넣어줘 바로 설정할 수 있게".
