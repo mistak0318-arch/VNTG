@@ -177,28 +177,98 @@ function hantooCanHave(symbol: string): boolean {
   return !symbol.includes(".") || hantooPair(symbol) !== null;
 }
 
+/**
+ * **한 번에 풀 종목 수** (2026-11-07).
+ *
+ * 아래 루프는 **종목당 조회 한 건**을 쓴다(거래소 아홉을 한 번에 물어야 해서 10칸이 찬다).
+ * 머리말에 "40종목이 4번"이라 적혀 있지만 그건 시세 조회 얘기고, 지도를 처음 만드는
+ * 이 루프는 **모르는 종목 수만큼** 조회가 나간다.
+ *
+ * 벤티지 관심종목이 **187종목**이 되면서 그게 터졌다 — 한 번에 187건을 쏘다가 유량에
+ * 막히고, 막힌 것은 아래 `catch` 가 삼켜서 지도가 **빈 채로 저장**됐다. 그러면 `known`
+ * 이 비어 모든 줄이 「어느 거래소에서도 찾지 못했습니다」가 되고, 화면에서는 원화·52주·
+ * 거래량·강도·봉이 전부 빈칸이 된다(실측: 187종목 중 187종목이 야후).
+ *
+ * 그래서 **한 번에 이만큼만** 풀고 나머지는 다음 호출로 미룬다. 몇 번 새로고침하면
+ * 지도가 다 채워지고, 한 번 채워진 뒤로는 이 루프가 아예 안 돈다.
+ */
+const RESOLVE_PER_CALL = 12;
+
 async function resolveExcd(symbols: string[]): Promise<void> {
   const map = await loadExcd();
   const unknown = symbols.filter((s) => !map[s] && hantooCanHave(s));
   if (unknown.length === 0) return;
 
-  // 거래소가 아홉이라 한 번에 한 종목씩 (10칸 한도)
-  for (let i = 0; i < unknown.length; i += 1) {
-    const batch = unknown.slice(i, i + 1);
-    const pairs = batch.flatMap((symbol) => EXCHANGES.map((excd) => ({ excd, symbol })));
+  const todo = unknown.slice(0, RESOLVE_PER_CALL);
+  let found = 0;
+  let failed = 0;
+  let lastWhy = "";
+
+  /*
+   * **미국 셋부터 세 종목씩** (2026-11-07).
+   *
+   * 아홉 거래소를 한꺼번에 물으면 10칸이 차서 **한 건에 한 종목**뿐이다. 그런데 이 앱이
+   * 보는 종목은 대부분 미국(NAS·NYS·AMS)이라, 그 셋만 먼저 물으면 **한 건에 세 종목**이다.
+   * 거기서 안 잡힌 것만 나머지 여섯(일본·홍콩·중국·베트남)으로 넘긴다.
+   *
+   * 같은 조회 수로 세 배를 푼다 — 187종목이 쌓인 지금은 그 차이가 크다.
+   */
+  const US = ["NAS", "NYS", "AMS"] as const;
+  const REST = EXCHANGES.filter((e) => !US.includes(e as (typeof US)[number]));
+
+  const ask = async (pairs: { excd: string; symbol: string }[]): Promise<boolean> => {
     try {
       const rows = await multRaw(pairs);
       for (const r of rows) {
         const sym = String(r.symb ?? "").trim();
         const excd = String(r.excd ?? "").trim();
         // 값이 실제로 돌아온 것만 인정한다 — 빈 껍데기가 오기도 한다
-        if (sym && excd && num(r.last) !== null && !map[sym]) map[sym] = excd;
+        if (sym && excd && num(r.last) !== null && !map[sym]) {
+          map[sym] = excd;
+          found += 1;
+        }
       }
-    } catch {
-      /* 못 찾으면 다음에 다시 시도한다 */
+      return true;
+    } catch (e) {
+      failed += 1;
+      lastWhy = e instanceof Error ? e.message : String(e);
+      return false;
     }
+  };
+
+  /* ① 미국 셋 — 세 종목씩 (3×3 = 9칸) */
+  let stopped = false;
+  for (let i = 0; i < todo.length && !stopped; i += 3) {
+    const part = todo.slice(i, i + 3);
+    const pairs = part.flatMap((symbol) => US.map((excd) => ({ excd, symbol })));
+    /*
+     * ⚠️ **막히면 거기서 그만둔다.** 유량에 걸린 뒤 남은 것을 계속 쏘면 전부 실패하고
+     * 그동안 화면이 기다린다. 다음 호출에 이어서 푼다 — 지도는 쌓이는 값이라 조급할 게 없다.
+     */
+    if (!(await ask(pairs))) stopped = true;
   }
+
+  /* ② 미국에서 못 잡힌 것만 나머지 여섯으로 — 한 종목씩 (6칸) */
+  for (const symbol of todo) {
+    if (stopped) break;
+    if (map[symbol]) continue;
+    if (!(await ask(REST.map((excd) => ({ excd, symbol }))))) stopped = true;
+  }
+
   await saveExcd();
+
+  /*
+   * 예전엔 이 루프의 실패를 **통째로 삼켰다.** 지도가 왜 안 채워지는지 로그에 한 줄도
+   * 안 남아, 화면이 빈 칸만 보여 주는데 까닭을 찾을 길이 없었다.
+   */
+  const left = unknown.length - todo.length;
+  if (found > 0 || failed > 0) {
+    console.log(
+      `[usExcd] 거래소 찾기 — 새로 ${found}개` +
+        (failed > 0 ? ` · 실패 ${failed}건 (${lastWhy})` : "") +
+        (left > 0 ? ` · 남은 ${left}종목은 다음에` : ""),
+    );
+  }
 }
 
 /**
