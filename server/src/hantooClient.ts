@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { recordApiCall } from "./apiUsage.js";
@@ -106,6 +106,37 @@ async function issueToken(): Promise<string> {
   await writeFile(TOKEN_FILE, JSON.stringify(state), "utf-8");
   console.log(`[hantoo] 접근토큰 발급 — ${new Date(state.expiresAt).toLocaleString("ko-KR")} 까지`);
   return state.token;
+}
+
+/**
+ * **죽은 토큰을 버린다** (2026-11-07 — 벤티지: "한투꺼가 지금 안된다는거야?").
+ *
+ * 로그가 하루 종일 이걸 말하고 있었다:
+ *
+ *   [hantoo] 미국 관심종목 재시도 2회 후에도 실패: 500 기간이 만료된 token 입니다.
+ *
+ * 그런데 **영원히 낫지 않았다.** `getToken` 은 `expiresAt` 만 보고 「아직 유효」라 판단해
+ * 같은 토큰을 돌려주고, 재시도 루프는 500 을 다시 부르기는 해도 **토큰을 버리지 않아서**
+ * 죽은 토큰으로 세 번 시도하고 끝났다. 한 번 죽으면 재시작 전까지 한투 전체가 멎는다 —
+ * 원화·52주·거래량·강도·봉이 통째로 비고, 종목상세의 한투 블록도 안 뜬다.
+ *
+ * ## 왜 만료 전에 죽나
+ *
+ * 한투는 **같은 앱키로 토큰을 새로 발급하면 이전 것을 무효화**한다. 그래서 다른 곳(개발
+ * PC 의 도구 등)에서 같은 키로 한 번 받으면, 미니PC 가 들고 있던 토큰이 `expiresAt` 이
+ * 한참 남았는데도 그 자리에서 죽는다. 시계로는 알 수 없고 **써 봐야** 안다.
+ */
+function dropToken(): void {
+  state = null;
+  issuing = null;
+  /* 파일도 치운다 — 안 그러면 다시 뜰 때 죽은 토큰을 또 읽는다 */
+  void unlink(TOKEN_FILE).catch(() => undefined);
+  console.warn("[hantoo] 토큰이 거부됐다 — 버리고 새로 받는다");
+}
+
+/** 한투가 「토큰이 틀렸다」고 말하는 꼴 — 코드가 아니라 말로 온다(500 + msg) */
+function tokenRejected(e: unknown): boolean {
+  return e instanceof HantooError && /token|토큰/i.test(e.message);
 }
 
 async function getToken(): Promise<string> {
@@ -298,7 +329,6 @@ async function hantooGetRaw<T = Record<string, unknown>>(
   const c = creds();
   if (!c) throw new HantooError("NO_KEY", "한국투자증권 API 키가 설정되지 않았습니다");
 
-  const token = await getToken();
   const url = `${BASE}${path}?${new URLSearchParams(params).toString()}`;
 
   /** 유량에 걸린 것. 쉬면 풀린다 */
@@ -307,6 +337,19 @@ async function hantooGetRaw<T = Record<string, unknown>>(
 
   const once = async (): Promise<T & { rt_cd?: string; msg1?: string; msg_cd?: string }> => {
     await slot();
+
+    /*
+     * ⚠️ **토큰은 시도할 때마다 받는다** (2026-11-07).
+     *
+     * 예전엔 이 함수 **바깥**에서 한 번만 받았다. 그러면 토큰이 거부돼 `dropToken()` 으로
+     * 버려도, 재시도는 **이미 손에 쥔 죽은 토큰**을 그대로 다시 보낸다 — 세 번 다 같은
+     * 값으로 두드리고 포기했다. 실측에서 「토큰이 거부됐다」가 세 번 찍히고도 끝내 실패한
+     * 것이 그 때문이다.
+     *
+     * 안으로 들이면 버린 다음 시도가 새 토큰을 발급해서 돈다. `getToken` 은 살아 있는
+     * 토큰이면 그대로 돌려주므로(메모리 캐시) 호출 비용은 없다.
+     */
+    const token = await getToken();
 
     let res: Response;
     try {
@@ -383,6 +426,12 @@ async function hantooGetRaw<T = Record<string, unknown>>(
     try {
       return await once();
     } catch (err) {
+      /*
+       * **토큰이 거부됐으면 버리고 다시 받는다.** 이 한 줄이 없어서, 죽은 토큰으로
+       * 세 번 시도하고 포기하는 일이 재시작 전까지 되풀이됐다. 버린 뒤의 재시도는
+       * `getToken` 이 새 토큰을 발급해서 돈다.
+       */
+      if (tokenRejected(err)) dropToken();
       if (attempt >= 2 || !retryable(err)) {
         if (attempt > 0 && err instanceof HantooError) {
           console.error(`[hantoo] ${feature} 재시도 ${attempt}회 후에도 실패: ${err.code} ${err.message}`);
