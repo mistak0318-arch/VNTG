@@ -42,8 +42,18 @@ export interface DayCandle {
   h: number;
   l: number;
   c: number;
-  /** 전일 종가 — 봉을 어디에 놓을지(위/아래)와 색을 정한다 */
+  /** 전일 종가 — 봉을 어디에 놓을지(위/아래)와 색을 정한다. **없으면 시가로 메운다** */
   pc: number;
+  /**
+   * 키움이 준 **진짜 기준가**(`base_pric`). 메운 적이 없을 때만 있다.
+   *
+   * ⚠️ 위 `pc` 로 등락률을 세면 안 된다 — 기준가가 0 으로 오는 줄은 시가로 메우므로
+   * 그런 줄은 「시가 대비」가 되어 **조용히 틀린다.** 봉을 그리는 데는 메운 값도 쓸모가
+   * 있지만(어디에 놓을지), 등락률은 기준가가 진짜일 때만 셀 수 있다.
+   *
+   * 권리락 날에는 이 값이 어제 종가와 다르다는 점도 그대로다(2026-09-17 퓨쳐켐).
+   */
+  pcReal?: number;
 }
 
 /**
@@ -108,7 +118,8 @@ async function candles(
       const pc = abs(r.base_pric);
       /* 하나라도 0 이면 봉을 못 그린다 — 안 그리는 편이 거짓 그림보다 낫다.
          NXT 단독은 그날 거기서 안 돈 종목이 0 으로 오는데, 그 줄은 봉이 안 나오는 게 맞다 */
-      if (code && o > 0 && h > 0 && l > 0 && c > 0) candleOf.set(ck(code), { at: Date.now(), v: { o, h, l, c, pc: pc > 0 ? pc : o } });
+      if (code && o > 0 && h > 0 && l > 0 && c > 0)
+        candleOf.set(ck(code), { at: Date.now(), v: { o, h, l, c, pc: pc > 0 ? pc : o, ...(pc > 0 ? { pcReal: pc } : {}) } });
     }
   }
   const out = new Map<string, DayCandle>();
@@ -775,8 +786,52 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
             /* 거래대금도 스냅샷의 어림값으로 — 이 순위엔 거래량이 없어 `extras` 가 못 낸다 (2026-09-09) */
             tv: s.tradeValue ?? null,
             tvEst: true,
+            /* 아래에서 채운다 — 미리 자리를 둬야 타입이 선다 */
+            cd: null as DayCandle | null,
           };
         });
+
+      /*
+       * **봉 + 애프터** (2026-11-07 — 벤티지: "시세분석 메뉴에서 시가총액으로 가면 봉이
+       * 안보이더라 옵션 켜도 확인해주고 … 거래대금 상위에서는 시간외랑 이런거 잘 유지
+       * 되는데 시가총액이나 다른 메뉴에서는 정규장 종가 기준으로밖에 표현이 안되네").
+       *
+       * 둘 다 **같은 구멍**이었다. 키움 순위 조회(`/:key`)에는 봉 붙이기가 있는데, 이
+       * 순위는 키움에 없어서 **우리가 스냅샷으로 세운 것**이라 그 장치가 안 붙어 있었다.
+       *
+       * 그리고 스냅샷의 `price`·`changeRate` 는 **정규장 기준**이다(업종 구성종목 TR 로
+       * 만든다). 그래서 20:00 애프터가 끝나도 이 표만 15:30 값에 멈춰 있었다.
+       *
+       * `ka10095` 가 주는 봉의 종가(`c`)가 **통합 최신가**다 — 봉을 받아 오는 김에 그
+       * 값으로 현재가·등락률까지 맞춘다. **조회는 안 는다.**
+       *
+       * ⚠️ `/:key` 는 반대로 한다(봉의 종가를 칸에 맞춘다). 거기서는 칸이 거래소 단추를
+       * 따라 KRX 로 덮이므로 칸이 기준이고, 여기서는 칸이 스냅샷(정규장)이라 **봉이 더
+       * 최신**이다. 한 줄에 한 기준이라는 규칙은 같고, 어느 쪽이 기준이냐만 다르다.
+       */
+      if (String(req.query.candle ?? "") === "1" && rows.length > 0) {
+        /* 봉이 표를 붙잡지 않게 1.2초만 기다린다 — `/:key` 와 같은 처리 */
+        const codes = rows.slice(0, 100).map((r) => r.code);
+        const job = candles(client, codes, "3").catch(() => null);
+        const cd = await Promise.race([job, new Promise<null>((r) => setTimeout(() => r(null), 1200))]);
+        if (cd) {
+          for (const r of rows) {
+            const c = cd.get(r.code);
+            if (!c) continue;
+            r.cd = c;
+            if (c.c > 0) {
+              r.cur_prc = Math.abs(c.c);
+              /*
+               * **진짜 기준가일 때만** 다시 센다(`pcReal`). `pc` 는 기준가가 0 으로 온 줄을
+               * 시가로 메운 값이라, 그걸로 세면 「시가 대비」가 되어 조용히 틀린다.
+               * 없으면 스냅샷 등락률을 그대로 둔다 — 가격만 최신이고 등락률은 정규장이라
+               * 둘이 한 박자 어긋나지만, **틀린 숫자를 지어내는 것보다 낫다.**
+               */
+              if (c.pcReal && c.pcReal > 0) r.flu_rt = ((Math.abs(c.c) - c.pcReal) / c.pcReal) * 100;
+            }
+          }
+        }
+      }
 
       res.json({
         spec: {
@@ -790,7 +845,9 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
           exchange: false,
           note:
             "시황 스냅샷에서 세운 순위입니다 — 키움 순위 조회에는 시가총액 순위가 없습니다. " +
-            "스냅샷은 업종 구성종목으로 만들어서 ETF·리츠와 일부 업종 종목이 빠집니다.",
+            "스냅샷은 업종 구성종목으로 만들어서 ETF·리츠와 일부 업종 종목이 빠집니다. " +
+            "⚠️ 현재가·등락률은 스냅샷 기준이라 **정규장 값**인데, 봉을 켜면 그때 받는 통합 시세로 " +
+            "애프터까지 반영됩니다 — 봉을 끄면 다시 정규장 값입니다(조회를 안 늘리려고 봉에 얹었습니다).",
         },
         market,
         exchange: "3",
