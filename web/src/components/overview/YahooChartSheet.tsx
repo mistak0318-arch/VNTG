@@ -14,6 +14,7 @@ import { CandleChart } from "../CandleChart";
 import { IntradayFlowChart } from "./IntradayFlowChart";
 import { IndexAnalysis, type DailyPt } from "./IndexAnalysis";
 import { UsRichPanel, type UsRichTab } from "./UsRichPanel";
+import { UsPeriodReturns } from "./UsPeriodReturns";
 
 /**
  * 지수·원자재 차트.
@@ -884,6 +885,12 @@ export function YahooChartSheet({
             */}
             <UsEtfHoldingsBlock symbol={target.symbol} onSelectSymbol={onSelectSymbol} />
 
+            {/*
+              **기간 상승률** (2026-11-07) — 국내 상세와 같은 모양. 오늘 하루 등락만으로는
+              「흘러내리다 하루 튄 것」과 「계단으로 오르는 중」이 똑같이 생긴다.
+              ⚠️ 한투 해외 일봉이 100건까지라 120일 칸은 없다(네 칸). 자세한 사정은 그 파일.
+            */}
+            {usStock && <UsPeriodReturns symbol={target.symbol} />}
             {detail && !detail.error && <UsFigures d={detail} />}
             {/*
               키움 세부 — 한투 상세(위)에 **얹는** 값이다. 업종·프리장·52주 날짜·10호가는
