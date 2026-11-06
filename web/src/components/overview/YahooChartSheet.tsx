@@ -15,6 +15,7 @@ import { IntradayFlowChart } from "./IntradayFlowChart";
 import { IndexAnalysis, type DailyPt } from "./IndexAnalysis";
 import { UsRichPanel, type UsRichTab } from "./UsRichPanel";
 import { UsPeriodReturns } from "./UsPeriodReturns";
+import { UsDailyTab } from "./UsDailyTab";
 
 /**
  * 지수·원자재 차트.
@@ -310,7 +311,12 @@ export function YahooChartSheet({
    * 해외 개별종목 서브탭 (2026-09-07 밤) — 벤티지: "해외주식 눌렀을 때 나오는 정보가 굉장히 적어."
    * 요약(있던 것) · 재무·실적 · 밸류·의견 · 수급 대체 · 뉴스 · 업종·동종 · 국내 연동.
    */
-  const [usTab, setUsTab] = useState<"overview" | UsRichTab>("overview");
+  /*
+   * 해외 상세의 탭. `UsRichTab`(재무·밸류·수급·뉴스·업종·국내연동)에 **이 시트가 직접
+   * 그리는 셋**을 더한다 — 호가·체결, 일별상세, 담은 ETF. 국내 상세처럼 위(시세)와
+   * 아래(깊이 보기) 두 줄로 나눠 그린다.
+   */
+  const [usTab, setUsTab] = useState<"overview" | "quote" | "daily" | "etf" | UsRichTab>("overview");
   const [anaDaily, setAnaDaily] = useState<DailyPt[] | null>(null);
   const [anaBench, setAnaBench] = useState<{ name: string; daily: DailyPt[] } | null>(null);
   const benchSym = target.symbol === "^GSPC" ? "^NDX" : "^GSPC";
@@ -682,26 +688,66 @@ export function YahooChartSheet({
           </div>
         )}
 
+        {/*
+          **위아래 두 줄** (2026-11-07 — 벤티지: "해외종목 종목상세 화면도 국내처럼
+          다양하게 위아래로 메뉴해서 꾸미라니까? 모든 메뉴를 도입하되 못 가져오는건
+          그냥 표시안하면되잖아").
+
+          국내 상세의 문법을 그대로 따른다 — **위는 시세**(종합·호가·체결강도…),
+          **아래는 깊이 보기**(차트·일별상세·뉴스·재무…). 여태는 일곱 개가 한 줄에
+          섮여 「지금 얼마」와 「어떤 회사인가」가 같은 무게로 나란히 있었다.
+
+          ⚠️ **못 가져오는 것은 칸을 안 만든다.** 국내에는 있지만 해외엔 없는 것이
+          여럿이다 — 거래원·프로그램·투자자 수급·신용·체결금액대·외국인·공매도·대차·
+          종목토론은 **국내 시장의 개념이거나 주는 곳이 없다.** 빈 탭을 두면 누를 때마다
+          「고장인가」를 묻게 된다.
+        */}
         {usStock && (
-          <nav className="detail-tabs idx-sub us-sub">
-            {(
-              [
-                ["overview", "요약"],
-                ["fin", "재무·실적"],
-                ["value", "밸류·의견"],
-                ["flow", "수급 대체"],
-                ["news", "뉴스"],
-                ["sector", "업종·동종"],
-                ["kr", "국내 연동"],
-              ] as const
-            ).map(([k, label]) => (
-              <button key={k} className={`detail-tab${usTab === k ? " active" : ""}`} onClick={() => setUsTab(k)}>
-                {label}
-              </button>
-            ))}
-          </nav>
+          <>
+            <nav className="detail-tabs idx-sub us-sub">
+              {(
+                [
+                  ["overview", "종합"],
+                  ["quote", "호가·체결"],
+                ] as const
+              ).map(([k, label]) => (
+                <button key={k} className={`detail-tab${usTab === k ? " active" : ""}`} onClick={() => setUsTab(k)}>
+                  {label}
+                </button>
+              ))}
+            </nav>
+            <nav className="detail-tabs idx-sub us-sub us-sub2">
+              {(
+                [
+                  ["daily", "일별상세"],
+                  ["news", "뉴스"],
+                  ["value", "목표주가·의견"],
+                  ["fin", "기업·재무"],
+                  ["sector", "업종·동종"],
+                  ["etf", "담은 ETF"],
+                  ["flow", "수급 대체"],
+                  ["kr", "국내 연동"],
+                ] as const
+              ).map(([k, label]) => (
+                <button key={k} className={`detail-tab${usTab === k ? " active" : ""}`} onClick={() => setUsTab(k)}>
+                  {label}
+                </button>
+              ))}
+            </nav>
+          </>
         )}
-        {usStock && usTab !== "overview" && <UsRichPanel symbol={target.symbol} tab={usTab} />}
+        {/*
+          아래 줄 탭들. **이 시트가 직접 그리는 셋**(호가·체결 / 일별상세 / 담은 ETF)과
+          `UsRichPanel` 이 맡는 나머지로 갈린다.
+        */}
+        {usStock && usTab === "quote" && <UsKiwoomBlock symbol={target.symbol} only="book" />}
+        {usStock && usTab === "daily" && <UsDailyTab symbol={target.symbol} />}
+        {usStock && usTab === "etf" && (
+          <UsEtfHoldingsBlock symbol={target.symbol} onSelectSymbol={onSelectSymbol} />
+        )}
+        {usStock && (["fin", "value", "flow", "news", "sector", "kr"] as const).includes(usTab as UsRichTab) && (
+          <UsRichPanel symbol={target.symbol} tab={usTab as UsRichTab} />
+        )}
 
         {!usStock && (
           <nav className="detail-tabs idx-sub">
@@ -883,20 +929,27 @@ export function YahooChartSheet({
               「소프트웨어 +6%」만 봐서는 무엇이 밀어 올렸는지 모른다. 지수·원자재·금리는
               구성종목이라는 게 없으므로 조용히 안 뜬다.
             */}
-            <UsEtfHoldingsBlock symbol={target.symbol} onSelectSymbol={onSelectSymbol} />
+            {/*
+              ETF 구성종목은 **해외 종목이면 「담은 ETF」 탭으로** 옮겼다 (2026-11-07).
+              지수·원자재(ETF 자신)를 열었을 때는 여기가 본문이라 그대로 둔다.
+            */}
+            {!usStock && <UsEtfHoldingsBlock symbol={target.symbol} onSelectSymbol={onSelectSymbol} />}
 
             {/*
-              **기간 상승률** (2026-11-07) — 국내 상세와 같은 모양. 오늘 하루 등락만으로는
-              「흘러내리다 하루 튄 것」과 「계단으로 오르는 중」이 똑같이 생긴다.
-              ⚠️ 한투 해외 일봉이 100건까지라 120일 칸은 없다(네 칸). 자세한 사정은 그 파일.
+              **국내 종합과 같은 차례** (2026-11-07 — 벤티지: "종합부분도 비슷한 구성으로
+              맞춰서 보여줘 차트도").
+
+              국내는 격자(저·시·고·거래대금…) → 밸류 띠 → 기간 상승률 → 당일 흐름 순이다.
+              여기도 같게 맞춘다 — 숫자를 먼저 보고 그림으로 확인하는 순서다. 차트는 위에
+              이미 그려져 있으므로(이 블록 머리), 그 아래로 숫자들이 온다.
             */}
-            {usStock && <UsPeriodReturns symbol={target.symbol} />}
             {detail && !detail.error && <UsFigures d={detail} />}
+            {usStock && <UsPeriodReturns symbol={target.symbol} />}
             {/*
-              키움 세부 — 한투 상세(위)에 **얹는** 값이다. 업종·프리장·52주 날짜·10호가는
-              키움만 준다. 미국(ND/NY/NA) 종목이 아니면 블록이 통째로 안 뜬다.
+              키움 세부 — 한투 상세(위)에 **얹는** 값이다. 업종·프리장·52주 날짜는 키움만 준다.
+              10호가는 「호가·체결」 탭으로 옮겼다. 미국(ND/NY/NA) 종목이 아니면 통째로 안 뜬다.
             */}
-            {usStock && <UsKiwoomBlock symbol={target.symbol} />}
+            {usStock && <UsKiwoomBlock symbol={target.symbol} only="cards" />}
 
             {/*
               지수·원자재·금리 숫자판 (2026-08-27 — 「지수나 원자재는 개별종목처럼 안 나온다」).
@@ -1356,7 +1409,14 @@ function hms(s: string): string {
  * 미국(ND/NY/NA) 종목이 아니거나 조회가 실패하면 블록이 통째로 안 뜬다 —
  * 없는 것을 있는 척하지 않는다.
  */
-function UsKiwoomBlock({ symbol }: { symbol: string }) {
+/**
+ * `only` — 이 블록을 **쪼개 쓰는 문** (2026-11-07).
+ *
+ * 한 번의 조회(`usKiwoomDetail`)로 요약 카드와 10호가가 같이 온다. 국내 상세처럼 호가를
+ * 제 탭으로 보내면서도 **조회를 두 번 하지 않으려고**, 같은 컴포넌트를 두 자리에서
+ * 다르게 그린다 — 종합에는 카드만, 「호가·체결」 탭에는 호가만.
+ */
+function UsKiwoomBlock({ symbol, only }: { symbol: string; only?: "cards" | "book" }) {
   const [k, setK] = useState<UsKiwoomDetailData | null>(null);
 
   useEffect(() => {
@@ -1436,9 +1496,9 @@ function UsKiwoomBlock({ symbol }: { symbol: string }) {
 
   return (
     <>
-      <UsCards items={items} />
+      {only !== "book" && <UsCards items={items} />}
 
-      {b && b.asks.some((r) => r.price !== null) && (
+      {only !== "cards" && b && b.asks.some((r) => r.price !== null) && (
         <div className="ukb-book">
           <div className="ukb-head">
             <span>10호가</span>

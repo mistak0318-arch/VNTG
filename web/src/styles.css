@@ -18970,6 +18970,17 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 /* ── 해외 풍부한 상세 (2026-09-07 밤) ────────────────────────────────── */
 .us-sub { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .us-sub .detail-tab { flex: 0 0 auto; }
+/*
+ * **아래 줄** (2026-11-07) — 국내 상세처럼 위는 시세, 아래는 깊이 보기로 나눴다.
+ * 두 줄이 맞붙으면 한 덩어리로 읽혀 나눈 뜻이 사라지므로, 선 하나로 층을 가르고
+ * 글자를 한 단계 줄인다. 위가 「지금 얼마」, 아래가 「어떤 회사인가」다.
+ */
+.us-sub2 {
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
+  padding-top: 2px;
+}
+.us-sub2 .detail-tab { font-size: 0.8rem; }
 .usr { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.4rem; }
 .usr-h { margin: 0.4rem 0 0.1rem; font-size: 0.92rem; display: flex; align-items: baseline; gap: 0.5rem; }
 .usr-h i { font-style: normal; font-size: 0.72rem; color: var(--muted); font-weight: 400; }
