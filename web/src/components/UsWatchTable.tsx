@@ -61,10 +61,25 @@ export function sideNameOf(stocks: UsQuoteRow[]): string {
  * 정렬 접근자는 **행에 실린 본 시세**만 본다. 3초 빠른 시세까지 기준으로 삼으면
  * 훅이 처음 등록한 접근자에 옛 값이 갇히고, 본 시세도 30초~1분마다 갱신되니 충분하다.
  */
-type UsColKey = "price" | "rate" | "won" | "w52" | "vol" | "power" | "added" | "ret";
+type UsColKey = "price" | "rate" | "cd" | "won" | "w52" | "vol" | "power" | "added" | "ret";
 const US_COLS: { key: UsColKey; title?: string; accessor: (r: UsQuoteRow) => number }[] = [
   { key: "price", accessor: (r) => r.price ?? -999 },
   { key: "rate", accessor: (r) => r.changeRate ?? -999 },
+  /*
+   * **봉** (2026-11-07 — 벤티지: "얘는 왜 옆에 봉 이런거 또 안나오냐").
+   *
+   * 국내 시세분석과 같은 자리(등락률 바로 뒤)에 같은 그림(`MiniCandle`)을 둔다.
+   * 재료는 **이미 오고 있었다** — 한투가 `open`·`high`·`low`·`last`를 주므로 조회가
+   * 한 건도 안 늨다. 전일 종가(`base`)만 실어 보내면 된다.
+   *
+   * 정렬은 **일중 변동폭**(고−저) — 「오늘 많이 흔들린 것」이 위로. 국내 표와 같다.
+   */
+  {
+    key: "cd",
+    title: "오늘 봉 — 세로는 고가~저가, 색은 시가 대비",
+    accessor: (r) =>
+      r.high != null && r.low != null && r.low > 0 ? ((r.high - r.low) / r.low) * 100 : -999,
+  },
   {
     key: "won",
     title: "원화 환산가 — 한국투자증권이 계산해 준다",
@@ -230,6 +245,7 @@ export function UsWatchTable({
         등락률 <span className="uw-day-h">({sideName})</span>
       </>
     ),
+    cd: "봉",
     won: "원화",
     w52: "52주",
     vol: "거래량",
@@ -485,6 +501,31 @@ export function UsWatchTable({
                           <span className="uw-cd" title="당일 봉 — 세로는 오늘 고가~저가, 색은 시가 대비, 점선은 전일 종가">
                             <MiniCandle d={cd} />
                           </span>
+                        </td>
+                      );
+                    }
+                    /*
+                      봉 — 국내 시세분석과 **같은 그림**이다. 종가는 그 줄의 현재가 칸과
+                      맞춘다(실시간이 얹혔으면 그 값): 한 줄에 한 기준이라는 규칙이 여기도 같다.
+                      넷 중 하나라도 없으면 안 그린다 — 거짓 그림보다 빈칸이 낫다.
+                    */
+                    case "cd": {
+                      const o = s.open, h = s.high, l = s.low, cl = s.price;
+                      const ok = o != null && h != null && l != null && cl != null && o > 0 && h > 0 && l > 0 && cl > 0;
+                      return (
+                        <td key={c.key} className="dcd-cell">
+                          {ok ? (
+                            <MiniCandle
+                              d={{
+                                o,
+                                h: Math.max(h, cl),
+                                l: Math.min(l, cl),
+                                c: cl,
+                                /* 전일 종가가 없으면 시가를 기준선으로 — 색이 「시가 대비」가 된다 */
+                                pc: s.base != null && s.base > 0 ? s.base : o,
+                              }}
+                            />
+                          ) : null}
                         </td>
                       );
                     }

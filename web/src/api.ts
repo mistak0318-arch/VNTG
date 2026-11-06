@@ -6121,6 +6121,8 @@ export interface UsQuoteRow {
   low52: number | null;
   /** 체결강도 — 100 보다 크면 사는 쪽이 세다 */
   power: number | null;
+  /** 전일 종가 — 봉의 기준선 */
+  base: number | null;
   open: number | null;
   high: number | null;
   low: number | null;

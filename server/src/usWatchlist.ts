@@ -337,6 +337,8 @@ export interface UsQuoteRow {
   low52: number | null;
   /** 체결강도 — 100 보다 크면 사는 쪽이 세다 */
   power: number | null;
+  /** 전일 종가 — 봉의 기준선 */
+  base: number | null;
   /** 시가·고가·저가 */
   open: number | null;
   high: number | null;
@@ -580,6 +582,7 @@ function toExtra(h: {
   high52: number | null;
   low52: number | null;
   power: number | null;
+  base: number | null;
   open: number | null;
   high: number | null;
   low: number | null;
@@ -599,6 +602,12 @@ function toExtra(h: {
     high52: h.high52,
     low52: h.low52,
     power: h.power,
+    /*
+     * **전일 종가** (2026-11-07) — 봉을 그리려면 기준선이 있어야 한다. `changeRate` 로
+     * 역산할 수도 있지만 등락률은 소수 둘째 자리라 되돌리면 값이 조금 어긋난다.
+     * 한투가 `base` 로 그대로 주므로 지어내지 않고 실어 보낸다.
+     */
+    base: h.base,
     open: h.open,
     high: h.high,
     low: h.low,
@@ -617,6 +626,7 @@ const EMPTY_EXTRA = {
   high52: null,
   low52: null,
   power: null,
+  base: null,
   open: null,
   high: null,
   low: null,
@@ -1003,6 +1013,7 @@ export function stubQuoteRow(symbol: string, name: string, addedPrice: number | 
     marketState: null,
     quotedAt: null,
     error: null,
+    base: null,
     wonPrice: null,
     volumeVsPrev: null,
     pos52: null,
