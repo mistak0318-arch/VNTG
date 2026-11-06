@@ -6151,6 +6151,8 @@ export interface UsWatchResult {
   quotedAt: number | null;
   /** 우리가 받아온 시각(ms) */
   fetchedAt: number;
+  /** 어느 출처로 채웠나 — 원화·52주·강도·봉은 한투만 준다 (2026-11-07 진단) */
+  source?: { hantoo: number; yahoo: number; total: number; error: string | null };
 }
 
 

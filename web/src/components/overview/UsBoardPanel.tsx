@@ -675,6 +675,8 @@ const GROUP_KEY = "vntg.usboard.group";
 
 function UsBoardWatch({ onOpen }: { onOpen: (symbol: string, label: string) => void }) {
   const [groups, setGroups] = useState<UsWatchGroup[]>([]);
+  /* 원화·52주·강도·봉이 비는 까닭을 화면이 직접 말하게 한다 (2026-11-07) */
+  const [source, setSource] = useState<{ hantoo: number; yahoo: number; total: number; error: string | null } | null>(null);
   const [openId, setOpenId] = useState<string>(() => localStorage.getItem(GROUP_KEY) ?? "");
   const [editing, setEditing] = useState(false);
   const [query, setQuery] = useState("");
@@ -688,6 +690,7 @@ function UsBoardWatch({ onOpen }: { onOpen: (symbol: string, label: string) => v
     try {
       const r = await api.usWatch();
       setGroups(r.groups);
+      setSource(r.source ?? null);
       setAt(Date.now());
       setError(null);
     } catch (e) {
@@ -926,6 +929,26 @@ function UsBoardWatch({ onOpen }: { onOpen: (symbol: string, label: string) => v
           지금 도는 세션 하나만 이름으로 적고, 나머지는 굵게 쓰지 않는다.
         */}
         <div className="table-note">
+          {source && source.total > 0 && (
+            <>
+              {/*
+                **왜 빈 칸이 생기는지 화면이 말한다** (2026-11-07 — 벤티지: "얜 왜 옆에 봉
+                이런거 또 안나오냐" → "아무것도 안바꼈는데?").
+
+                원화·52주·거래량·강도·봉은 **한투만 준다.** 야후로 메운 줄은 그 칸들이
+                빌 수밖에 없는데, 화면에는 그냥 「-」만 떠서 고장인지 원래 없는 값인지
+                구분이 안 됐다. 서버 쪽 실패도 `catch` 로 삼키고 있어 로그에도 안 남았다.
+              */}
+              {source.yahoo > 0 ? (
+                <>
+                  ⚠️ <b>{source.total}종목 중 {source.yahoo}종목이 야후</b>로 채워졌습니다 —
+                  원화·52주·거래량·강도·봉은 <b>한국투자증권만 주는 값</b>이라 그 줄은 빕니다.
+                  {source.error && <> (한투 실패: {source.error})</>}
+                  <br />
+                </>
+              ) : null}
+            </>
+          )}
           <b>관심종목(해외)</b> 와 같은 목록입니다 — 여기서 넣고 빼면 거기서도 바뀝니다.
           종목을 누르면 <b>상세</b>가 열립니다.
           등락률은 <b>전일 종가 대비</b>고, 괄호는 지금 도는{" "}

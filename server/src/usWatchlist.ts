@@ -571,6 +571,19 @@ export interface UsWatchResult {
    */
   quotedAt: number | null;
   fetchedAt: number;
+  /**
+   * **어느 출처로 채웠나** (2026-11-07 — 벤티지: "얜 왜 옆에 봉 이런거 또 안나오냐" +
+   * "아무것도 안바꼈는데?").
+   *
+   * 원화·52주·거래량·강도·봉은 **한투만 준다.** 그 줄들이 비었다는 건 한투가 아니라
+   * 야후로 채워졌다는 뜻인데, 아래 `hantooUsQuotes` 의 실패를 `catch(() => new Map())`
+   * 로 **통째로 삼키고 있어서** 왜 그런지 알 길이 없었다. 로컬에서는 5/5 다 오는데
+   * 미니PC 화면만 비어 있었고, 흔적이 없으니 추측밖에 할 수 없었다.
+   *
+   * 그래서 셈을 실어 보낸다 — 화면이 「한투 n · 야후 n」을 적는다. 다음 새로고침 한 번에
+   * 「한투가 통째로 실패」인지 「몇 줄만 못 찾음」인지 갈린다.
+   */
+  source: { hantoo: number; yahoo: number; total: number; error: string | null };
 }
 
 /** 한투가 준 값 중 화면에 쓸 것만 골라 담는다 */
@@ -650,7 +663,17 @@ async function buildGroups(force: boolean): Promise<UsWatchResult> {
    * 그래도 야후를 지우진 않는다 — 한투에 없는 티커(신규 상장, ADR 일부)가 있고,
    * 키가 안 꽂힌 상태에서도 화면이 살아 있어야 한다.
    */
-  const hantoo = await hantooUsQuotes(symbols).catch(() => new Map());
+  /*
+   * ⚠️ 실패를 **삼키지 않는다.** 예전엔 `catch(() => new Map())` 뿐이라, 한투가 통째로
+   * 죽어도 화면엔 그냥 빈 칸만 남고 로그에 한 줄도 없었다. 야후로 살아남는 것은 그대로
+   * 두되(그게 이 폴백의 뜻이다) **왜 넘어갔는지는 적는다.**
+   */
+  let hantooError: string | null = null;
+  const hantoo = await hantooUsQuotes(symbols).catch((e: unknown) => {
+    hantooError = e instanceof Error ? e.message : String(e);
+    console.warn(`[usWatch] 한투 해외 시세 실패 — ${hantooError} (야후로 메웁니다, ${symbols.length}종목)`);
+    return new Map();
+  });
   const extra = new Map<string, ReturnType<typeof toExtra>>();
   const quotes = new Map<string, Awaited<ReturnType<typeof quoteOne>>>();
 
@@ -780,10 +803,20 @@ async function buildGroups(force: boolean): Promise<UsWatchResult> {
 
   // 가장 최근 체결 시각을 화면 전체의 기준으로 삼는다
   const times = [...quotes.values()].map((q) => q.quotedAt).filter((x): x is number => x !== null);
+  /*
+   * 어느 출처로 채웠나 — `extra` 가 붙은 줄이 한투다(원화·52주·강도·봉이 거기서 온다).
+   * 화면이 이 셈을 적는다. 자세한 사정은 `UsWatchResult.source`.
+   */
+  const hantooCount = evaluated.reduce(
+    (n, g) => n + g.stocks.filter((s) => s.wonPrice !== null || s.power !== null || s.open !== null).length,
+    0,
+  );
+  const totalCount = evaluated.reduce((n, g) => n + g.stocks.length, 0);
   return {
     groups: evaluated,
     quotedAt: times.length > 0 ? Math.max(...times) : null,
     fetchedAt: Date.now(),
+    source: { hantoo: hantooCount, yahoo: totalCount - hantooCount, total: totalCount, error: hantooError },
   };
 }
 
