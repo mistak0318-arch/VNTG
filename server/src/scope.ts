@@ -383,21 +383,47 @@ export async function scopeList(client: KiwoomClient): Promise<{ rows: ScopeRow[
     loadNotes(),
   ]);
 
-  /* 오늘 수급은 종목마다 하나씩 — 한도가 초당 5라 몰아 보내지 않고 차례로 */
-  const todays = new Map<string, ScopeRow["today"]>();
-  for (const c of codes) todays.set(c, await todayFlow(client, c));
+  /*
+   * **오늘 수급 — 한꺼번에 던진다** (2026-11-10 — 벤티지: "현미경 진입이 왜케 느리냐").
+   *
+   * 여태 `for … await` 로 **한 종목씩 차례로** 받았다. 주석에 "한도가 초당 5라 몰아 보내지
+   * 않고 차례로"라고 적혀 있었는데, 그건 **토큰버킷이 생기기 전**(2026-09-16) 판단이다.
+   * 지금은 `KiwoomClient` 가 통 8개·초당 4.5개로 **스스로 줄을 세운다** — 그 위에 또 직렬을
+   * 걸면 유량은 그대로인데 **왕복 지연(RTT)만 종목 수만큼 쌓인다.**
+   *
+   * 스무 종목이면 그 차이가 그대로 기다림이 된다. 던져 놓으면 버킷이 알아서 흘리고,
+   * 캐시가 더운 종목(60초)은 그 자리에서 끝난다.
+   *
+   * ⚠️ 한 종목이 실패해도 나머지는 그린다 — `todayFlow` 안에서 삼키므로 여기서 또 감싸지
+   * 않는다. 없는 줄은 「오늘」 칸이 비는 것으로 화면이 말한다.
+   */
+  const todayPairs = await Promise.all(codes.map(async (c) => [c, await todayFlow(client, c)] as const));
+  const todays = new Map<string, ScopeRow["today"]>(todayPairs);
 
   let notesDirty = false;
   const now = new Date().toISOString();
   const rows: ScopeRow[] = [];
   let ledgerAt: string | null = null;
 
+  /*
+   * **원장·일봉도 미리 한꺼번에** (2026-11-10). 아래 루프에서 종목마다 `await` 하면
+   * 파일 읽기와 JSON 파싱이 **한 줄로 선다** — `loadLedger` 는 종목마다 파일 하나를 통째로
+   * 읽고 파싱하는데 캐시가 없다. 스무 종목이면 스무 번을 차례로 기다리는 꼴이다.
+   * 조회가 아니라 디스크라 유량과 무관하고, 미리 받아 두면 루프는 Map 을 꺼내 쓰기만 한다.
+   */
+  const [ledgerPairs, barPairs] = await Promise.all([
+    Promise.all(codes.map(async (c) => [c, await loadLedger(c).catch(() => null)] as const)),
+    Promise.all(codes.map(async (c) => [c, await barsOf(c)] as const)),
+  ]);
+  const ledgers = new Map(ledgerPairs);
+  const barsByCode = new Map(barPairs);
+
   for (const it of items) {
     const code = it.code;
-    const led = await loadLedger(code).catch(() => null);
+    const led = ledgers.get(code) ?? null;
     const flow = led?.flow ?? [];
     /* 일봉은 원장이 아니라 `dailyCloses` 에 있다 — 수집기가 같은 것을 두 번 안 받으려고 갈라 뒀다 */
-    const bars = await barsOf(code);
+    const bars = barsByCode.get(code) ?? [];
     const shortRows = led?.short ?? [];
     const loanRows = led?.loan ?? [];
     const ratioRows = led?.fgnRatio ?? [];
