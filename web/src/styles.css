@@ -11393,9 +11393,22 @@ svg path:not([fill]) { fill: none; }
 /* ===== 텔레그램 검색 — 내 종목이 어디서 언급되나 ===== */
 .cs-q { margin: 0.4rem 0 0.3rem; }
 .cs-words { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-bottom: 0.4rem; }
+/*
+ * 찾는 말 — **누르면 꺼진다** (2026-11-09). 보드가 보고 있는 종목 말(이름·코드)이 늘
+ * 끼어들어, 그 칸에서 다른 종목을 찾을 길이 없던 것을 푼 자리다.
+ * 지우지 않고 끄는 것이라 꺼진 것도 남아 있어야 다시 켤 수 있다.
+ */
 .cs-word {
   font-size: 0.68rem; padding: 0.1rem 0.35rem; border-radius: 999px;
   border: 1px solid var(--border); color: var(--muted);
+  background: none; cursor: pointer; font-family: inherit; line-height: 1.5;
+}
+.cs-word:hover { border-color: var(--text); color: var(--text); }
+/* 꺼진 말 — 글자를 긋고 흐리게. 「빠졌다」가 한눈에 보여야 한다 */
+.cs-word.off {
+  text-decoration: line-through;
+  opacity: 0.45;
+  border-style: dashed;
 }
 .cs-list { max-height: 26rem; overflow: auto; }
 /*

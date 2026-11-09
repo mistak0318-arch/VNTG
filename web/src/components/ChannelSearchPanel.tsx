@@ -266,11 +266,26 @@ export function ChannelSearchPanel({ code, name }: { code?: string; name?: strin
   const [ai, setAi] = useState<{ text: string | null; model: string | null; error: string | null } | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
   /** 종목이 바뀌면 사람이 넣어 둔 키워드는 지운다 — 다른 종목에 남아 있으면 헷갈린다 */
+  /**
+   * **끈 말** (2026-11-09 — 벤티지: "삼성전자 검색하고 싶은데 네이버 지금 NAVER로 계속하네.
+   * 현재 선택된 종목에 텔레그램 검색 필터가 고정되어 있는듯").
+   *
+   * 찾는 말은 **보드가 보고 있는 종목**(이름·짧은 이름·코드)에 사람이 넣은 말을 더해서
+   * 만든다. 「이 종목이 어디서 언급되나」가 원래 쓰임이라 그게 맞았는데, 그 칸에서 **다른
+   * 종목을 찾고 싶을 때** 길이 없었다 — 「삼성전자」를 넣어도 NAVER·035420 이 같이 걸려서
+   * 결과가 섞인다. 보드 종목을 바꾸지 않는 한 빠져나갈 수가 없었다.
+   *
+   * 그래서 말마다 끄고 켤 수 있게 한다. 지우는 게 아니라 **끄는 것**이라 다시 누르면 돌아온다.
+   */
+  const [off, setOff] = useState<Set<string>>(new Set());
+
   const lastCode = useRef(code);
 
   useEffect(() => {
     if (lastCode.current !== code) {
       lastCode.current = code;
+      /* 다른 종목으로 넘어가면 끈 것도 푼다 — 앞 종목에서 끈 말이 남으면 영문을 모른다 */
+      setOff(new Set());
       setExtra("");
     }
   }, [code]);
@@ -282,6 +297,23 @@ export function ChannelSearchPanel({ code, name }: { code?: string; name?: strin
       out.push(name);
       const s = shortName(name);
       if (s) out.push(s);
+    }
+    if (code) out.push(code);
+    for (const w of extra.split(",")) {
+      const t = w.trim();
+      if (t) out.push(t);
+    }
+    /* 끈 말은 뺀다 — 목록에는 남아 있고(끈 모양으로) 찾을 때만 안 쓴다 */
+    return [...new Set(out)].filter((w) => !off.has(w));
+  }, [name, code, extra, off]);
+
+  /** 끄고 켜기 전의 모든 말 — 태그 줄은 끈 것도 보여 줘야 다시 켤 수 있다 */
+  const allWords = useMemo(() => {
+    const out: string[] = [];
+    if (name) {
+      out.push(name);
+      const s2 = shortName(name);
+      if (s2) out.push(s2);
     }
     if (code) out.push(code);
     for (const w of extra.split(",")) {
@@ -446,13 +478,33 @@ export function ChannelSearchPanel({ code, name }: { code?: string; name?: strin
         />
       </div>
 
-      {/* 무엇으로 찾고 있는지 보인다 — 안 보이면 왜 안 걸리는지 알 수가 없다 */}
+      {/*
+        무엇으로 찾고 있는지 보인다 — 안 보이면 왜 안 걸리는지 알 수가 없다.
+        **누르면 끈다** (2026-11-09): 보드가 보고 있는 종목 말을 빼고 다른 종목만 찾을 때 쓴다.
+      */}
       <div className="cs-words">
-        {words.map((w) => (
-          <span className="cs-word" key={w}>
-            {w}
-          </span>
-        ))}
+        {allWords.map((w) => {
+          const dead = off.has(w);
+          return (
+            <button
+              type="button"
+              className={`cs-word${dead ? " off" : ""}`}
+              key={w}
+              title={dead ? "눌러서 다시 넣기" : "눌러서 빼기 — 이 말 없이 찾습니다"}
+              onClick={() =>
+                setOff((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(w)) next.delete(w);
+                  else next.add(w);
+                  return next;
+                })
+              }
+            >
+              {w}
+            </button>
+          );
+        })}
+        {words.length === 0 && <span className="pt-n">찾을 말이 하나도 없습니다 — 말을 켜거나 직접 넣으세요</span>}
       </div>
 
       {/*
