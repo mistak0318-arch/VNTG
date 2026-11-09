@@ -103,6 +103,8 @@ export function loadGateStats(): {
   최고기다림: number;
   최대기다림ms: number;
   되돌려보냄: number;
+  /** 보던 화면을 떠나 줄에서 뺀 요청 수 (2026-11-10) */
+  떠나서버림: number;
   상한MB: number;
 } {
   /*
@@ -118,15 +120,40 @@ export function loadGateStats(): {
     최고기다림: peakWaiters,
     최대기다림ms: maxWaitedMs,
     되돌려보냄: shed,
+    떠나서버림: dropped,
     상한MB: limitMB,
   };
 }
 
 function release(): void {
   inflight -= 1;
+  passTurn();
+}
+
+/**
+ * **차례만 넘긴다** — 도는 수(`inflight`)는 건드리지 않는다.
+ *
+ * 떠난 요청은 자리를 **차지한 적이 없다.** 그래서 여기서 `release()` 를 부르면 한 건
+ * 끝났을 때 `inflight` 가 두 번 줄어 동시 상한이 조용히 늘어난다 — 과부하 관문이 스스로
+ * 문을 여는 셈이다. 자리를 쓴 쪽만 `release()`, 줄만 비켜 주는 쪽은 이쪽이다.
+ */
+function passTurn(): void {
   const next = waiters.shift();
   if (next) next();
 }
+
+/**
+ * 이 요청을 **아직 누가 기다리고 있나.**
+ *
+ * 브라우저가 연결을 끊으면(화면을 떠나거나 `AbortController` 로 취소하면) 소켓이 죽는다.
+ * 그때 돌려줄 곳이 없는 값을 받으려고 증권사 조회를 내보낼 이유가 없다.
+ */
+function gone(res: Response): boolean {
+  return res.destroyed || res.writableEnded || !res.socket || res.socket.destroyed;
+}
+
+/** 떠난 화면 것이라 줄에서 뺀 수 — 화면이 「아낀 조회」처럼 읽는다 */
+let dropped = 0;
 
 export function loadGate(req: Request, res: Response, next: NextFunction): void {
   if (!req.path.startsWith("/api/") || light(req.path)) {
@@ -186,6 +213,25 @@ export function loadGate(req: Request, res: Response, next: NextFunction): void 
     if (timer) {
       clearTimeout(timer);
       timer = null;
+      /*
+       * **떠난 화면 것은 자리를 안 쓴다** (2026-11-10 — 벤티지: "나는 내가 보는 화면에서만
+       * 요청이 돌아가면 되는건데 왜 계속 누적이 되는거야?").
+       *
+       * 종목을 빠르게 넘기면 앞 종목 요청이 줄에 그대로 남아 있었다. 차례가 오면 **이미
+       * 아무도 안 보는 화면**의 값을 받으려고 증권사 조회까지 나갔다 — 그게 줄을 더 밀고,
+       * 지금 보는 종목이 그만큼 늦어진다.
+       *
+       * 끊긴 요청은 여기서 버리고 **차례를 다음 사람에게 넘긴다**(`passTurn`). 안 넘기면
+       * 그 차례가 영영 돌지 않는다. `release()` 가 아니다 — 자리를 쓴 적이 없다.
+       *
+       * 대개는 아래 `res.on("close")` 가 먼저 잡아 줄에서 바로 뺀다. 여기까지 오는 것은
+       * 소켓이 죽었는데 `close` 가 아직 안 온 틈뿐이다.
+       */
+      if (gone(res)) {
+        dropped += 1;
+        passTurn();
+        return;
+      }
       const waited = Date.now() - queuedAt;
       if (waited > maxWaitedMs) maxWaitedMs = waited;
       run();
@@ -193,6 +239,23 @@ export function loadGate(req: Request, res: Response, next: NextFunction): void 
   };
   waiters.push(start);
   if (waiters.length > peakWaiters) peakWaiters = waiters.length;
+
+  /*
+   * 기다리는 **도중에** 끊기면 그 자리에서 줄을 뺀다. 차례를 기다렸다 버리는 것보다
+   * 빨리 빠지는 만큼 뒤쪽이 앞당겨진다.
+   */
+  const dropIfGone = () => {
+    if (!timer) return;
+    clearTimeout(timer);
+    timer = null;
+    const i = waiters.indexOf(start);
+    if (i >= 0) {
+      waiters.splice(i, 1);
+      dropped += 1;
+    }
+  };
+  res.on("close", dropIfGone);
+
   timer = setTimeout(() => {
     timer = null;
     const i = waiters.indexOf(start);
