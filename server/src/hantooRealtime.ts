@@ -116,9 +116,31 @@ function usTradingWindow(now = new Date()): boolean {
   });
   const p = Object.fromEntries(f.formatToParts(now).map((x) => [x.type, x.value]));
   const day = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(String(p.weekday));
-  if (day === 0 || day === 6) return false;
   const mins = (Number(p.hour) % 24) * 60 + Number(p.minute);
-  return mins >= 4 * 60 && mins < 20 * 60;
+
+  /*
+   * **주간거래(오버나이트)까지 센다** (2026-11-09 — 벤티지: "프리장 애프터장 값이 이상하더라.
+   * 저 시간에 엔비디아 4프로 하락중이었는데 갱신이 안되고 있더라고").
+   *
+   * 벤티지가 본 때는 한국 11/9(월) 12:42 = **ET 11/8(일) 22:42**, 일요일 밤이다. 화면에는
+   * 금요일 종가가 그대로 있었다. 그런데 미국 주간거래는 **일요일 ET 20:00 부터** 돈다 —
+   * 이 창은 주말을 통째로 빼고(`day === 0`) 평일도 20:00 에 닫아서, **주간거래 시간이
+   * 통째로 창 밖**이었다. 이 함수는 「값이 안 오면 소켓을 다시 붙일까」를 정하므로,
+   * 창 밖이면 조용히 멎어도 아무도 되살리지 않는다.
+   *
+   *   정규장 포함 프리·애프터  평일 04:00 ~ 20:00
+   *   주간거래(오버나이트)     일~목 20:00 ~ 이튿날 04:00
+   *
+   * 금요일 20:00 에 끝나 일요일 20:00 에 다시 열린다 — 토요일 하루만 쉰다.
+   */
+  const weekday = day >= 1 && day <= 5;
+  /* 낮 구간: 평일 04:00~20:00 (프리·정규·애프터) */
+  if (weekday && mins >= 4 * 60 && mins < 20 * 60) return true;
+  /* 밤 구간(주간거래): 일~목 20:00~24:00 */
+  if (day >= 0 && day <= 4 && mins >= 20 * 60) return true;
+  /* 밤 구간이 날짜를 넘긴 뒤: 월~금 00:00~04:00 */
+  if (weekday && mins < 4 * 60) return true;
+  return false;
 }
 
 function enabled(): boolean {

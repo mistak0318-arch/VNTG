@@ -448,8 +448,17 @@ export async function hantooUsDayQuotes(symbols: string[]): Promise<Map<string, 
   const pairs = symbols
     .filter((s) => map[s] && DAY_EXCD[map[s]])
     .map((symbol) => ({ excd: DAY_EXCD[map[symbol]], symbol }));
-  if (pairs.length === 0) return out;
+  if (pairs.length === 0) {
+    /*
+     * 지도가 비면 주간거래가 **통째로** 안 돈다 — 화면엔 금요일 종가가 그대로 남고
+     * 까닭은 어디에도 없다. 2026-11-09 에 벤티지가 「갱신이 안되고 있더라」로 잡은 자리다.
+     */
+    if (symbols.length > 0) console.warn(`[usDay] 주간거래 건너뜀 — 거래소를 아는 종목이 하나도 없다 (${symbols.length}종목)`);
+    return out;
+  }
 
+  let failed = 0;
+  let lastWhy = "";
   for (let i = 0; i < pairs.length; i += 10) {
     try {
       const rows = await multRaw(pairs.slice(i, i + 10));
@@ -465,9 +474,16 @@ export async function hantooUsDayQuotes(symbols: string[]): Promise<Map<string, 
           volume,
         });
       }
-    } catch {
-      // 주간거래는 있으면 좋은 값이다. 실패해도 정규장 시세를 막지 않는다
+    } catch (e) {
+      /*
+       * 주간거래는 있으면 좋은 값이라 **정규장 시세를 막지는 않는다.** 다만 예전엔
+       * `catch {}` 로 **아무 흔적도 안 남겨서**, 값이 안 돌 때 까닭을 찾을 길이 없었다.
+       * 살려 두되 적는다 — 어제 한투 토큰을 찾아낸 것도 이렇게 드러낸 덕이었다.
+       */
+      failed += 1;
+      lastWhy = e instanceof Error ? e.message : String(e);
     }
   }
+  if (failed > 0) console.warn(`[usDay] 주간거래 ${failed}묶음 실패 — ${lastWhy} (받은 줄 ${out.size}/${pairs.length})`);
   return out;
 }
