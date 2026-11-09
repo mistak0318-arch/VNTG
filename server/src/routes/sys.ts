@@ -6,6 +6,7 @@ import { addAsk } from "../askHistory.js";
 /* 메모리 계기판·손으로 비우기 (2026-10-08) */
 import { brokerQueues, recoverNow, recoveryStats } from "../recovery.js";
 import { loadGateStats } from "../loadGate.js";
+import { heapWho } from "../heapWho.js";
 import { shareGetStats } from "../shareGet.js";
 
 /**
@@ -40,6 +41,24 @@ export function createSysRouter(client: KiwoomClient): Router {
    */
   router.post("/recover", (_req, res) => {
     res.json(recoverNow());
+  });
+
+  /**
+   * **누가 메모리를 먹나** (2026-11-10 — 벤티지: "누가 먹는지 먼저 재다").
+   *
+   * 「무거운 요청」 로그는 요청이 열려 있던 동안의 heap 차라 **동시에 도는 것끼리
+   * 섞인다** — `/series` 가 +3,448MB 로 찍혔지만 그 길은 창고만 읽는다. 이 길은 V8
+   * 샘플링 프로파일러에게 **할당하는 코드 한 줄**을 직접 묻는다.
+   *
+   * 느릴 때 **두 번** 누른다 — 두 번째의 `그사이` 가 지금 먹고 있는 자다.
+   */
+  router.get("/heap-who", async (req, res, next) => {
+    try {
+      const n = Math.min(40, Math.max(5, Number(req.query.n) || 15));
+      res.json(await heapWho(n));
+    } catch (err) {
+      next(err);
+    }
   });
 
   /** 해석만 (수 ms) — 화면이 「종목 두산에너빌리티 긁는 중」을 먼저 띄운다 */

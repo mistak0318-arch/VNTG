@@ -99,6 +99,7 @@ import { loadGate } from "./loadGate.js";
 import { shareGet } from "./shareGet.js";
 /* 복구 루틴 — 나빠진 뒤 스스로 돌아온다 (2026-10-07 밤) */
 import { startRecovery } from "./recovery.js";
+import { startHeapWho } from "./heapWho.js";
 import { createAiRouter } from "./routes/ai.js";
 import { createAskRouter } from "./routes/ask.js";
 import { createSysRouter } from "./routes/sys.js";
@@ -684,6 +685,11 @@ app.listen(port, host, () => {
    */
   /* 루프가 실제로 멈추는지 재 둔다 — 재는 값이 거의 공짜다(네이티브 히스토그램) */
   startLoopLag();
+  /*
+   * **누가 할당하나**를 재 둔다 (2026-11-10). 「무거운 요청」 로그는 동시에 도는 것끼리
+   * 섞여 범인을 못 집는다 — 64KB 마다 한 점이라 늘 켜 둬도 싸다. `/api/sys/heap-who`.
+   */
+  startHeapWho();
   startRecovery((why) => {
     noteLife("EXIT", why);
     /* 쓰던 응답이 마저 나가도록 한 박자 뒤에 — OOM 즉사와 다른 점이 이것이다 */

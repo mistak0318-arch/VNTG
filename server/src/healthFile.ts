@@ -10,6 +10,7 @@ import os from "node:os";
 import v8 from "node:v8";
 import { lifeSummary, noteLife, selfHeal } from "./lifecycle.js";
 import { loadGateStats } from "./loadGate.js";
+import { heapWhoRecent } from "./heapWho.js";
 import { loopLagStats } from "./loopLag.js";
 import { routeStatsTop } from "./routeStats.js";
 import { recoveryStats } from "./recovery.js";
@@ -212,6 +213,12 @@ async function writeOnceInner(): Promise<void> {
     루프지연: loopLagStats(),
     /* 길목별 비용 — 합이 큰 순서. 「어디를 고치면 체감이 바뀌나」의 답 (2026-10-14) */
     길목비용: routeStatsTop(15),
+    /*
+     * **지난 1분 동안 누가 할당했나** (2026-11-10). 길목별 heap 차는 동시에 도는 것끼리
+     * 섞여 범인을 못 집는다 — V8 샘플링 프로파일러에게 **할당하는 코드 한 줄**을 묻는다.
+     * ⚠️ 할당한 양이지 들고 있는 양이 아니고, 외부 버퍼(소켓·Buffer)는 안 잡힌다.
+     */
+    할당상위: heapWhoRecent(),
     /*
      * 복구 루틴 (2026-10-07 밤) — 「지금 어떤 상태인가」와 「몇 번 복구했나」.
      * `상태` 가 자주 「복구」면 봉우리가 구조적으로 큰 것이고, `GC가능: false` 면
