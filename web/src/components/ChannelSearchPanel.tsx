@@ -279,6 +279,39 @@ export function ChannelSearchPanel({ code, name }: { code?: string; name?: strin
    */
   const [off, setOff] = useState<Set<string>>(new Set());
 
+  /** 보드가 보고 있는 종목에서 온 말 — 이름·짧은 이름·코드 */
+  const stockWords = useMemo(() => {
+    const out: string[] = [];
+    if (name) {
+      out.push(name);
+      const s2 = shortName(name);
+      if (s2) out.push(s2);
+    }
+    if (code) out.push(code);
+    return out;
+  }, [name, code]);
+
+  /*
+   * **직접 쓴 말이 있으면 그것만 찾는다** (2026-11-09 — 벤티지: "삼성전자라고 새로운걸
+   * 검색하면 저렇게 동시검색이 되버리네? 단독검색해야지 왜 합쳐 맘대로").
+   *
+   * 종목 말은 **거들라고** 붙는 것이지 주인이 아니다. 「알테오젠」을 보다가 「삼성전자」를
+   * 치면 찾고 싶은 건 삼성전자지, 「알테오젠 또는 196170 또는 삼성전자」가 아니다.
+   * 그런데 늘 합쳐져서, 보드 종목을 바꾸지 않는 한 단독으로 찾을 길이 없었다.
+   *
+   * 그래서 **칸에 처음 글자가 들어오는 순간** 종목 말을 끈다. 칸을 비우면 되돌아온다 —
+   * 종목 말로 찾는 것이 이 칸의 원래 쓰임이라, 안 쓸 때는 그 자리로 돌아와야 한다.
+   *
+   * 끄는 것이지 지우는 게 아니라서, 둘 다 찾고 싶으면 태그를 눌러 다시 켜면 된다.
+   */
+  const typedBefore = useRef(extra.trim().length > 0);
+  useEffect(() => {
+    const has = extra.trim().length > 0;
+    if (has === typedBefore.current) return;
+    typedBefore.current = has;
+    setOff(has ? new Set(stockWords) : new Set());
+  }, [extra, stockWords]);
+
   const lastCode = useRef(code);
 
   useEffect(() => {
