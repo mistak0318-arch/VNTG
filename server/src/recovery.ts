@@ -1,4 +1,5 @@
 import { memoryUsage } from "node:process";
+import { freemem } from "node:os";
 import v8 from "node:v8";
 import { noteLife } from "./lifecycle.js";
 import { dropSamplesCache, dropSamplesIfIdle } from "./signalSamples.js";
@@ -45,6 +46,42 @@ import { KiwoomClient } from "./kiwoomClient.js";
 
 const LIMIT_MB = Math.round(v8.getHeapStatistics().heap_size_limit / 1048576);
 
+/**
+ * **램이 좁아지는 것도 같은 압박이다** (2026-11-10).
+ *
+ * 벤티지: "아까 낮에 느렸거든" → 배포 직전 기록이 이랬다:
+ *
+ *   heap 5,225 / 상한 9,408MB = **55%**   ← 이 자가 본 것. 「여유 있다」
+ *   RSS 5,987MB, 남은 램 **1,601MB**      ← 기계가 실제로 겪은 것
+ *   루프 최고지연 **21,626ms**, 평균 1,660ms, 멈춤 10회
+ *   바빠서 되돌려보냄 **0건**             ← 관문이 한 건도 안 막았다
+ *
+ * heap 상한을 OOM 막으려고 6,144 → 9,216MB 로 올렸는데(11/05) 이 기계 램은
+ * **13,259MB** 다. 상한이 램보다 크면 heap 비율은 **영영 문턱에 안 닿는다** — 경계(65%)
+ * 가 6.1GB, 복구(78%)가 7.3GB 인데 기계는 6GB 에서 이미 숨이 막힌다. 죽지는 않게
+ * 됐지만 **죽는 대신 느려졌다.**
+ *
+ * 그래서 두 자 중 **먼저 걸리는 쪽**으로 잰다. 램 쪽을 heap 과 같은 0~1 자로 옮긴다:
+ *
+ *   남은 램   4,000MB → 0.25 (정상)
+ *             2,400MB → 0.65 (경계)
+ *             1,880MB → 0.78 (복구)
+ *             1,000MB → 1.00
+ *
+ * ⚠️ **재시작은 이 자로 하지 않는다.** 남은 램이 좁은 까닭이 다른 프로그램일 수 있고,
+ * 그러면 우리가 내려가도 안 넓어진다 — 내려갈 판단은 heap 으로만 한다(아래 `복구` 갈래).
+ */
+const FREE_BASE_MB = 5_000;
+const FREE_CRIT_MB = 1_000;
+
+function ramRatio(): number {
+  const freeMB = Math.round(freemem() / 1048576);
+  /* 램을 못 읽는 환경이면 압박 없음으로 둔다 — 모르는 것으로 조이지 않는다 */
+  if (!Number.isFinite(freeMB) || freeMB <= 0) return 0;
+  const r = (FREE_BASE_MB - freeMB) / (FREE_BASE_MB - FREE_CRIT_MB);
+  return Math.min(1, Math.max(0, r));
+}
+
 /** 올라갈 때 문턱 */
 const WARN_AT = 0.65;
 const RECOVER_AT = 0.78;
@@ -76,13 +113,20 @@ export function recoveryStats(): {
   복구횟수: number;
   GC호출: number;
   GC가능: boolean;
+  /** 지금 쪼들림 — heap 과 램 중 **먼저 걸리는 쪽** (2026-11-10) */
+  쪼들림퍼센트: number;
+  /** 그 쪼들림이 heap 때문인가 램 때문인가 — 「왜 조였나」의 답 */
+  쪼들림무엇: string;
 } {
   const used = Math.round(memoryUsage().heapUsed / 1048576);
+  const p = pressure();
   return {
     상태: state,
     heapMB: used,
     상한MB: LIMIT_MB,
     퍼센트: LIMIT_MB > 0 ? Math.round((used / LIMIT_MB) * 100) : 0,
+    쪼들림퍼센트: Math.round(p.비율 * 100),
+    쪼들림무엇: p.무엇,
     복구횟수: recoverCount,
     GC호출: gcCount,
     GC가능: canGc,
@@ -92,6 +136,26 @@ export function recoveryStats(): {
 /** 관문이 물어본다 — 복구 중이면 더 적게 받는다 */
 export function isStressed(): boolean {
   return state !== "정상";
+}
+
+/**
+ * **지금 얼마나 쪼들리나** — 0~1, 관문과 복구 루틴이 **같은 자**를 쓴다 (2026-11-10).
+ *
+ * 관문은 여태 `heapUsed / heap상한` 만 봤다. 상한(9,408MB)이 이 기계 램(13,259MB)보다
+ * 커서 그 자는 영영 문턱에 안 닿았고, 루프가 21초씩 멈추는 동안 **되돌려보냄이 0건**
+ * 이었다. 자를 하나로 합쳐 둘이 어긋나지 않게 한다.
+ */
+export function pressure(): { 비율: number; 무엇: string; heapMB: number; 남은램MB: number } {
+  const heapMB = Math.round(memoryUsage().heapUsed / 1048576);
+  const 남은램MB = Math.round(freemem() / 1048576);
+  const h = LIMIT_MB > 0 ? heapMB / LIMIT_MB : 0;
+  const r = ramRatio();
+  return {
+    비율: Math.max(h, r),
+    무엇: r > h ? "램" : "heap",
+    heapMB,
+    남은램MB,
+  };
 }
 
 /**
@@ -222,7 +286,15 @@ function dropIdleCaches(now: number): void {
 export function recoveryTick(selfExit: (why: string) => void): void {
   if (LIMIT_MB <= 0) return;
   const usedMB = Math.round(memoryUsage().heapUsed / 1048576);
-  const ratio = usedMB / LIMIT_MB;
+  const heapRatio = usedMB / LIMIT_MB;
+  /*
+   * **먼저 걸리는 쪽으로 잰다** (2026-11-10). 위 `ramRatio` 설명 참고 — heap 상한이
+   * 램보다 크면 heap 비율만으로는 문턱에 영영 안 닿는다.
+   */
+  const ram = ramRatio();
+  const ratio = Math.max(heapRatio, ram);
+  /* 무엇이 걸린 건지 로그에 적는다 — 「왜 조였나」가 heap 숫자만 보면 안 풀린다 */
+  const why = ram > heapRatio ? `남은 램 ${Math.round(freemem() / 1048576)}MB` : `heap ${usedMB}/${LIMIT_MB}MB`;
   const now = Date.now();
   const pct = Math.round(ratio * 100);
 
@@ -235,7 +307,7 @@ export function recoveryTick(selfExit: (why: string) => void): void {
   /* ── 내려왔다 ── */
   if (state !== "정상" && ratio <= CLEAR_AT) {
     const secs = Math.round((now - since) / 1000);
-    noteLife("WARN", `복구됨 — heap ${usedMB}/${LIMIT_MB}MB (${pct}%), ${state} 상태로 ${secs}초 있었다`);
+    noteLife("WARN", `복구됨 — ${why} (${pct}%), ${state} 상태로 ${secs}초 있었다`);
     state = "정상";
     since = now;
     recoverFrom = 0;
@@ -249,7 +321,7 @@ export function recoveryTick(selfExit: (why: string) => void): void {
       since = now;
       recoverFrom = now;
       recoverCount += 1;
-      noteLife("WARN", `복구 시작 — heap ${usedMB}/${LIMIT_MB}MB (${pct}%)`);
+      noteLife("WARN", `복구 시작 — ${why} (${pct}%)`);
     }
     /* 캐시를 놓고 GC 를 직접 부른다. 매 틱마다 — 들어오는 쪽이 계속 밀어 넣고 있다 */
     const dropped = dropWhatWeCan();
@@ -262,9 +334,20 @@ export function recoveryTick(selfExit: (why: string) => void): void {
      * 그래도 안 내려오면 **깨끗하게** 내려간다. OOM 즉사와 다르다 —
      * 지금 쓰고 있던 응답이 마저 나가고, 감시자가 다시 띄운다.
      */
-    if (recoverFrom > 0 && now - recoverFrom > GIVE_UP_MS && now - lastRestart > RESTART_GAP_MS && process.uptime() > 120) {
+    /*
+     * ⚠️ **내려갈 판단은 heap 으로만 한다** (2026-11-10). 남은 램이 좁은 까닭이 다른
+     * 프로그램이면 우리가 내려가도 안 넓어진다 — 그 상태로 재시작 문턱을 걸면 45초마다
+     * 멀쩡한 서버가 스스로 내려가는 **맴돌이**가 된다. 램 압박은 조이기까지만이다.
+     */
+    if (
+      heapRatio >= RECOVER_AT &&
+      recoverFrom > 0 &&
+      now - recoverFrom > GIVE_UP_MS &&
+      now - lastRestart > RESTART_GAP_MS &&
+      process.uptime() > 120
+    ) {
       lastRestart = now;
-      noteLife("FATAL", `복구 실패 — ${Math.round(GIVE_UP_MS / 1000)}초 동안 ${pct}% 에서 안 내려온다. 스스로 내려간다`);
+      noteLife("FATAL", `복구 실패 — ${Math.round(GIVE_UP_MS / 1000)}초 동안 heap ${usedMB}/${LIMIT_MB}MB 에서 안 내려온다. 스스로 내려간다`);
       selfExit("복구 실패 재시작");
     }
     return;
@@ -275,7 +358,7 @@ export function recoveryTick(selfExit: (why: string) => void): void {
     if (state === "정상") {
       state = "경계";
       since = now;
-      noteLife("WARN", `경계 — heap ${usedMB}/${LIMIT_MB}MB (${pct}%). 관문을 조인다`);
+      noteLife("WARN", `경계 — ${why} (${pct}%). 관문을 조인다`);
     }
     return;
   }
