@@ -8148,6 +8148,15 @@ export interface TrendResult {
 }
 
 /** 서버 메모리 — `/api/sys/mem` (2026-10-08). 서버 recovery.ts·loadGate.ts 와 같은 모양 */
+/** 할당 추적의 한 장 — 서버 `heapWho.ts` 와 같은 모양 (2026-11-10) */
+export interface 할당샷 {
+  찍은시각: string;
+  사이초: number;
+  /** 그때 쪼들림(%) — 이게 높을 때의 장이 쓸모 있다 */
+  쪼들림: number;
+  상위: { 곳: string; MB: number }[];
+}
+
 export interface SysMem {
   복구: {
     상태: "정상" | "경계" | "복구";
@@ -8157,7 +8166,18 @@ export interface SysMem {
     복구횟수: number;
     GC호출: number;
     GC가능: boolean;
+    /** heap 과 램 중 **먼저 걸리는 쪽** (2026-11-10) — heap 만 보면 문턱에 안 닿았다 */
+    쪼들림퍼센트?: number;
+    쪼들림무엇?: string;
   };
+  /**
+   * **누가 메모리를 할당하나** (2026-11-10) — 서버가 1분마다 스스로 찍어 둔 것.
+   * `최근` 은 지난 1분, `가장쪼들릴때` 는 **가장 나빴던 순간**의 한 장이다.
+   */
+  할당상위?: {
+    최근: 할당샷 | null;
+    가장쪼들릴때: 할당샷 | null;
+  } | null;
   관문: {
     지금도는것: number;
     동시한도: number;

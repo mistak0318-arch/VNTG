@@ -3210,6 +3210,19 @@ body.col-resizing { cursor: row-resize; }
 .mem-pop-go:disabled { cursor: default; opacity: 0.6; }
 .mem-pop-said { margin-top: 0.4rem; text-align: center; font-size: 0.74rem; color: var(--muted); }
 
+/*
+  ── 누가 메모리를 먹나 (2026-11-10) ──
+  `곳` 은 `routes/news.js:235 가져오기` 꼴로 길다. 한 줄에 **MB 를 왼쪽에 세우고**
+  곳은 남는 폭에서 말줄임한다 — 숫자가 세로로 줄 서야 크기 비교가 눈에 들어온다.
+*/
+.mem-who { margin-top: 0.55rem; padding-top: 0.5rem; border-top: 1px solid var(--border); }
+.mem-who-t { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; font-weight: 600; font-size: 0.76rem; margin-bottom: 0.3rem; }
+.mem-who-t em { font-style: normal; font-weight: 400; font-size: 0.7rem; color: var(--muted); flex: none; }
+.mem-who-r { display: flex; gap: 0.5rem; line-height: 1.65; font-size: 0.72rem; }
+.mem-who-r b { flex: none; width: 4.4rem; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.mem-who-r span { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mem-who-n { margin-top: 0.35rem; color: var(--muted); font-size: 0.68rem; line-height: 1.5; word-break: keep-all; }
+
 /* ── 실전 성적표 (2026-10-07) ── 「잰 것이 적은 줄은 흐리게」가 이 블록의 핵심이다 */
 .sc { margin-bottom: 12px; }
 .sc-pick { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }

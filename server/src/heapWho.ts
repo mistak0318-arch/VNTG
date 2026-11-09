@@ -1,5 +1,6 @@
 import { Session } from "node:inspector";
 import { noteLife } from "./lifecycle.js";
+import { pressure } from "./recovery.js";
 
 /**
  * **누가 메모리를 먹나** (2026-11-10 — 벤티지가 고른 것: "누가 먹는지 먼저 재다").
@@ -61,11 +62,26 @@ let prevAt = 0;
  * 1분을 고른 이유: 재시작 **66초**에 RSS 가 1,966MB 였다 — 범인은 그 창 안에서 먹는다.
  */
 const AUTO_MS = 60_000;
-let 최근: { 찍은시각: string; 사이초: number; 상위: { 곳: string; MB: number }[] } | null = null;
+type Shot = { 찍은시각: string; 사이초: number; 쪼들림: number; 상위: { 곳: string; MB: number }[] };
+let 최근: Shot | null = null;
+
+/**
+ * **쪼들릴 때 찍힌 것은 따로 들고 있는다** (2026-11-10).
+ *
+ * `health.json` 은 30초마다 **덮어쓴다.** 최근 1분만 들고 있으면 밤새 돌려도 아침에
+ * 남는 건 「새벽 네 시의 한가한 1분」뿐이다 — 범인은 느릴 때 먹는데 그 장면이 안 남는다.
+ *
+ * 그래서 ① 가장 쪼들렸던 순간의 한 장을 **갈아타며 보관**하고, ② 문턱을 넘은 장면은
+ * `lifecycle.log` 에도 적는다(덧붙이는 파일이라 지워지지 않는다).
+ */
+let 최악: Shot | null = null;
+/** 이 위로 올라갔을 때만 남긴다 — 경계(0.65)보다 조금 낮게 잡아 올라가는 길을 잡는다 */
+const NOTE_AT = 0.6;
+let lastNote = 0;
 
 /** `health.json` 이 읽어 간다 — 동기라 파일 쓰는 길을 안 막는다 */
-export function heapWhoRecent(): typeof 최근 {
-  return 최근;
+export function heapWhoRecent(): { 최근: Shot | null; 가장쪼들릴때: Shot | null } {
+  return { 최근, 가장쪼들릴때: 최악 };
 }
 
 export function startHeapWho(): void {
@@ -87,11 +103,31 @@ export function startHeapWho(): void {
           prev = now;
           prevAt = Date.now();
           if (이전시각 > 0) {
-            최근 = {
+            const p = pressure();
+            const shot: Shot = {
               찍은시각: new Date().toISOString(),
               사이초: Math.round((Date.now() - 이전시각) / 1000),
+              쪼들림: Math.round(p.비율 * 100),
               상위: top(사이, 10),
             };
+            최근 = shot;
+            /* 가장 쪼들렸던 한 장을 갈아타며 들고 있는다 — 덮어쓰기에 안 지워진다 */
+            if (!최악 || shot.쪼들림 > 최악.쪼들림) 최악 = shot;
+            /*
+             * 문턱을 넘었으면 로그에도 적는다. `health.json` 은 덮어쓰지만 로그는
+             * 덧붙이는 파일이라 **아침에 밤새 기록이 그대로 있다.**
+             */
+            if (p.비율 >= NOTE_AT && Date.now() - lastNote > 5 * 60_000) {
+              lastNote = Date.now();
+              const 줄 = shot.상위
+                .slice(0, 5)
+                .map((r) => `${r.MB}MB ${r.곳}`)
+                .join(" · ");
+              noteLife(
+                "WARN",
+                `쪼들림 ${shot.쪼들림}% (${p.무엇}, 남은 램 ${p.남은램MB}MB) — 지난 ${shot.사이초}초 할당: ${줄 || "(점이 없다)"}`,
+              );
+            }
           }
         } catch {
           /* 한 번 못 찍어도 다음 분에 또 찍는다 */
