@@ -314,6 +314,18 @@
   white-space: nowrap;
 }
 
+/*
+  곁들이는 원화 (2026-11-12) — 달러가 주고 이건 거드는 값이라 **작고 흐리게**.
+  `ov-g-px` 가 `white-space: nowrap` 이라 같은 줄에 붙는다.
+*/
+.ov-g-krw {
+  font-style: normal;
+  font-size: 0.6833rem;
+  font-weight: 400;
+  color: var(--ov-txt-3);
+  margin-left: 4px;
+}
+
 .ov-g-pct {
   font-size: 0.7667rem;
   width: 110px;

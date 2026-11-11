@@ -54,6 +54,23 @@ export interface GlobalQuote {
   /** 어디서 받았나 — 야후 / 업비트 / 한투 (2026-09-10) */
   source?: "yahoo" | "upbit" | "hantoo";
   /**
+   * **곁들이는 원화 값** — 암호화폐만 (2026-11-12).
+   *
+   * 벤티지: "코인들 가격표시가 이상하게 되어 있네 … USD 기준으로 받아오는 거라면 USD
+   * 기준으로 표시해야지 그리고 괄호로 작게 원화로 표시하는게 맞지 않겠니?"
+   *
+   * 여태 업비트 원화가 `price` 를 **통째로 덮었다.** 그런데 상세 창은 심볼(`BTC-USD`)로
+   * 야후를 부르므로 차트·고저·52주 자리가 전부 달러다 — **한 화면에 두 단위**가 섞여
+   * 큰 숫자만 1억이고 그 아래 카드는 73,720 이었다.
+   *
+   * 이제 `price` 는 **야후 달러**로 두고 원화는 이 칸에 싣는다. 화면은 달러를 크게,
+   * 원화를 괄호로 작게 적는다 — 차트·카드와 같은 단위가 주가 된다.
+   *
+   * ⚠️ **환산값이 아니다.** 업비트 실거래가라 달러×환율과 어긋난다(김치프리미엄).
+   * 그게 버그로 보이지 않게 화면이 「업비트」라고 밝힌다.
+   */
+  krw?: { price: number; changeRate: number; at: number } | null;
+  /**
    * 줄 단위 경고. 미장 주요지수와 같은 방식이다 —
    * 색만 칠하면 왜 빨간지 모르므로 **이유를 문장으로** 같이 낸다.
    */
@@ -252,12 +269,17 @@ const TARGETS: {
 
   // ── 암호화폐
   /*
-   * 암호화폐는 **업비트 원화**로 (2026-09-10 — 벤티지 "비트코인은 그 업비트 API"). 공개 시세라
-   * 키가 없고 실시간이다. 심볼은 차트(야후) 몫이라 그대로 두고, 값·시각만 업비트가 덮는다
-   * (`fastTier`). 업비트가 죽으면 야후 달러 값이 남는다.
+   * 암호화폐는 **달러가 주, 원화는 곁들이기** (2026-11-12 고침).
+   *
+   * 9/10 에 업비트 원화로 값을 덮게 했는데(벤티지 "비트코인은 그 업비트 API"), 상세 창은
+   * 심볼(`BTC-USD`)로 야후를 부른다 — 그래서 큰 숫자는 1억 원인데 바로 아래 「전일 종가」는
+   * 73,720 이었다. **이름에 (원) 을 붙여 놔도 섞인 건 섞인 것**이다.
+   *
+   * 지금은 `price` 가 야후 달러고, 업비트 실거래 원화는 `krw` 칸에 따로 간다(`fastTier`).
+   * 업비트가 죽으면 원화만 빠지고 달러는 그대로 남는다.
    */
-  { key: "btc", label: "비트코인 (원)", group: "암호화폐", symbol: "BTC-USD" },
-  { key: "eth", label: "이더리움 (원)", group: "암호화폐", symbol: "ETH-USD" },
+  { key: "btc", label: "비트코인", group: "암호화폐", symbol: "BTC-USD" },
+  { key: "eth", label: "이더리움", group: "암호화폐", symbol: "ETH-USD" },
 
 
   /*
@@ -334,9 +356,14 @@ async function refreshFastTier(): Promise<void> {
     const cur = byKey.get(q.key);
     if (cur && q.price !== null) Object.assign(cur, q, { source: "yahoo" as const });
   }
+  /*
+   * **원화는 곁들이기만 한다** (2026-11-12). 예전엔 `price` 를 통째로 덮어서 목록은
+   * 원화인데 상세 창(야후 `BTC-USD`)은 달러였다 — 같은 종목이 두 단위로 보였다.
+   * 달러 값은 야후 것 그대로 두고, 업비트 실거래 원화는 `krw` 칸에 얹는다.
+   */
   for (const [key, v] of crypto) {
     const cur = byKey.get(key);
-    if (cur) Object.assign(cur, { price: v.price, change: v.change, changeRate: v.changeRate, quotedAt: v.at, source: "upbit" as const, error: null });
+    if (cur) cur.krw = { price: v.price, changeRate: v.changeRate, at: v.at };
   }
   if (night && night.price !== null) {
     const cur = byKey.get("krNightFut");

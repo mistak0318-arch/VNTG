@@ -10108,6 +10108,17 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
   font-weight: 600;
 }
 /*
+  곁들이는 원화 (2026-11-12) — 달러가 주고 이건 거드는 값이라 작고 흐리게.
+  큰 숫자(1.4rem)의 절반쯤이라 같은 줄에 있어도 둘이 다투지 않는다.
+*/
+.yc-krw {
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: var(--muted);
+  margin-left: 2px;
+}
+.yc-head.compact .yc-krw { font-size: 0.72rem; }
+/*
  * 캔버스가 아니라 SVG 다 — viewBox 라 폭이 얼마든 같은 그림이 나온다.
  * `preserveAspectRatio="none"` 이라 가로로 늘어나도 세로 비율은 유지된다.
  */

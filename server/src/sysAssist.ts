@@ -762,7 +762,20 @@ async function macroSection(k: MacroKey): Promise<SysSection> {
       Promise.all(MACRO_TREND[k].map((t) => trendLine(t.label, t.symbol, Boolean(t.rate)))),
     ]);
     const usRows = us?.rows ?? [];
-    const g = (x: (typeof global)[number]): SysFact => ({ label: x.label, value: x.price === null ? "-" : `${x.isRate ? `${x.price}%` : num(x.price)} (${pct(x.changeRate)})`, tone: toneOf(x.changeRate), hint: x.kind ? `${x.kind}` : undefined });
+    /*
+     * ⚠️ 코인은 **단위를 값에 적는다** (2026-11-12). 예전엔 이름이 「비트코인 (원)」이라
+     * 이름이 단위를 지고 있었는데, 달러를 주로 바꾸면서 그 꼬리표를 뗐다. 여기서도 안
+     * 적으면 「비트코인 103,456」만 남아 **무슨 돈인지 사라진다.**
+     */
+    const g = (x: (typeof global)[number]): SysFact => ({
+      label: x.label,
+      value:
+        x.price === null
+          ? "-"
+          : `${x.isRate ? `${x.price}%` : num(x.price)}${x.krw ? "달러" : ""} (${pct(x.changeRate)})${x.krw ? ` · 업비트 ${num(x.krw.price)}원` : ""}`,
+      tone: toneOf(x.changeRate),
+      hint: x.kind ? `${x.kind}` : undefined,
+    });
     /* %p 는 부동소수 찌꺼기가 그대로 보인다(-0.005000000000000782) — 셋째 자리까지 */
     const pp = (v: number | null) => (v === null ? "-" : `${v > 0 ? "+" : ""}${v.toFixed(3).replace(/0+$/, "").replace(/\.$/, "")}%p`);
     const u = (r: (typeof usRows)[number]): SysFact => ({

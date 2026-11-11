@@ -240,6 +240,17 @@ export interface ChartTarget {
    */
   hintPrice?: number | null;
   /**
+   * **곁들이는 원화** — 암호화폐만 (2026-11-12).
+   *
+   * 벤티지 화면에서 큰 숫자는 1억 원인데 바로 아래 「전일 종가」는 73,720 이었다.
+   * 값을 업비트 원화로 덮었는데 차트·카드는 심볼(`BTC-USD`)로 야후를 부르니, **한
+   * 화면에 두 단위**가 섞인 것이다. 이제 달러가 주고 원화는 괄호로 거든다.
+   *
+   * hintPrice 와 같은 원칙으로 **목록이 들고 있는 값을 넘겨받는다** — 시트가 따로
+   * 업비트를 부르면 두 숫자가 언젠가 갈라진다.
+   */
+  hintKrw?: number | null;
+  /**
    * **금리인가** (2026-09-21 — 벤티지: "이건 또 왜 안 맞아").
    *
    * 카드는 금리를 `%p`(변화폭)로 적고 바로 밑에 「금리는 %p 로 읽습니다」라고 설명까지 해 두는데,
@@ -866,6 +877,15 @@ export function YahooChartSheet({
                   maximumFractionDigits: digits,
                 })}
               </b>
+              {/*
+                **원화는 괄호로 작게** (2026-11-12). 환산이 아니라 업비트 실거래가라
+                달러×환율과 어긋난다 — 어디 값인지 밝혀야 「환율이 틀렸네」로 안 읽힌다.
+              */}
+              {target.hintKrw != null && (
+                <span className="yc-krw" title="업비트 실거래가입니다 — 달러 값에 환율을 곱한 것이 아니라 국내 거래소 가격이라 조금 어긋납니다">
+                  ({target.hintKrw.toLocaleString("ko-KR")}원)
+                </span>
+              )}
               {fastQ?.changeRate != null ? (
                 <>
                   <span className={`yc-rate ${fastQ.changeRate >= 0 ? "positive" : "negative"}`}>{moveText(fastQ.changeRate, fastQ.price)}</span>

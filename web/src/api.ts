@@ -4748,6 +4748,13 @@ export interface GlobalQuote {
   /** 시세의 기준 시각(ms) — 야후는 거래소 지연이 실려 있다. 화면이 「n분 전」을 단다 */
   quotedAt?: number | null;
   source?: "yahoo" | "upbit" | "hantoo";
+  /**
+   * **곁들이는 원화** — 암호화폐만 (2026-11-12).
+   *
+   * `price` 는 야후 달러다. 이건 업비트 **실거래** 원화라 달러×환율과 어긋난다
+   * (김치프리미엄). 그래서 화면이 「업비트」라고 밝히고 괄호로 작게 적는다.
+   */
+  krw?: { price: number; changeRate: number; at: number } | null;
 }
 
 export interface ProviderUsage {

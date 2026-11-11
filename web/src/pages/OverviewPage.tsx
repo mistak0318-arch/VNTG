@@ -629,6 +629,8 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                       isRate: g.isRate,
                       hintRate: g.changeRate,
                       hintPrice: g.price,
+                      /* 코인은 달러가 주고 원화가 거든다 — 시트가 따로 안 부르고 넘겨받는다 */
+                      hintKrw: g.krw?.price ?? null,
                     })
                   }
                   /* 심볼은 줄에서 뺐다(아래) — 무엇을 보는 줄인지는 여기에 남긴다 */
@@ -672,6 +674,21 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                       <span className="ov-g-px num">
                         {/* 금리는 소수 셋째 자리까지 그대로 — 4.550 을 4.55 로 줄이면 자릿수가 들쭉날쭉해진다 */}
                         {g.price === null ? "-" : g.isRate ? `${g.price.toFixed(3)}%` : fmtNum(Number(g.price.toFixed(2)))}
+                        {/*
+                          **원화는 괄호로 작게** (2026-11-12 — 벤티지: "USD 기준으로 받아오는
+                          거라면 USD 기준으로 표시해야지 그리고 괄호로 작게 원화로").
+
+                          ⚠️ 환산이 아니라 **업비트 실거래가**다(김치프리미엄만큼 어긋난다).
+                          그래서 title 로 어디 값인지 밝힌다 — 안 밝히면 「환율 계산이 틀렸네」로 읽힌다.
+                        */}
+                        {g.krw && (
+                          <em
+                            className="ov-g-krw"
+                            title={`업비트 실거래가 ${g.krw.price.toLocaleString("ko-KR")}원 — 달러 값에 환율을 곱한 것이 아니라 국내 거래소 가격입니다`}
+                          >
+                            ({fmtNum(g.krw.price)}원)
+                          </em>
+                        )}
                       </span>
                       {/* 금리는 변화폭(%p)만 — 등락률로 보면 감이 안 온다 (4.71→4.72 는 0.2% 지만 0.01%p 가 뜻) */}
                       {/* 등락률을 모르면 「(+0.00%)」 대신 괄호를 뺀다 — 색도 대비 부호로 (2026-09-18 전수검증 D6) */}
