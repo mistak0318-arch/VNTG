@@ -1698,14 +1698,17 @@ export function createMarketRouter(client: KiwoomClient): Router {
       /*
        * **오늘 밤 야간 세션이 없는 날** (2026-09-23 21:28 — 벤티지: "야간선물 값이 안 움직이는데 이거 맞아 지금?").
        * 추석 전날이었다. 야간 파생은 **다음 거래일의 일부**라 다음 날이 휴장이면 열리지 않는데, 화면은 시·고·저·종이
-       * 전부 같은 값(주간 정산가)인 채 아무 말이 없었다. 18:00 뒤에 다음 날이 휴장이면, 또는 05:00 전에 오늘이
+       * 전부 같은 값(주간 정산가)인 채 아무 말이 없었다. 18:00 뒤에 다음 날이 휴장이면, 또는 06:00 전에 오늘이
        * 휴장이면 `nightClosed` 를 같이 보낸다 — 시트가 한 줄 적는다.
+       *
+       * ⚠️ 새벽 경계가 **05:00 이었다**(2026-11-12 고침). 세션은 06:00 까지라, 05~06시에는
+       * 휴장일인데도 `nightClosed` 가 안 붙어 시트가 아무 말을 안 했다.
        */
       const kst = new Date(Date.now() + 9 * 3600_000);
       const hh = kst.getUTCHours();
       const dayAt = (d: number) => new Date(`${new Date(kst.getTime() + d * 86_400_000).toISOString().slice(0, 10)}T12:00:00+09:00`);
       const nightClosed =
-        market === "CM" && ((hh >= 18 && !isTradingDay(dayAt(1))) || (hh < 5 && !isTradingDay(dayAt(0))));
+        market === "CM" && ((hh >= 18 && !isTradingDay(dayAt(1))) || (hh < 6 && !isTradingDay(dayAt(0))));
       res.json({ code, market, period, nightClosed, ...(await futuresCandles(code, market, period, days)) });
     } catch (err) {
       next(err);

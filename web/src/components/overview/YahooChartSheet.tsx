@@ -656,7 +656,7 @@ export function YahooChartSheet({
           <OhlcStrip
             label={
               (target.futMarket ?? "CM") === "CM"
-                ? `${futDay.t.slice(5, 10).replace("-", "/")} 야간 세션 (18:00~05:00)`
+                ? `${futDay.t.slice(5, 10).replace("-", "/")} 야간 세션 (18:00~06:00)`
                 : futDay.t.slice(0, 10) === new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10)
                   ? "오늘"
                   : `${futDay.t.slice(5, 10).replace("-", "/")} (마지막 거래일)`
