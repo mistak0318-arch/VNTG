@@ -1,4 +1,5 @@
 import { sharedKiwoom } from "./kiwoomShared.js";
+import { noteLife } from "./lifecycle.js";
 
 /**
  * **VKOSPI — 코스피200 변동성지수** (2026-11-12 — 벤티지: "VKOSPI 라고 알아 너? 그 지표도
@@ -48,6 +49,20 @@ let cache: VkospiQuote | null = null;
 let at = 0;
 let inflight: Promise<VkospiQuote | null> | null = null;
 
+/**
+ * **첫 결과를 한 번만 적는다** — 성공이든 실패든.
+ *
+ * 아래 `catch` 는 못 받은 걸 삼키고 넘어간다(줄 하나 때문에 시황이 흔들리면 안 되니까).
+ * 그런데 **삼키기만 하면 「왜 줄이 없지」에 답할 길이 없다** — 이 프로젝트가 되풀이해
+ * 당한 자리다. 뜨고 처음 한 번은 결과를 남겨 둔다. 매번 적으면 60초마다 로그가 는다.
+ */
+let noted = false;
+function note(msg: string): void {
+  if (noted) return;
+  noted = true;
+  noteLife("START", msg);
+}
+
 /** 코스피200 옵션이 도는 동안만 — KST 평일 09:00~15:40 */
 function krxOpen(now = new Date()): boolean {
   const kst = new Date(now.getTime() + (9 * 60 + now.getTimezoneOffset()) * 60_000);
@@ -79,7 +94,10 @@ export async function vkospi(): Promise<VkospiQuote | null> {
         inds_cd: VKOSPI_CODE,
       });
       const price = Math.abs(num(data.cur_prc));
-      if (!Number.isFinite(price) || price <= 0) return cache;
+      if (!Number.isFinite(price) || price <= 0) {
+        note(`VKOSPI 값이 비었다 — cur_prc=${String(data.cur_prc)}`);
+        return cache;
+      }
       const rate = num(data.flu_rt);
       const change = num(data.pred_pre);
       cache = {
@@ -90,9 +108,11 @@ export async function vkospi(): Promise<VkospiQuote | null> {
         at: Date.now(),
       };
       at = Date.now();
+      note(`VKOSPI ${cache.price} (${cache.changeRate ?? "?"}%)`);
       return cache;
-    } catch {
+    } catch (e) {
       /* 못 받으면 들고 있던 값 — 없으면 줄이 안 나간다(없는 값을 있는 척하지 않는다) */
+      note(`VKOSPI 실패 — ${e instanceof Error ? e.message : String(e)}`);
       return cache;
     } finally {
       inflight = null;
