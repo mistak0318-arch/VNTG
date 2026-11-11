@@ -51,8 +51,8 @@ export interface GlobalQuote {
   kind: "선물" | "현물" | "";
   /** Yahoo 가 알려준 체결 시각(ms) — "언제 값인가"의 답 */
   quotedAt: number | null;
-  /** 어디서 받았나 — 야후 / 업비트 / 한투 (2026-09-10) */
-  source?: "yahoo" | "upbit" | "hantoo";
+  /** 어디서 받았나 — 야후 / 업비트 / 한투 (2026-09-10) / 키움 (2026-11-12, VKOSPI) */
+  source?: "yahoo" | "upbit" | "hantoo" | "kiwoom";
   /**
    * **곁들이는 원화 값** — 암호화폐만 (2026-11-12).
    *
@@ -620,6 +620,45 @@ export async function getGlobalMarket(force = false): Promise<GlobalQuote[]> {
         }
       } catch {
         /* 야간선물 없이도 글로벌은 나간다 */
+      }
+      /*
+       * **VKOSPI 를 야간선물 바로 밑에** (2026-11-12 — 벤티지: "그 지표도 볼 수 있음
+       * 좋겠는데 코스피 야간선물 밑에다가").
+       *
+       * 야간선물이 `unshift` 로 맨 위에 서므로 여기서 **1번 자리**에 끼우면 그 바로
+       * 아래다. 야간선물이 없는 날(한투 실패·휴장)에는 0번이 되어 맨 위에 선다 —
+       * 둘 다 「지금 한국이 어디로 가나」를 말하는 줄이라 그 순서가 어긋나지 않는다.
+       *
+       * ⚠️ **묶음은 따로 둔다.** 「야간선물」 묶음에 넣으면 머리글의 장 배지가 그대로
+       * 걸려서, 새벽 5시에 **VKOSPI 까지 「야간 거래 중」**으로 뜬다. VKOSPI 는 코스피200
+       * 옵션에서 나오므로 정규장(09:00~15:40)에만 움직인다 — 묶음 하나 값이 아니라
+       * **화면이 거짓말을 안 하는 값**이다. 배지는 안 붙는다(`kindOfGroup` 에 안 넣었다):
+       * 틀린 배지보다 없는 배지가 낫고, 「n분 전」이 신선도를 대신 말한다.
+       */
+      try {
+        const { vkospi } = await import("./vkospi.js");
+        const v = await vkospi();
+        if (v) {
+          results.splice(results.length > 0 && results[0]?.key === "krNightFut" ? 1 : 0, 0, {
+            key: "vkospi",
+            label: "VKOSPI",
+            group: "변동성",
+            color: "#b06cd4",
+            /* 야후 심볼이 없다 — 빈 문자열이면 화면이 줄을 **안 누르게** 한다 */
+            symbol: "",
+            price: v.price,
+            change: v.change,
+            changeRate: v.changeRate,
+            isRate: false,
+            kind: "현물",
+            quotedAt: v.at,
+            source: "kiwoom",
+            signal: null,
+            error: null,
+          });
+        }
+      } catch {
+        /* VKOSPI 없이도 글로벌은 나간다 */
       }
       cache = { data: results, at: Date.now() };
       /* 처음부터 원화 암호화폐·최신 야간선물로 — 첫 화면이 야후 달러 값으로 뜨지 않게 */

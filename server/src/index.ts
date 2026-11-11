@@ -100,7 +100,7 @@ import { shareGet } from "./shareGet.js";
 /* 복구 루틴 — 나빠진 뒤 스스로 돌아온다 (2026-10-07 밤) */
 import { startRecovery } from "./recovery.js";
 import { startHeapWho } from "./heapWho.js";
-import { probeVkospiOnce } from "./vkospiProbe.js";
+import { setSharedKiwoom } from "./kiwoomShared.js";
 import { createAiRouter } from "./routes/ai.js";
 import { createAskRouter } from "./routes/ask.js";
 import { createSysRouter } from "./routes/sys.js";
@@ -314,6 +314,11 @@ app.use("/api/auth", createAuthRouter());
 app.use(requireAuth);
 
 const client = createKiwoomClientFromEnv();
+/*
+ * 인자 없이 불리는 모듈이 키움을 쓸 수 있게 한 자리에 맡겨 둔다 (2026-11-12).
+ * `globalMarket` 이 VKOSPI(업종 603)를 끼우는데, 그 함수는 인자를 안 받는다.
+ */
+setSharedKiwoom(client);
 app.use("/api/account", createAccountRouter(client));
 app.use("/api/market", createMarketRouter(client));
 app.use("/api/us-kiwoom", createUsKiwoomRouter(client));
@@ -691,13 +696,6 @@ app.listen(port, host, () => {
    * 섞여 범인을 못 집는다 — 64KB 마다 한 점이라 늘 켜 둬도 싸다. `/api/sys/heap-who`.
    */
   startHeapWho();
-  /*
-   * VKOSPI 가 키움 업종에 있나 — **한 번 쓰고 지울 진단** (2026-11-12). 야후·네이버·KRX
-   * 가 전부 막혀서 남은 후보가 키움뿐인데, 로컬에서 키움 토큰을 받으면 이 서버 것이
-   * 끊긴다. 답은 `lifecycle.log` 로 나온다(`:4000` 은 바깥에서 안 열린다).
-   * 뜨고 90초 뒤 조회 네 건. 답을 확인하면 이 줄과 `vkospiProbe.ts` 를 지운다.
-   */
-  probeVkospiOnce(client);
   startRecovery((why) => {
     noteLife("EXIT", why);
     /* 쓰던 응답이 마저 나가도록 한 박자 뒤에 — OOM 즉사와 다른 점이 이것이다 */

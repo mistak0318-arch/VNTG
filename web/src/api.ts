@@ -4747,7 +4747,7 @@ export interface GlobalQuote {
   signal: RowSignal | null;
   /** 시세의 기준 시각(ms) — 야후는 거래소 지연이 실려 있다. 화면이 「n분 전」을 단다 */
   quotedAt?: number | null;
-  source?: "yahoo" | "upbit" | "hantoo";
+  source?: "yahoo" | "upbit" | "hantoo" | "kiwoom";
   /**
    * **곁들이는 원화** — 암호화폐만 (2026-11-12).
    *
