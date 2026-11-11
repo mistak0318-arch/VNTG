@@ -11,6 +11,7 @@ import {
   type YahooChart,
 } from "../../api";
 import { CandleChart } from "../CandleChart";
+import { useChartFullscreen } from "../../useChartFullscreen";
 import { IntradayFlowChart } from "./IntradayFlowChart";
 import { IndexAnalysis, type DailyPt } from "./IndexAnalysis";
 import { UsRichPanel, type UsRichTab } from "./UsRichPanel";
@@ -288,6 +289,8 @@ export function YahooChartSheet({
 }) {
   /* 뒤로가기로 닫힌다 — 폰에서 시트를 열고 뒤로 누르면 페이지가 넘어갔다 (2026-08-28) */
   useSheetBack(true, onClose);
+  /* 차트 크게 보기 — 종목 상세·지수 시트와 **같은 훅** (2026-11-12) */
+  const fs = useChartFullscreen();
   const futures = target.kind === "futures";
   const usStock = target.kind === "usStock";
   const ranges = usStock ? US_RANGES : futures ? FUTURES_RANGES : YAHOO_RANGES;
@@ -785,6 +788,23 @@ export function YahooChartSheet({
 
         {((!usStock && sub === "overview") || (usStock && usTab === "overview")) && (
         <>
+        {/*
+          **크게 보기** (2026-11-12). 지수 시트와 **같은 훅**이다(`useChartFullscreen`) —
+          종목 상세에만 있던 장치라, `CandleChart` 를 직접 쓰는 이 시트들은 못 받고 있었다.
+        */}
+        <div className="chart-placeholder" hidden={!fs.full}>
+          크게 보는 중…
+        </div>
+        <div className={fs.full ? `chart-full${fs.compact ? " compact" : ""}` : undefined} ref={fs.hostRef}>
+        {fs.full && !fs.compact && (
+          <div className="chart-full-head">
+            <span className="chart-full-name">
+              {target.label}
+              {target.symbol && <span className="pt-n"> {target.symbol}</span>}
+            </span>
+            <span className="pt-n chart-full-hint">가로로 돌리면 더 넓게 봅니다 · ESC 로 닫기</span>
+          </div>
+        )}
         <div className="filter-row">
           {ranges.map((r) => (
             <button
@@ -836,6 +856,16 @@ export function YahooChartSheet({
               ))}
             </>
           )}
+          {candles.length > 0 &&
+            (fs.full ? (
+              <button className="filter-btn" onClick={fs.exitFull} title="닫기 (ESC)">
+                ✕ 닫기
+              </button>
+            ) : (
+              <button className="filter-btn" onClick={fs.enterFull} title="크게 보기">
+                ⤢ 크게
+              </button>
+            ))}
         </div>
 
         {/*
@@ -860,7 +890,7 @@ export function YahooChartSheet({
         {!loading && data?.error && <div className="error-banner">{data.error}</div>}
 
         {view && (
-          <div className={loading ? "chart-swapping" : undefined}>
+          <div className={`yc-chartbox${loading ? " chart-swapping" : ""}`}>
             {loading && <div className="chart-swap-badge">불러오는 중…</div>}
             {/*
               큰 숫자는 **전일 대비**다 — 목록에서 보고 누른 그 숫자와 같아야 한다.
@@ -924,6 +954,8 @@ export function YahooChartSheet({
               SVG 로는 그걸 다 다시 만들어야 했다.
             */}
             {candles.length > 0 ? (
+              /* 크게 볼 때만 `.chart-wrap` — 평소에 입히면 없던 회색 칸이 생긴다 */
+              <div className={fs.full ? "chart-wrap" : undefined} ref={fs.wrapRef}>
               <CandleChart
                 candles={toChartCandles(candles)}
                 /*
@@ -934,7 +966,7 @@ export function YahooChartSheet({
                  * 이면 분봉이다. 기간 이름(1d·5d)으로 재면 서버가 간격을 바꿨을 때 어긋난다.
                  */
                 intraday={String(candles[0]?.t ?? "").length > 10}
-                height={340}
+                height={fs.chartHeight(340)}
                 fitKey={`${target.symbol}:${range}:${longRange ? "L" : "S"}:${futSpanDays ?? ""}`}
                 name={target.label}
                 code={target.symbol}
@@ -942,7 +974,17 @@ export function YahooChartSheet({
                 digits={digits}
                 prevClose={range === "1d" ? (data?.prevClose ?? null) : null}
               />
+              </div>
             ) : null}
+
+            {/*
+              차트 **뒤에 오는 것들**(ETF 구성종목·선물 표·설명글)은 크게 볼 때 감춘다.
+
+              오버레이가 이것들까지 안고 있으면 차트가 그만큼 줄어든다 — 크게 보려고 연
+              자리인데 표가 따라오면 뜻이 없다. 지우지 않고 `display:none` 으로 **감추기만**
+              하는 까닭은, 언마운트하면 닫을 때 저 표들이 **다시 받아오기** 때문이다.
+            */}
+            <div className="yc-extra">
 
             {/*
               ETF 구성종목 (2026-08-27 요청) — 섹터 MAP 타일을 눌렀을 때 「무엇이 들었나」.
@@ -1023,8 +1065,11 @@ export function YahooChartSheet({
                 미결제가 <b>줄면</b> 숏 청산이 밀어 올린 것이라 힘이 약합니다.
               </div>
             )}
+            </div>
           </div>
         )}
+        {/* 크게 보기 껍데기 닫기 */}
+        </div>
         </>
         )}
       </div>

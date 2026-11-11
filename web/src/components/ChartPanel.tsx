@@ -7,6 +7,7 @@ import { setPref } from "../prefs";
 import { indOn, setIndOn, useChartPrefs } from "../useChartPrefs";
 import { ChartInsights } from "./ChartInsights";
 import { PERIOD_CONFIG, lastDays, toCandles, type Period } from "./chartCandles";
+import { useChartFullscreen } from "../useChartFullscreen";
 
 /**
  * 기간 전환이 되는 캔들차트 패널.
@@ -89,10 +90,7 @@ const SPAN_SETS: Record<SpanKind, { label: string; days: number }[]> = {
   ],
 };
 
-const CHROME_PX = 108;
-const CHROME_PX_COMPACT = 62;
-/** 이보다 낮으면 폰을 눕힌 것으로 본다 */
-const COMPACT_VH = 500;
+/* 전체화면 높이·눕힌 폰 판정은 `useChartFullscreen` 으로 옮겼다 (2026-11-12) */
 
 export function ChartPanel({
   code,
@@ -347,11 +345,13 @@ export function ChartPanel({
       </div>
     );
   })();
-  const [full, setFull] = useState(false);
+  /*
+   * 크게 보기는 **공용 훅**이 쥔다 (2026-11-12). 지수·야후·야간선물 시트가 같은 장치를
+   * 쓰는데, 복사해 두면 언젠가 갈라진다(`useChartFullscreen.ts`).
+   */
+  const { full, compact, enterFull, exitFull, hostRef, wrapRef, chartHeight: fullHeight } = useChartFullscreen();
   /** 전체화면에서는 판독 줄을 접어 둔다 — 크게 보려고 들어온 자리다 */
   const [fullInsights, setFullInsights] = useState(false);
-  const [vh, setVh] = useState(() => (typeof window === "undefined" ? 800 : window.innerHeight));
-  const hostRef = useRef<HTMLDivElement>(null);
   const isIntraday = PERIOD_CONFIG[period].intraday === true;
 
   /*
@@ -467,142 +467,16 @@ export function ChartPanel({
    */
   const candles = span > 0 ? lastDays(all, span) : all;
 
-  /* ---------------- 크게 보기 ---------------- */
-
-  const exitFull = useCallback(() => {
-    // 실패해도 오버레이는 닫아야 한다 — 안 그러면 빠져나올 방법이 없어진다
-    try {
-      if (document.fullscreenElement) void document.exitFullscreen();
-    } catch {
-      /* 되는 데서만 된다 */
-    }
-    try {
-      (screen.orientation as { unlock?: () => void } | undefined)?.unlock?.();
-    } catch {
-      /* iOS 는 없다 */
-    }
-    setFull(false);
-  }, []);
-
-  /*
-   * 전체화면 요청은 **여기서 하지 않는다.**
+  /* ---------------- 크게 보기 ----------------
    *
-   * `setFull(true)` 은 곧바로 반영되지 않는다. 바로 뒤에서 `requestFullscreen()` 을 부르면
-   * 그 시점의 `hostRef` 는 **아직 옛 요소**다 — 브라우저가 그걸 전체화면으로 만들고 나면
-   * 화면에는 아무것도 안 나온다. 실제로 「크게 보는 중…」만 뜨고 까매졌다.
-   * 그래서 상태만 켜고, 실제 요청은 아래 effect 가 **다시 그린 뒤에** 한다.
+   * 움직이는 부분은 전부 `useChartFullscreen` 으로 옮겼다 (2026-11-12) — 오버레이 ·
+   * Fullscreen API · 가로 고정 · ESC · 뒤 화면 스크롤 잠금 · 높이 실측까지.
+   * 지수·야후·야간선물 시트가 **같은 훅**을 쓴다. 복사해 두면 언젠가 갈라진다.
    */
-  function enterFull() {
-    setFull(true);
-  }
-
-  useEffect(() => {
-    if (!full) return;
-    const el = hostRef.current;
-    if (!el) return;
-    void (async () => {
-      try {
-        await el.requestFullscreen?.();
-      } catch {
-        // iOS 사파리는 video 가 아니면 안 준다. 오버레이만으로도 화면은 꽉 찬다
-      }
-      try {
-        await (
-          screen.orientation as { lock?: (o: string) => Promise<void> } | undefined
-        )?.lock?.("landscape");
-      } catch {
-        // 안드로이드 크롬에서만 된다. 안 되면 사용자가 폰을 돌리면 그만이다
-      }
-    })();
-  }, [full]);
-
-  // 화면 크기·방향이 바뀌면 차트 높이를 다시 잰다
-  useEffect(() => {
-    const onResize = () => setVh(window.innerHeight);
-    window.addEventListener("resize", onResize);
-    window.addEventListener("orientationchange", onResize);
-    return () => {
-      window.removeEventListener("resize", onResize);
-      window.removeEventListener("orientationchange", onResize);
-    };
-  }, []);
-
-  /*
-   * ESC 로 나가거나, 브라우저가 알아서 전체화면을 풀었을 때 상태를 맞춘다.
-   * 이걸 안 하면 전체화면만 풀리고 오버레이가 남아 화면이 잠긴 것처럼 보인다.
-   */
-  useEffect(() => {
-    if (!full) return;
-    const onFsChange = () => {
-      if (!document.fullscreenElement) setFull(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") exitFull();
-    };
-    document.addEventListener("fullscreenchange", onFsChange);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("fullscreenchange", onFsChange);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [full, exitFull]);
-
-  // 오버레이가 떠 있는 동안 뒤 화면이 스크롤되면 안 된다
-  useEffect(() => {
-    if (!full) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [full]);
 
   const showInsights = insights && prefs.insightsOn && (!full || fullInsights);
-  // 눕힌 폰에서는 머리줄을 접는다. 종목명은 차트 툴팁에도 나오므로 잃는 게 없다
-  const compact = full && vh < COMPACT_VH;
 
-  /*
-   * ⚠️ 전체화면 높이를 **어림하지 않고 실제로 잰다.**
-   *
-   * 예전엔 `창 높이 − 도구줄 어림값(108px)` 로 계산했다. 두 가지가 틀어졌다.
-   *   · 전체화면에 들어가면 브라우저 주소창이 사라져 창 높이가 **그 순간** 바뀐다.
-   *     `resize` 가 늦게 오면 옛 높이로 계산한 차트가 그려진다.
-   *   · 도구줄이 실제로 몇 픽셀인지는 글꼴 크기 설정에 따라 달라진다. 108 은 어림이다.
-   *
-   * 그래서 눕힌 폰(844×390)에서 **차트가 649px** 로 잡혀 창보다 커졌고, 남는 자리가
-   * 없으니 위의 도구줄이 8px 로 짓눌려 글자가 안 보였다. 사용자 화면이 그 꼴이었다.
-   *
-   * 차트를 담는 칸의 높이를 그대로 쓴다. 칸의 크기는 아래 CSS 가 flex 로 정하므로
-   * 차트가 커진다고 칸이 커지지 않는다 — 순환이 안 생긴다.
-   */
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const [wrapH, setWrapH] = useState(0);
-  useEffect(() => {
-    const el = wrapRef.current;
-    if (!el || !full) return;
-    /*
-     * **안쪽 여백은 빼고 준다** (2026-10-12). `clientHeight` 는 패딩을 포함하는데
-     * 차트가 쓸 수 있는 자리는 그 안쪽이다. 16px 이 작아 보여도 아래 칸이 생긴 뒤로는
-     * 그만큼 맨 아래가 잘린다 — 넘치면 `.chart-wrap` 이 그대로 자른다.
-     */
-    const measure = () => {
-      const cs = getComputedStyle(el);
-      const pad = parseFloat(cs.paddingTop || "0") + parseFloat(cs.paddingBottom || "0");
-      setWrapH(Math.max(0, el.clientHeight - pad));
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [full, compact, fullInsights]);
-
-  const chartHeight = full
-    ? Math.max(
-        200,
-        // 잰 값이 아직 없을 때만 어림값으로 시작한다 — 한 프레임 뒤 실제 값으로 바뀐다
-        wrapH > 0 ? wrapH : vh - (compact ? CHROME_PX_COMPACT : CHROME_PX),
-      )
-    : Math.max(140, height ?? 320);
+  const chartHeight = fullHeight(height ?? 320);
 
   const toolbar = (
     <div className="period-toggle">

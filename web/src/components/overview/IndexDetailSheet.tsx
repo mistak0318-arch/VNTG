@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useSheetBack } from "../../useSheetBack";
 import { api, fmtNum, type IndexDetailData, type IndexRange, type MarketFlow } from "../../api";
 import { CandleChart } from "../CandleChart";
+import { useChartFullscreen } from "../../useChartFullscreen";
 import { IntradayFlowChart } from "./IntradayFlowChart";
 import { OhlcStrip } from "./OhlcStrip";
 import { useSection } from "../../useSection";
@@ -89,6 +90,8 @@ const FLOW_COLS: { key: FlowKey; label: string; hint?: string }[] = [
 ];
 
 export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () => void }) {
+  /* 차트 크게 보기 — 종목 상세(`ChartPanel`)와 **같은 훅**이다 (2026-11-12) */
+  const fs = useChartFullscreen();
   /* 뒤로가기로 닫힌다 — 폰에서 시트를 열고 뒤로 누르면 페이지가 넘어갔다 (2026-08-28) */
   useSheetBack(true, onClose);
   const [range, setRange] = useState<IndexRange>("day");
@@ -231,6 +234,25 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
 
         {sub === "overview" && (
         <>
+        {/*
+          **크게 보기** (2026-11-12 — 벤티지: "우리 지수 볼때 차트 크게 보는 기능이
+          빠져있더라고"). 종목 상세에만 있었다 — 지수 시트는 `CandleChart` 를 직접
+          쓰느라 `ChartPanel` 의 그 장치를 못 받았다. 같은 캔들차트인데 코스피를 크게 볼
+          길만 없었던 셈이다. 움직이는 부분은 `useChartFullscreen` 하나가 쥔다.
+
+          기간 단추(일/주/월)는 **크게 본 상태에서도 그대로 둔다** — 크게 보는 까닭이
+          대개 「길게 보려고」라 거기서 기간을 못 바꾸면 도로 닫아야 한다.
+        */}
+        <div className="chart-placeholder" hidden={!fs.full}>
+          크게 보는 중…
+        </div>
+        <div className={fs.full ? `chart-full${fs.compact ? " compact" : ""}` : undefined} ref={fs.hostRef}>
+        {fs.full && !fs.compact && (
+          <div className="chart-full-head">
+            <span className="chart-full-name">{data?.name ?? (code === "101" ? "코스닥" : "코스피")}</span>
+            <span className="pt-n chart-full-hint">가로로 돌리면 더 넓게 봅니다 · ESC 로 닫기</span>
+          </div>
+        )}
         <div className="filter-row">
           {RANGES.map((r) => (
             <button
@@ -242,6 +264,16 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
             </button>
           ))}
           {data && <span className="pt-n">{candles.length}개</span>}
+          {candles.length > 1 &&
+            (fs.full ? (
+              <button className="filter-btn" onClick={fs.exitFull} title="닫기 (ESC)">
+                ✕ 닫기
+              </button>
+            ) : (
+              <button className="filter-btn" onClick={fs.enterFull} title="크게 보기">
+                ⤢ 크게
+              </button>
+            ))}
         </div>
 
         {!data && !error && <div className="page-note">불러오는 중…</div>}
@@ -254,9 +286,16 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
           지수엔 거래량이 없어 0 을 넣는다 — 거래량 막대는 그려지지 않는다.
         */}
         {candles.length > 1 && (
+          /*
+            크게 볼 때만 `.chart-wrap` 을 입힌다. 평소에 입히면 차트에 없던 회색 칸과
+            여백이 생겨 **원래 보던 화면이 달라진다** — 크게 보기를 붙이자고 평소 모습을
+            바꿀 일이 아니다. 자(높이)를 재는 칸이라 `ref` 는 늘 달아 둔다.
+          */
+          <div className={fs.full ? "chart-wrap" : undefined} ref={fs.wrapRef}>
           <CandleChart
             name={data?.name}
             showExtremes
+            height={fs.full ? fs.chartHeight(320) : undefined}
             candles={candles.map((c) => ({
               time: {
                 year: Number(c.dt.slice(0, 4)),
@@ -271,7 +310,9 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
               volume: c.tradeValue,
             }))}
           />
+          </div>
         )}
+        </div>
 
         {/*
           일별 수급. 지수 그림 밑에 붙여야 뜻이 생긴다 —

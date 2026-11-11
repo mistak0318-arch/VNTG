@@ -9535,7 +9535,26 @@ th.est-col { color: var(--blue); }
  */
 .chart-full > .chart-full-head,
 .chart-full > .period-toggle,
+/*
+  지수·야후·야간선물 시트의 도구줄은 `.filter-row` 다 (2026-11-12). 안 적으면
+  `flex-shrink: 1` 이 걸려 **기간 단추가 짓눌린다** — 종목 상세에서 도구줄이 8px 로
+  납작해졌던 것과 같은 병이다.
+*/
+.chart-full > .filter-row,
 .chart-full .ci-wrap { flex: none; }
+
+/*
+  크게 볼 때는 차트 뒤의 표·설명을 감춘다 (2026-11-12). 오버레이가 그것들까지 안고
+  있으면 차트가 그만큼 줄어든다 — 크게 보려고 연 자리다. 지우지 않고 감추기만 하는
+  까닭은 언마운트하면 닫을 때 **다시 받아오기** 때문이다.
+*/
+.chart-full .yc-extra { display: none; }
+/*
+  차트를 담은 칸이 남는 자리를 다 쓰게 — 그 안의 `.chart-wrap` 이 실제 높이를 잰다.
+  ⚠️ 이름을 따로 준다(`yc-chartbox`). 이 칸은 **불러오는 중일 때만** `chart-swapping`
+  이 붙어서, 그걸로 짚으면 평소에는 규칙이 안 걸린다.
+*/
+.chart-full .yc-chartbox { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 
 /* 차트는 남는 만큼만 — `min-height: 0` 이 없으면 flex 자식이 안 줄어든다 */
 /*

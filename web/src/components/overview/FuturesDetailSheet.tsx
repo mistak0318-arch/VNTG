@@ -4,6 +4,7 @@ import { useSheetBack } from "../../useSheetBack";
 import { api, fmtNum } from "../../api";
 import { useLoadWatch } from "../../loadWatch";
 import { CandleChart } from "../CandleChart";
+import { useChartFullscreen } from "../../useChartFullscreen";
 import { IntradayFlowChart } from "./IntradayFlowChart";
 import { OhlcStrip } from "./OhlcStrip";
 import { IndexAnalysis, type DailyPt, type LooseFlow } from "./IndexAnalysis";
@@ -58,6 +59,8 @@ export function FuturesDetailSheet({
 }) {
   /* 뒤로가기로 닫힌다 — 폰에서 시트를 열고 뒤로 누르면 페이지가 넘어갔다 (2026-08-28) */
   useSheetBack(true, onClose);
+  /* 차트 크게 보기 — 지수·야후 시트와 **같은 훅** (2026-11-12) */
+  const fs = useChartFullscreen();
   const [range, setRange] = useState<"D" | "W" | "M">("D");
   const [candles, setCandles] = useState<
     { t: string; open: number; high: number; low: number; close: number; volume: number }[]
@@ -226,6 +229,19 @@ export function FuturesDetailSheet({
 
         {sub === "overview" && (
         <>
+        {/* 크게 보기 — 지수·야후 시트와 **같은 훅** (2026-11-12) */}
+        <div className="chart-placeholder" hidden={!fs.full}>
+          크게 보는 중…
+        </div>
+        <div className={fs.full ? `chart-full${fs.compact ? " compact" : ""}` : undefined} ref={fs.hostRef}>
+        {fs.full && !fs.compact && (
+          <div className="chart-full-head">
+            <span className="chart-full-name">
+              코스피200 선물<span className="pt-n"> {target.name}</span>
+            </span>
+            <span className="pt-n chart-full-hint">가로로 돌리면 더 넓게 봅니다 · ESC 로 닫기</span>
+          </div>
+        )}
         <div className="filter-row">
           {RANGES.map((r) => (
             <button
@@ -250,6 +266,16 @@ export function FuturesDetailSheet({
           {target.openInterest != null && (
             <span className="pt-n">미결제 {fmtNum(target.openInterest)}계약</span>
           )}
+          {candles.length > 1 &&
+            (fs.full ? (
+              <button className="filter-btn" onClick={fs.exitFull} title="닫기 (ESC)">
+                ✕ 닫기
+              </button>
+            ) : (
+              <button className="filter-btn" onClick={fs.enterFull} title="크게 보기">
+                ⤢ 크게
+              </button>
+            ))}
         </div>
 
         {chartErr && <div className="error-banner">차트를 못 받았습니다 — {chartErr}</div>}
@@ -259,9 +285,12 @@ export function FuturesDetailSheet({
 
         {/* 지수 시트와 같은 캔들 모듈 — 이평·자물쇠·키보드(+/−·←/→)가 그대로 따라온다 */}
         {candles.length > 1 && (
+          /* 크게 볼 때만 `.chart-wrap` — 평소에 입히면 없던 회색 칸이 생긴다 */
+          <div className={fs.full ? "chart-wrap" : undefined} ref={fs.wrapRef}>
           <CandleChart
             name="코스피200 선물"
             showExtremes
+            height={fs.full ? fs.chartHeight(320) : undefined}
             candles={candles.map((c) => ({
               time: {
                 year: Number(c.t.slice(0, 4)),
@@ -275,7 +304,9 @@ export function FuturesDetailSheet({
               volume: c.volume,
             }))}
           />
+          </div>
         )}
+        </div>
 
         {/* 장중 수급 변화 — 지수 시트와 같은 자리·같은 그림. 선물도 억원(네이버 새 API) */}
         <IntradayFlowChart market="03" unit="억원" />
