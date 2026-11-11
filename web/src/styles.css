@@ -9865,25 +9865,28 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .usb-curve { margin-top: 8px; font-size: 0.7333rem; color: var(--red); }
 
 /* 금리 */
+.usb-rates { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 6px; }
+.usb-rate {
+  display: flex; flex-direction: column; gap: 1px;
+  padding: 8px 10px; border-radius: 8px; background: var(--panel-2); min-width: 0;
+}
+.usb-rate-nm { font-size: 0.6667rem; color: var(--muted); }
+.usb-rate-v { font-size: 0.9333rem; font-variant-numeric: tabular-nums; }
+.usb-rate-d { font-size: 0.6667rem; font-variant-numeric: tabular-nums; }
+
 /*
-  컴팩트 (2026-11-12 — "사각형 박스가 너무 크거든"). 네 칸이 폰에서 한 화면을 먹었다.
+  폰에서만 컴팩트 (2026-11-12). 실측(360px): 이 카드가 **343px → 229px**.
   줄인 것은 **안쪽 여백과 이름 글자**다. 금리 숫자(`usb-rate-v`)는 그대로 — 보러 온 값이다.
 
-  ⚠️ **열 수를 못 박는다.** 예전엔 `auto-fit` + `minmax(9rem, 1fr)` 이었는데, 여백을
-  줄이자 폭에 따라 **3+1 로 깨졌다**(세 칸 한 줄, 한 칸 다음 줄). 네 칸짜리는 2×2 나
-  4×1 이라야 읽히지 3+1 은 아니다. 폰은 2열, 넓은 화면은 4열로 정해 둔다.
+  ⚠️ **열 수를 못 박는다.** 여백을 줄이자 `auto-fit` 이 폭에 따라 **3+1 로 깨졌다**
+  (세 칸 한 줄, 한 칸 다음 줄). 네 칸짜리는 2×2 나 4×1 이라야 읽히지 3+1 은 아니다.
+  폰은 2×2 로 고정한다. 720px 위는 손대지 않으므로 예전처럼 자동으로 채운다.
 */
-.usb-rates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
-@media (min-width: 700px) {
-  .usb-rates { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 720px) {
+  .usb-rates { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+  .usb-rate { padding: 6px 9px; gap: 0; }
+  .usb-rate-nm, .usb-rate-d { font-size: 0.64rem; }
 }
-.usb-rate {
-  display: flex; flex-direction: column; gap: 0;
-  padding: 6px 9px; border-radius: 8px; background: var(--panel-2); min-width: 0;
-}
-.usb-rate-nm { font-size: 0.64rem; color: var(--muted); }
-.usb-rate-v { font-size: 0.9333rem; font-variant-numeric: tabular-nums; }
-.usb-rate-d { font-size: 0.64rem; font-variant-numeric: tabular-nums; }
 
 /*
  * 야후에 없어 한투에서 오는 금리 — **지난 종가**다 (2026-09-02).
@@ -11078,47 +11081,35 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .uwm-top { margin-bottom: 0.35rem; }
 
 /*
-  ===== 미국 탭 컴팩트 (2026-11-12) =====
+  ===== 미국 탭 관심종목 MAP — 폰에서만 컴팩트 (2026-11-12) =====
 
-  벤티지: "실황 대시보드 미국 탭에서 이 세 가지 애들이 사각형 박스가 너무 크거든?
-  좀 컴팩트하게 만들어서 할 수 없겠니?"
+  벤티지: "사각형 박스가 너무 크거든? 좀 컴팩트하게" → 보내 준 캡처가 폰이었고,
+  이어서 "모바일 모드에서 너무 크다고 말한 거였어?" 로 되물어 **폰에만** 걸기로 했다.
+  PC·태블릿은 자리가 남으므로 예전 그대로 둔다.
 
-  폰 캡처(1080px) 기준으로 지수 여덟 칸이 **한 화면을 다 먹고**, 금리 네 칸과 MAP 이
-  각각 또 한 화면이었다. 세 카드를 보려고 세 번 넘겨야 했다.
+  ⚠️ **미국 쪽 클래스 안쪽만 건드린다.** `.map-tile` 은 국내 테마·업종 MAP 과 **공용**
+  이라 거기서 줄이면 보지도 않은 화면이 같이 바뀐다.
 
-  ⚠️ **미국 쪽 클래스에만 건다.** `.map-tile` 은 국내 테마·업종 MAP 과 **공용**이라
-  거기서 줄이면 보지도 않은 화면이 같이 바뀐다. 그래서 `.uwm-top`(관심종목 MAP) 안쪽만.
-
-  줄인 것은 **여백과 글자**지 **숫자가 아니다** — 등락률은 각 칸의 주인공이라 크기를
-  그대로 두고, 이름·보조글·패딩에서 자리를 뺀다.
-*/
-/*
   ⚠️ MAP 은 **타일 높이가 아니라 열 수**가 자리를 정한다. 여백만 줄였을 때 실측으로
-  5px 밖에 안 줄었다 — 열 수가 그대로니 줄 수도 그대로였다. 칸 최소폭을 내려 한 줄에
-  한 칸 더 들어가게 한다(7.5rem → 6.4rem). 열일곱 그룹이면 줄 수가 그만큼 줄어든다.
+  5px 밖에 안 줄었다 — 줄 수가 그대로면 아무 소용이 없다.
 
-  이름은 두 줄까지 접히므로(`-webkit-line-clamp: 2`) 「글로벌_반도체」 같은 긴 이름도
-  잘려 사라지지 않는다.
+  ⚠️ 그래서 폰은 **3열로 못 박는다.** rem 으로 두면 글자 크기 설정에 따라 칸 수가
+  달라진다(벤티지 기기는 글자가 커서 두 칸이었다). `minmax(min(6.4rem, 30%), 1fr)` 로
+  하한을 주려고도 해 봤는데 **규칙이 통째로 무시됐다** — `repeat(auto-fill, …)` 안의
+  퍼센트는 안 먹는다. 이름은 두 줄까지 접히므로(`-webkit-line-clamp: 2`)
+  「글로벌_반도체」 같은 긴 이름도 잘려 사라지지 않는다.
 
-  ⚠️ 폰에서는 **열 수를 못 박는다.** rem 으로 두면 글자 크기 설정에 따라 칸 수가 달라져
-  (벤티지 기기는 글자가 커서 두 칸이었다) 줄인 보람이 없다. `minmax(min(6.4rem, 30%), 1fr)`
-  로 하한을 주려고도 해 봤는데 **규칙이 통째로 무시됐다** — `repeat(auto-fill, …)` 안의
-  퍼센트는 안 먹는다(실측: 16·18·20px 전부 두 칸 그대로). 그래서 폰은 3열로 정하고,
-  넓어지면 그때부터 rem 기준 자동 채움으로 돌린다.
-*/
-/*
   ⚠️ 선택자가 `.map-grid.uwm-top` 인 까닭: 이 파일 **뒤쪽**(「테마 MAP 기본 타일도 rem
   으로」)에 `.map-grid { grid-template-columns: … }` 가 또 있다. 둘 다 클래스 하나라
-  특이도가 같고, 그러면 **나중 것이 이긴다** — `.uwm-top` 만 적었을 때 열 수가 전혀 안
-  바뀌어서 한참 헤맸다(16·18·20px 모두 두 칸 그대로였다).
+  특이도가 같고, 그러면 **나중 것이 이긴다** — `.uwm-top` 만 적었을 때 16·18·20px 모두
+  두 칸 그대로라 폰트 탓인 줄 알고 한참 헤맸다.
 */
-.map-grid.uwm-top { gap: 5px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-@media (min-width: 560px) {
-  .map-grid.uwm-top { grid-template-columns: repeat(auto-fill, minmax(6.4rem, 1fr)); }
+@media (max-width: 720px) {
+  .map-grid.uwm-top { gap: 5px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .map-grid.uwm-top .map-tile { padding: 7px 8px; gap: 1px; }
+  .map-grid.uwm-top .map-tile-name { font-size: 0.74rem; line-height: 1.2; }
+  .map-grid.uwm-top .map-tile-sub { font-size: 0.62rem; }
 }
-.uwm-top .map-tile { padding: 7px 8px; gap: 1px; }
-.uwm-top .map-tile-name { font-size: 0.74rem; line-height: 1.2; }
-.uwm-top .map-tile-sub { font-size: 0.62rem; }
 .uwm-top-note { margin-bottom: 0.8rem; padding-bottom: 0.7rem; border-bottom: 1px solid var(--border); }
 
 /* 인증 만료 띠 — 한 화면 문제가 아니라 앱 전체가 값을 못 받는 상태다 */
