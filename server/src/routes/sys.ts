@@ -7,6 +7,7 @@ import { addAsk } from "../askHistory.js";
 import { brokerQueues, recoverNow, recoveryStats } from "../recovery.js";
 import { loadGateStats } from "../loadGate.js";
 import { heapWho, heapWhoRecent } from "../heapWho.js";
+import { probeSectorIndexes } from "../vkospiProbe.js";
 import { shareGetStats } from "../shareGet.js";
 
 /**
@@ -59,6 +60,35 @@ export function createSysRouter(client: KiwoomClient): Router {
    *
    * 느릴 때 **두 번** 누른다 — 두 번째의 `그사이` 가 지금 먹고 있는 자다.
    */
+  /**
+   * **VKOSPI 가 키움 업종에 있나** — 한 번 쓰고 버릴 진단 길 (2026-11-12).
+   *
+   * 벤티지: "VKOSPI 라고 알아 너? 그 지표도 볼 수 있음 좋겠는데 코스피 야간선물 밑에다가"
+   *
+   * 받아올 데를 전수로 찾았는데 전부 없었다:
+   *
+   *   야후    `^VKOSPI`·`VKOSPI`·`^VKS`·`^KSVKOSPI` 넷 다 404
+   *   네이버  index API 는 `StockConflict`(KOSPI·KPI200 은 정상), 검색도 결과 0,
+   *           옛 지수 페이지는 302 로 사라졌다
+   *   KRX     공개 JSON 이 세션 쿠키를 요구하고(`LOGOUT`), 쿠키를 붙여도 응답이 안 끝난다
+   *
+   * 남은 후보가 **키움 업종**인데, 확인하려면 키움을 불러야 한다. 로컬에서 토큰을 새로
+   * 받으면 **미니PC 것이 끊길 위험**이 있어(한투에서 그렇게 당했다) 여기서 물어본다.
+   *
+   * 전업종지수(`ka20003`)를 시장별로 불러 **코드·이름을 통째로** 내놓는다. 변동성지수가
+   * 업종 목록에 있으면 여기 이름이 찍힌다. 없으면 키움 업종 쪽은 닫힌 것이고, 그때는
+   * 한투 선물옵션이 열릴 때까지 접는다.
+   *
+   * 조회 네 건뿐이고, 답이 나오면 이 길은 지운다.
+   */
+  router.get("/sector-index-dump", async (_req, res, next) => {
+    try {
+      res.json(await probeSectorIndexes(client));
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.get("/heap-who", async (req, res, next) => {
     try {
       const n = Math.min(40, Math.max(5, Number(req.query.n) || 15));
