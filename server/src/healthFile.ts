@@ -11,6 +11,7 @@ import v8 from "node:v8";
 import { lifeSummary, noteLife, selfHeal } from "./lifecycle.js";
 import { loadGateStats } from "./loadGate.js";
 import { heapWhoRecent } from "./heapWho.js";
+import { stockValuationStat } from "./stockValuation.js";
 import { loopLagStats } from "./loopLag.js";
 import { routeStatsTop } from "./routeStats.js";
 import { recoveryStats } from "./recovery.js";
@@ -219,6 +220,12 @@ async function writeOnceInner(): Promise<void> {
      * ⚠️ 할당한 양이지 들고 있는 양이 아니고, 외부 버퍼(소켓·Buffer)는 안 잡힌다.
      */
     할당상위: heapWhoRecent(),
+    /*
+     * 종목 밸류 수집 (2026-11-12) — 조건검색의 PER·PBR 이 여기서 온다. 한 밤에 400 종목씩
+     * 받아 **일곱 밤에 한 바퀴**라, 「가진 것」이 얼마나 찼는지를 봐야 조건식이 몇 종목을
+     * 훑는지 안다. ⚠️ `eps 단위 어긋남` 이 늘면 한투가 또 단위를 바꾼 것이다.
+     */
+    종목밸류: stockValuationStat(),
     /*
      * 복구 루틴 (2026-10-07 밤) — 「지금 어떤 상태인가」와 「몇 번 복구했나」.
      * `상태` 가 자주 「복구」면 봉우리가 구조적으로 큰 것이고, `GC가능: false` 면

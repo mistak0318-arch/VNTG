@@ -655,6 +655,86 @@ export const COND_FIELDS: CondField[] = [
     own: true,
     cost: "조회 0회",
   },
+  /*
+   * ── 밸류 넷 (2026-11-12) ──────────────────────────────────────────────
+   *
+   * 벤티지: "PER, PBR 등 지표들 해가지고 그 종목 조회하는 거, 그리고 타 종목 대비 PER이
+   * 고평가나 저평가인지도 평가 검색하는 거 식 만들 수 있겠는데 그거 이미 우리 들고
+   * 있는 거잖아"
+   *
+   * ⚠️ 넷 다 **직전 결산(작년) 기준**이다. 키움·한투의 `per` 이 「오늘 주가 ÷ 직전 결산
+   * EPS」라서, 분모가 1년에 한 번만 바뀐다. **네이버의 TTM·포워드와 섞어 읽으면 안 된다** —
+   * 성장주는 둘이 몇 배씩 차이 난다.
+   *
+   * 「고평가/저평가」는 **두 칸으로 나눴다.** 둘은 다른 질문이다:
+   *   업종 대비 배수  — 업종 평균(시총가중)보다 몇 배인가. 평균은 큰 종목 몇이 정한다
+   *   업종 내 백분위  — 같은 업종을 실제로 줄 세웠을 때 어디쯤인가
+   * 대형주가 비싼 업종이면 「평균보다 싼데 업종에서는 비싼 쪽」이 흔하다.
+   */
+  {
+    key: "mkPer",
+    label: "PER (작년 결산 기준)",
+    group: "마크",
+    unit: "배",
+    hint: "오늘 주가 ÷ 작년 결산 EPS. 적자면 0 이하입니다 — 싼 걸 찾으려면 ≤ 로 걸되 0 보다 큰지도 같이 보세요. 네이버 화면의 TTM·포워드 PER 과는 기준이 다릅니다",
+    ops: ["gte", "lte"],
+    def: 10,
+    presets: [
+      { v: 5, label: "5배" },
+      { v: 10, label: "10배" },
+      { v: 20, label: "20배" },
+    ],
+    own: true,
+    cost: "조회 0회",
+  },
+  {
+    key: "mkPbr",
+    label: "PBR (작년 결산 기준)",
+    group: "마크",
+    unit: "배",
+    hint: "오늘 주가 ÷ 작년 결산 BPS. 1 아래면 장부가보다 싸게 거래되는 것입니다",
+    ops: ["gte", "lte"],
+    def: 1,
+    presets: [
+      { v: 0.5, label: "0.5배" },
+      { v: 1, label: "1배" },
+      { v: 2, label: "2배" },
+    ],
+    own: true,
+    cost: "조회 0회",
+  },
+  {
+    key: "mkPerVsSector",
+    label: "업종 평균 PER 대비",
+    group: "마크",
+    unit: "배",
+    hint: "1.0 이면 업종 평균과 같고, 0.5 면 업종 평균의 절반 값입니다(저평가). 업종 평균은 그 업종 시총 상위 열 종목의 시총가중 PER 입니다 — 큰 종목이 값을 정합니다",
+    ops: ["gte", "lte"],
+    def: 0.7,
+    presets: [
+      { v: 0.5, label: "절반 (싸다)" },
+      { v: 0.7, label: "0.7배" },
+      { v: 1.5, label: "1.5배 (비싸다)" },
+    ],
+    own: true,
+    cost: "조회 0회",
+  },
+  {
+    key: "mkPerPctInSector",
+    label: "업종 내 PER 백분위",
+    group: "마크",
+    unit: "%",
+    hint: "0 이 그 업종에서 가장 싸고 100 이 가장 비쌉니다. ≤ 20 이면 업종에서 싼 쪽 5분의 1. 같은 업종에 흑자 종목이 다섯 미만이면 빈칸이라 안 걸립니다",
+    ops: ["gte", "lte"],
+    def: 20,
+    presets: [
+      { v: 10, label: "하위 10%" },
+      { v: 20, label: "하위 20%" },
+      { v: 80, label: "상위 20%" },
+    ],
+    own: true,
+    cost: "조회 0회",
+  },
   {
     key: "mkVolEok",
     label: "거래대금 (그날 확정값)",
@@ -885,6 +965,15 @@ export async function ownValues(code: string, keys: Set<string>): Promise<OwnVal
       setNum("mkGapMa20", m.gapMa20);
       setNum("mkVolEok", m.volEok);
       setNum("mkVolRatio", m.volRatio);
+      /*
+       * 밸류 넷 (2026-11-12). `setNum` 이 `null` 을 안 담으므로, **받은 적 없는 종목은
+       * 그 조건에서 자동으로 빠진다** — 「PER 0」으로 굳혀 「아주 싸다」로 읽히는 것보다
+       * 안 걸리는 게 맞다. 적자(≤0)는 담긴다. 그건 모르는 게 아니라 아는 사실이다.
+       */
+      setNum("mkPer", m.per);
+      setNum("mkPbr", m.pbr);
+      setNum("mkPerVsSector", m.perVsSector);
+      setNum("mkPerPctInSector", m.perPctInSector);
       setNum("mkShortRatio", m.shortRatio);
       setFlag("mkShortCooling", m.shortCooling);
       setNum("mkProg5", m.prog5);

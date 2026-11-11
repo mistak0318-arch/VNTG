@@ -8,6 +8,9 @@ import { computeAlerts, killAlerts, marketReturns } from "./hotAlerts.js";
 import { marketRegime } from "./marketRegime.js";
 import { superMarkIndex } from "./superSignal.js";
 import type { DailyLedger, FlowRow } from "./dailyStore.js";
+import { loadStockValuation, valuationOf } from "./stockValuation.js";
+import { allSectorValues } from "./sectorValuation.js";
+import { getMarketSnapshot, peekSnapshot } from "./marketSnapshot.js";
 
 /**
  * **전 종목 마크** (2026-09-16) — 조회 0회.
@@ -101,6 +104,36 @@ export interface StockMark {
   kill: boolean | null;
   /** 시가총액(억) */
   capEok: number | null;
+  /**
+   * PER — **오늘 주가 기준**, 직전 결산 EPS (2026-11-12).
+   *
+   * 받아 둔 비율을 오늘 종가로 되살린 값이다(`stockValuation.ts`). 적자면 0 이하로
+   * 그대로 온다 — 「PER 이 없다(null)」와 「적자다(≤0)」는 다른 말이라 안 합친다.
+   */
+  per: number | null;
+  /** PBR — 같은 방식 */
+  pbr: number | null;
+  /**
+   * **업종 평균 대비 몇 배인가** — 1.0 이면 업종과 같다, 2.0 이면 두 배 비싸다.
+   *
+   * 벤티지: "타 종목 대비 PER이 고평가나 저평가인지도 평가 검색하는 거". 분모는
+   * `sectorValuation` 이 매일 내는 업종 시총가중 PER 이고, **기준이 같다**(둘 다 직전
+   * 결산). TTM·포워드와 섞으면 안 된다.
+   *
+   * 내 PER 이나 업종 PER 중 하나라도 0 이하(적자)면 `null` — 적자끼리의 배수는 뜻이 없다.
+   */
+  perVsSector: number | null;
+  /**
+   * **업종 안에서 싼 쪽부터 몇 %** — 0 이 제일 싸고 100 이 제일 비싸다.
+   *
+   * 배수(`perVsSector`)는 평균 하나와만 견준다. 그런데 업종 평균은 **큰 종목 몇이 정하는**
+   * 시총가중 값이라, 평균보다 싸다고 그 업종에서 싼 쪽이라는 뜻은 아니다. 백분위는
+   * 같은 업종 종목들을 **실제로 줄 세운** 자리다 — 둘은 다른 질문에 답한다.
+   *
+   * 같은 업종에 PER 이 양수인 종목이 다섯 미만이면 `null` — 셋이 줄 선 걸 백분위라
+   * 부르면 안 된다.
+   */
+  perPctInSector: number | null;
 }
 
 export interface MarksFile {
@@ -214,6 +247,31 @@ async function buildStockMarksOnce(client: KiwoomClient): Promise<{ day: string;
     const mktRet = await marketReturns().catch(() => ({ r20: null, r60: null }));
     const regime = (await marketRegime().catch(() => null))?.regime ?? null;
 
+    /*
+     * **PER·PBR 과 업종 비교** (2026-11-12) — 셋 다 조회 0회다.
+     *
+     *   종목 비율   `stockValuation` 이 받아 둔 per·pbr 과 **그때 주가**(결산은 연 1회라
+     *               한 바퀴 돌면 오래 쓴다). 오늘 종가로 되살린다.
+     *   업종 평균   `sectorValuation` 이 매일 내는 시총가중 PER — **기준이 같다**(직전 결산)
+     *   업종        전종목 스냅샷. 메모리에 없으면 파일에서 읽는다(막 떴을 때)
+     *
+     * 못 읽어도 마크 굽기는 **멈추지 않는다** — PER 칸만 null 이 된다. 조건식에서 null 은
+     * 「모름」이라 그 조건을 건 종목만 빠지고, 나머지 마흔 몇 칸은 그대로 쓸 수 있다.
+     */
+    await loadStockValuation().catch(() => undefined);
+    const sectorPer = new Map<string, number>();
+    try {
+      const sv = await allSectorValues();
+      for (const s of sv?.sectors ?? []) if (s.per !== null && s.per > 0) sectorPer.set(s.sector, s.per);
+    } catch {
+      /* 업종 평균이 없으면 배수·백분위만 빈다 */
+    }
+    const snap = peekSnapshot() ?? (await getMarketSnapshot(client).catch(() => null));
+    const sectorOf = (code: string): string => snap?.byCode.get(code)?.sector ?? "";
+    /** 업종별로 PER 을 모아 둔다 — 백분위는 루프가 끝나야 낼 수 있다 */
+    const perBySector = new Map<string, number[]>();
+    const myPer = new Map<string, number>();
+
     const files = (await readdir(DAILY_DIR).catch(() => [] as string[])).filter((f) => f.endsWith(".json"));
     progress.total = files.length;
 
@@ -316,6 +374,20 @@ async function buildStockMarksOnce(client: KiwoomClient): Promise<{ day: string;
       const al = computeAlerts({ chartRows, tradeEok: volEok ?? 0, capEok, regime, market: mktRet });
 
       const sup = superOf?.get(code);
+      /*
+       * 오늘 종가로 되살린 PER·PBR. 적자(≤0)는 그대로 둔다 — 「없다」와 다른 말이다.
+       * 양수인 것만 업종 줄 세우기에 넣는다(적자끼리의 순위는 뜻이 없다).
+       */
+      const val = valuationOf(code, todayBar?.c ?? null);
+      if (val?.per != null && val.per > 0) {
+        myPer.set(code, val.per);
+        const sec = sectorOf(code);
+        if (sec) {
+          const arr = perBySector.get(sec);
+          if (arr) arr.push(val.per);
+          else perBySector.set(sec, [val.per]);
+        }
+      }
       marks[code] = {
         twin,
         fgn3,
@@ -341,8 +413,49 @@ async function buildStockMarksOnce(client: KiwoomClient): Promise<{ day: string;
         super: superOf ? sup?.super === true : null,
         rainbow: superOf ? sup?.rainbow === true : null,
         cross: superOf ? sup?.cross === true : null,
+        per: val?.per ?? null,
+        pbr: val?.pbr ?? null,
+        /* 업종 비교는 전부 모은 뒤에 — 아래 둘째 바퀴 */
+        perVsSector: null,
+        perPctInSector: null,
       };
       progress.marked += 1;
+    }
+
+    /*
+     * **둘째 바퀴 — 업종 비교** (2026-11-12). 백분위는 같은 업종이 다 모여야 낼 수 있어서
+     * 첫 바퀴에서는 못 채운다. 조회는 0회이고 산수뿐이라 한 바퀴 더 도는 값이 싸다.
+     */
+    for (const [sec, list] of perBySector) list.sort((a, b) => a - b);
+    const MIN_PEERS = 5;
+    for (const [code, mark] of Object.entries(marks)) {
+      const per = myPer.get(code);
+      if (per === undefined) continue;
+      const sec = sectorOf(code);
+      if (!sec) continue;
+      /* 배수 — 업종 평균(시총가중) 대비. 「평균보다 몇 배 비싼가」 */
+      const avg = sectorPer.get(sec);
+      if (avg !== undefined && avg > 0) mark.perVsSector = Math.round((per / avg) * 100) / 100;
+      /*
+       * 백분위 — 같은 업종을 **실제로 줄 세운** 자리. 평균은 큰 종목 몇이 정하므로
+       * 「평균보다 싸다」와 「업종에서 싼 쪽이다」는 다른 말이다.
+       */
+      const peers = perBySector.get(sec);
+      if (peers && peers.length >= MIN_PEERS) {
+        /*
+         * 나보다 싼 것이 몇인가 ÷ **(전체 − 1)**.
+         *
+         * ⚠️ 전체로 나누면 **가장 비싼 종목이 100 이 안 된다** — 다섯 종목이면 4/5=80%
+         * 가 최대다. 「0 이 제일 싸고 100 이 제일 비싸다」고 적어 놓고 100 이 영영 안
+         * 나오면 설명이 거짓말이 된다. 끝에서 끝까지 줄을 세우는 쪽으로 나눈다.
+         * 검산: [5,8,10,12,20] → 0 · 25 · 50 · 75 · 100.
+         *
+         * 같은 값이 여럿이면 그 앞까지만 세므로 **공동 최저는 다 같이 0** 이다.
+         */
+        let below = 0;
+        while (below < peers.length && peers[below] < per) below += 1;
+        mark.perPctInSector = Math.round((below / (peers.length - 1)) * 1000) / 10;
+      }
     }
 
     lastDays.sort();

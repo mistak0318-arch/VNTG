@@ -18,6 +18,8 @@ import { getTradeStats } from "./tradeStats.js";
 import { pushNotice } from "./notifyCenter.js";
 import { buildSamplesFromLedger } from "./samplesFromLedger.js";
 import { runAllRaces } from "./cisScenario.js";
+import { getCommonStockCodes } from "./stockListCache.js";
+import { refreshStockValuation, stockValuationStat } from "./stockValuation.js";
 import { sendTelegram } from "./telegram.js";
 import { ensureFinance } from "./financeCache.js";
 import { closesProgress } from "./dailyCloses.js";
@@ -99,6 +101,7 @@ const STEPS: { key: string; label: string }[] = [
   { key: "listTrack", label: "신호등 분석" },
   { key: "super", label: "슈퍼신호등" },
   { key: "cross", label: "교차" },
+  { key: "valuation", label: "종목 밸류" },
   { key: "marks", label: "전종목 마크" },
   { key: "condAuto", label: "조건식 자동" },
   { key: "trade", label: "수출입" },
@@ -725,6 +728,30 @@ export async function runAfterClose(
    * 2,600종목의 마크가 **파일만 읽고** 나온다(`stockMarks.ts`). 여기 두는 이유가 그것이다 —
    * 앞이면 슈퍼·교차가 어제 것이고, 뒤로 더 가면 표본 만드는 시간에 밀린다.
    */
+  /*
+   * ⑧-0 **종목 밸류 수집** (2026-11-12) — 마크 **앞**이어야 한다.
+   *
+   * 벤티지: "PER, PBR 등 지표들 해가지고 그 종목 조회하는 거, 그리고 타 종목 대비 PER이
+   * 고평가나 저평가인지도 평가 검색하는 거"
+   *
+   * 한투에서 종목별 `per`·`pbr` 과 **그때 주가**를 받아 둔다. 키움·한투의 PER 은 분모가
+   * 「직전 결산 EPS」라 **1년에 한 번만** 바뀌므로, 매일 받을 이유가 없다 — 한 번 받아
+   * 두면 마크가 오늘 종가로 되살린다(`stockValuation.ts`).
+   *
+   * 한 회차에 400 종목까지, 오래된 것부터. 2,700 종목이면 일곱 밤에 한 바퀴다.
+   * 450ms 간격이라 3분쯤 걸리고, 그만큼 뒤 단계가 밀린다 — 결산이 연 1회라 그 값은 한다.
+   *
+   * 실패해도 **마크는 돈다.** PER 칸만 비고 나머지 마흔 몇 칸은 그대로다.
+   */
+  if (want("valuation"))
+    await step("valuation", "종목 밸류 (한투, 400종목까지)", async () => {
+      const codes = [...((await getCommonStockCodes(client).catch(() => null)) ?? [])];
+      if (codes.length === 0) return "종목 목록을 못 받아 건너뜀";
+      await refreshStockValuation(codes);
+      const s = stockValuationStat();
+      return `받음 ${s.받음} · 실패 ${s.실패} · 가진 것 ${s.종목수}종목`;
+    });
+
   if (want("marks"))
     await step("marks", "전종목 마크 (조회 0회)", async () => {
       const m = await buildStockMarks(client);
