@@ -511,8 +511,101 @@ function usRegularOpen(now = new Date()): boolean {
  * **장이 닫힌 뒤엔 이 값이 안 변한다.** 그런데 일반 시세 캐시(60초)를 쓰면 111종목을
  * 1분마다 다시 받게 된다. 따로 두고 길게 잡는다.
  */
-const closeCache = new Map<string, { at: number; price: number; rate: number | null }>();
+interface CloseRow {
+  /** 마지막 정규장 종가 */
+  price: number;
+  /** 그 종가의 전일 대비 */
+  rate: number | null;
+  /** 프리·애프터 마지막 체결 — 없으면 null */
+  side: { price: number; at: number } | null;
+}
+const closeCache = new Map<string, CloseRow & { at: number }>();
 const CLOSE_TTL_MS = 15 * 60_000;
+/*
+ * 프리·애프터가 도는 동안에는 짧게 — 그 값은 계속 움직인다.
+ *
+ * ⚠️ 위의 `SIDE_TTL_MS`(15초)와 **다른 값이다.** 그쪽은 빠른 시세(가벼운 spark)용이고,
+ * 이건 **분봉 한 벌**이라 15초마다 전 종목을 다시 받으면 감당이 안 된다. 괄호에 뜨는
+ * 시간외 값이 1분 늦는 건 견딜 만하다.
+ *
+ * 프리·애프터인지 가리는 건 바로 위 `usSideSession()` 을 그대로 쓴다 — 같은 시간표를
+ * 두 벌로 만들면 언젠가 어긋난다.
+ */
+const CLOSE_SIDE_TTL_MS = 60_000;
+
+/**
+ * **정규장 종가 + 프리·애프터 마지막 체결을 한 번에** (2026-11-12).
+ *
+ * 벤티지: "증권 플러스는 엔비디아 애프터장 계속나오는데 내껀 왜이러는데"
+ *
+ * ## 한투가 애프터를 안 준다
+ *
+ * 2026-08-20 실측 주석은 「한투는 정규장이 끝난 뒤에도 `last` 를 애프터장 체결가로
+ * 계속 갱신한다」였다. **지금은 아니다.** 11/12 ET 19:23 실측:
+ *
+ *     NVDA  한투 = 야후 정규장 종가 173.73  (애프터 158.78, −8.6% 인데)
+ *     증권플러스 159.33 / −8.29%  ← 애프터를 제대로 보여 준다
+ *
+ * 한투 값이 종가와 같으니 「시간외 체결 없음」으로 눌렸고, 표 머리에는 폴백 문자열
+ * 「(시간외)」만 남아 **정규장 종가에 시간외 딱지를 붙인 꼴**이 됐다. 빈칸보다 나쁘다 —
+ * 애프터에 −8% 인 종목이 +2.9% 로 보였다.
+ *
+ * 한투의 「주간거래」(BAQ·BAY·BAA)는 **미국 오버나이트**(한국 낮)지 애프터장이 아니다.
+ * 그 칸으로는 못 메운다.
+ *
+ * ## 야후 분봉이 준다 — 조회는 안 늘어난다
+ *
+ * `includePrePost=true` 로 1분봉을 받으면 **meta 에 정규장 종가**가 있고 **16:00 뒤
+ * 봉에 애프터**가 있다. 정규장 종가를 받으려고 어차피 종목당 한 번 부르고 있었으므로
+ * 그 호출을 이걸로 바꾸면 끝이다.
+ *
+ * ⚠️ 분봉은 하루치 ~960봉이라 일봉보다 무겁다(이 서버는 OOM 이력이 있다). 그래서
+ * **프리·애프터가 도는 동안만** 분봉을 받고, 그 밖에는 예전처럼 일봉 한 줄을 받는다.
+ */
+async function extendedOne(symbol: string): Promise<{ price: number | null; rate: number | null; side: { price: number; at: number } | null }> {
+  const res = await fetch(`${CHART}/${encodeURIComponent(symbol)}?range=1d&interval=1m&includePrePost=true`, {
+    headers: { "User-Agent": "Mozilla/5.0" },
+  });
+  void recordApiCall("yahoo", "chart:prepost", res.ok ? "ok" : "failed");
+  const j = (await res.json()) as {
+    chart?: {
+      result?: {
+        meta?: { regularMarketPrice?: number; chartPreviousClose?: number; previousClose?: number };
+        timestamp?: number[];
+        indicators?: { quote?: { close?: (number | null)[] }[] };
+      }[];
+    };
+  };
+  const r = j.chart?.result?.[0];
+  const m = r?.meta;
+  if (!m?.regularMarketPrice) return { price: null, rate: null, side: null };
+  const prev = m.chartPreviousClose ?? m.previousClose ?? null;
+  const rate = prev && prev > 0 ? (m.regularMarketPrice / prev - 1) * 100 : null;
+
+  /*
+   * **정규장 밖의 마지막 봉**을 고른다. 프리장이면 09:30 앞쪽, 애프터장이면 16:00 뒤쪽이
+   * 그 자리다 — 지금이 어느 쪽인지 따로 묻지 않고 **정규장 시간대만 건너뛴다.**
+   * 그러면 한 가지 규칙으로 둘 다 잡힌다.
+   */
+  const ts = r?.timestamp ?? [];
+  const close = r?.indicators?.quote?.[0]?.close ?? [];
+  let side: { price: number; at: number } | null = null;
+  for (let i = 0; i < ts.length; i += 1) {
+    const c = close[i];
+    if (c == null || !Number.isFinite(c)) continue;
+    const p = Object.fromEntries(
+      new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hour12: false })
+        .formatToParts(new Date(ts[i] * 1000))
+        .map((x) => [x.type, x.value]),
+    );
+    const mins = (Number(p.hour) % 24) * 60 + Number(p.minute);
+    const regular = mins >= 9 * 60 + 30 && mins < 16 * 60;
+    if (!regular) side = { price: c, at: ts[i] * 1000 };
+  }
+  /* 종가와 같으면 시간외 체결이 없었던 것이다 — 같은 값을 두 번 보여 주지 않는다 */
+  if (side && Math.abs(side.price - m.regularMarketPrice) < 1e-9) side = null;
+  return { price: m.regularMarketPrice, rate, side };
+}
 
 /**
  * 마지막 **정규장 종가**를 야후에서 받는다.
@@ -529,22 +622,25 @@ const CLOSE_TTL_MS = 15 * 60_000;
  * 야후 `regularMarketPrice` 는 이름 그대로 정규장 값이라 여기서만 쓴다.
  * **장 중에는 부르지 않는다** — 그때는 한투 값이 곧 정규장 값이다.
  */
-async function regularCloses(symbols: string[]): Promise<Map<string, { price: number; rate: number | null }>> {
-  const out = new Map<string, { price: number; rate: number | null }>();
+async function regularCloses(symbols: string[]): Promise<Map<string, CloseRow>> {
+  const out = new Map<string, CloseRow>();
   const need: string[] = [];
+  /* 프리·애프터가 도는 동안에는 짧게 — 옆값이 계속 움직인다. 그 밖엔 종가라 안 변한다 */
+  const ttl = usSideSession() ? CLOSE_SIDE_TTL_MS : CLOSE_TTL_MS;
   for (const sym of symbols) {
     const hit = closeCache.get(sym);
-    if (hit && Date.now() - hit.at < CLOSE_TTL_MS) out.set(sym, { price: hit.price, rate: hit.rate });
+    if (hit && Date.now() - hit.at < ttl) out.set(sym, { price: hit.price, rate: hit.rate, side: hit.side });
     else need.push(sym);
   }
   for (let i = 0; i < need.length; i += 6) {
     const chunk = need.slice(i, i + 6);
     await Promise.all(
       chunk.map(async (sym) => {
-        const q = await quoteOne(sym).catch(() => null);
+        /* 프리·애프터 때만 분봉(무겁다) — 그 밖엔 예전처럼 일봉 한 줄 */
+        const q = usSideSession() ? await extendedOne(sym).catch(() => null) : await quoteOne(sym).then((r) => ({ price: r.price, rate: r.changeRate, side: null })).catch(() => null);
         if (!q || q.price === null) return;
-        closeCache.set(sym, { at: Date.now(), price: q.price, rate: q.changeRate });
-        out.set(sym, { price: q.price, rate: q.changeRate });
+        closeCache.set(sym, { at: Date.now(), price: q.price, rate: q.rate, side: q.side });
+        out.set(sym, { price: q.price, rate: q.rate, side: q.side });
       }),
     );
   }
@@ -710,10 +806,23 @@ async function buildGroups(force: boolean): Promise<UsWatchResult> {
          * 기준을 정규장 종가(rc.price)로 바꾼다. 프리장일 때도 rc 는 직전 정규장
          * 종가라 같은 식이 맞다.
          */
-        if (Math.abs(h.price - rc.price) > 1e-9) {
+        /*
+         * **한투가 주면 한투, 안 주면 야후** (2026-11-12).
+         *
+         * 2026-08-20 에는 한투 `last` 가 애프터 체결가였다(그 실측이 이 함수의 머리말에
+         * 있다). **지금은 종가와 같은 값이 온다** — 그러면 아래 조건이 거짓이 되어 시간외
+         * 칸이 통째로 비고, 표 머리에는 폴백 「(시간외)」만 남는다. 정규장 종가에 시간외
+         * 딱지를 붙인 꼴이라 **빈칸보다 나쁘다**(애프터 −8.6% 가 +2.9% 로 보였다).
+         *
+         * 한투를 버리지는 않는다 — 다시 주기 시작하면 그쪽이 더 빠르다. 한투 값이 종가와
+         * 같을 때만 야후 분봉에서 뽑은 값(`rc.side`)으로 메운다.
+         */
+        const hantooSide = Math.abs(h.price - rc.price) > 1e-9 ? h.price : null;
+        const sidePrice = hantooSide ?? rc.side?.price ?? null;
+        if (sidePrice !== null) {
           after.set(sym, {
-            price: h.price,
-            rate: rc.price > 0 ? (h.price / rc.price - 1) * 100 : null,
+            price: sidePrice,
+            rate: rc.price > 0 ? (sidePrice / rc.price - 1) * 100 : null,
           });
         }
         quotes.set(sym, {
