@@ -74,12 +74,28 @@ export interface HantooRtStatus {
   rejects: string[];
   /** 붙은 지 몇 초 — null 이면 아직 */
   connectedForSec: number | null;
+  /**
+   * **붙었는데 한 건도 안 왔나** (2026-11-12).
+   *
+   * `lastFrameAgoSec: null` 만으로는 「아직 안 붙음」과 「붙었는데 조용함」이 구별되지
+   * 않아서, 42분째 멎은 소켓이 밖에서 멀쩡해 보였다. 이게 `true` 면 **지금 고장이다.**
+   */
+  무프레임: boolean;
+  /** 조용해서 다시 붙인 횟수 — 늘기만 하면 재접속이 답이 아니라는 뜻이다 */
+  조용해서다시붙임: number;
 }
 
 let ws: WebSocket | null = null;
 let approvalKey = "";
 let state: HantooRtStatus["state"] = "꺼짐";
 let lastFrameAt = 0;
+/**
+ * **조용해서 다시 붙인 횟수** (2026-11-12).
+ *
+ * 다시 붙여도 한투가 애프터 체결을 원래 안 주는 것이라면 이 수만 3분마다 는다 —
+ * 그러면 「고쳤다」가 아니라 **다른 데를 봐야 한다**는 뜻이다. 숫자가 그 말을 대신한다.
+ */
+let silentRevives = 0;
 let frames = 0;
 const rejects: string[] = [];
 /** 지금 걸려 있는 tr_key → 심볼 */
@@ -431,9 +447,30 @@ export function startHantooRealtime(s: RealtimeStore): void {
      * 20:00 ET)에 구독이 있는데 **3분 넘게 프레임이 없으면** 끊고 다시 붙는다.
      * 거래가 뜸한 종목만 담긴 그룹일 수도 있으니 3분은 넉넉하게 잡았다.
      */
-    if (state === "연결됨" && subs.size > 0 && usTradingWindow() && lastFrameAt > 0 && Date.now() - lastFrameAt > 3 * 60_000) {
-      rejects.unshift(`프레임이 ${Math.round((Date.now() - lastFrameAt) / 1000)}초째 없어 다시 붙는다`);
+    /*
+     * ⚠️ **붙은 뒤 한 건도 못 받은 경우가 빠져 있었다** (2026-11-12 — 벤티지: "장 시작하면
+     * 해외주식 소켓 닫혀?? 안보이네 애프터장 시세").
+     *
+     * 조건에 `lastFrameAt > 0` 이 있었는데, `onopen` 이 붙을 때마다 그 값을 **0 으로
+     * 리셋**한다. 그래서 「붙었지만 프레임이 한 건도 안 오는」 상태는 **감시 대상에서
+     * 통째로 빠졌다** — 이 감시자가 막으려던 바로 그 조용한 실패인데.
+     *
+     * 실측(2026-11-12 09:45, ET 19:23 애프터장):
+     *   state 연결됨 · subscribed 20 · connectedForSec 2560 · lastFrameAgoSec **null**
+     * 42분째 한 건도 없는데 아무도 안 깨웠다. 화면은 정규장 종가에 「시간외」 딱지만
+     * 붙은 채였다.
+     *
+     * 이제 **프레임이 없으면 붙은 시각부터** 잰다. 붙자마자 조용한 것도 조용한 것이다.
+     */
+    const 조용한지 = lastFrameAt > 0 ? Date.now() - lastFrameAt : connectedAt ? Date.now() - connectedAt : 0;
+    if (state === "연결됨" && subs.size > 0 && usTradingWindow() && 조용한지 > 3 * 60_000) {
+      rejects.unshift(
+        lastFrameAt > 0
+          ? `프레임이 ${Math.round(조용한지 / 1000)}초째 없어 다시 붙는다`
+          : `붙은 지 ${Math.round(조용한지 / 1000)}초인데 **한 건도** 안 와서 다시 붙는다`,
+      );
       rejects.splice(20);
+      silentRevives += 1;
       try {
         ws?.close();
       } catch {
@@ -450,6 +487,13 @@ export function hantooRealtimeStatus(): HantooRtStatus {
     enabled: enabled(),
     state,
     lastFrameAgoSec: lastFrameAt ? Math.round((Date.now() - lastFrameAt) / 1000) : null,
+    /*
+     * **붙은 뒤 한 건도 못 받았나** (2026-11-12). `lastFrameAgoSec: null` 은 「모름」처럼
+     * 읽혀서, 42분째 아무것도 안 오는 상태를 밖에서 알아볼 길이 없었다. 그 경우를
+     * 이름으로 적는다.
+     */
+    무프레임: lastFrameAt === 0 && state === "연결됨",
+    조용해서다시붙임: silentRevives,
     subscribed: [...subs.values()],
     max: MAX_SUBS,
     frames,
