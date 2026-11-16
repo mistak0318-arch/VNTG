@@ -20,6 +20,7 @@ import { MenuOrderPanel } from "../components/MenuOrderPanel";
 import { CardOrderPanel } from "../components/CardOrderPanel";
 import { ScreenLockPanel } from "../components/ScreenLockPanel";
 import { MENU_ITEMS } from "../App";
+import { HomeTabPanel } from "../components/HomeTabPanel";
 import { ChannelCollectPanel } from "../components/ChannelCollectPanel";
 import { SignalConfigPanel } from "../components/SignalConfigPanel";
 import { RegimePanel } from "../components/RegimePanel";
@@ -139,6 +140,22 @@ export function SettingsPage() {
       <p className="page-note">{SETTINGS_TABS.find((t) => t.key === tab)?.hint}</p>
 
       {tab === "about" && <AboutPanel />}
+
+      {/*
+        시작 화면 (2026-11-16 — 벤티지: "시작화면이 왜 맨날 마켓 브리핑이야. 시황
+        대시보드로 할 수 있게 해줘. 아니면 옵션에서 설정할 수 있게"). 메뉴 순서 바로
+        위다 — 둘 다 「어느 화면을 얼마나 자주 보나」를 정하는 자리라 붙여 둔다.
+      */}
+      {tab === "display" && (
+      <CollapsibleCard
+        id="homeTab"
+        scope="global"
+        title="시작 화면"
+        hint="앱을 처음 열 때 어느 메뉴로 갈지 — 주소에 화면이 적혀 있으면(새로고침·링크) 그쪽이 우선입니다."
+      >
+        <HomeTabPanel />
+      </CollapsibleCard>
+      )}
 
       {tab === "display" && (
       <CollapsibleCard

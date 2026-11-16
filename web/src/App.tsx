@@ -156,7 +156,29 @@ type Tab =
  * 그래서 그룹마다 색을 주고 항목마다 아이콘을 붙였다 — 글자를 읽기 전에
  * **모양과 색으로 먼저 덩어리를 찾고** 그 안에서 고르게 하려는 것이다.
  */
-const MENU: {
+/**
+ * **처음 열 때 어느 화면인가** (2026-11-16 — 벤티지: "시작화면이 왜 맨날 마켓 브리핑이야.
+ * 시황 대시보드로 할 수 있게 해줘. 아니면 옵션에서 설정할 수 있게").
+ *
+ * 여태 `"briefing"` 이 코드에 박혀 있었다. 설정에서 고르게 하고, 안 고르면 예전 그대로다.
+ *
+ * ⚠️ `localStorage` 를 **동기로** 읽는다 — 서버 설정은 뜰 때 여기로 복사되므로
+ * (`prefs.ts` 머리말) 두 번째 방문부터는 기기를 옮겨도 고른 값이 따라온다. 처음 켠
+ * 기기에서는 사본이 아직 없어 기본값으로 뜬다. 그 한 번을 위해 화면을 늦추지 않는다.
+ */
+export const HOME_TAB_KEY = "vntg.home.tab";
+
+export function homeTab(): string {
+  try {
+    const v = localStorage.getItem(HOME_TAB_KEY);
+    return v && v.trim() ? v : "briefing";
+  } catch {
+    /* 사생활 보호 모드 등에서 막히면 예전 기본값 */
+    return "briefing";
+  }
+}
+
+export const MENU: {
   group: string;
   /** 그룹 구분용 강조색. 라벨 앞 막대와 활성 항목에 쓴다 */
   accent: string;
@@ -386,7 +408,7 @@ const READING_TABS = new Set<Tab>(["news", "telegram", "report", "journal", "gui
 
 export default function App() {
   /* 홈 = 브리핑. 앱을 열면 「오늘 시장이 어떤가」부터 — 파고들기는 대시보드로 */
-  const { route, navigate } = useHashRoute("briefing");
+  const { route, navigate } = useHashRoute(homeTab());
   /* 새 번들이 올라왔는데 이 탭이 옛것인지 — 폰 PWA 탭이 아침에 연 채 남는다 (2026-09-03) */
   const build = useBuildWatch();
   /*

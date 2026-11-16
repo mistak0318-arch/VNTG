@@ -22157,3 +22157,12 @@ tr.gv-strong td:first-child { color: var(--text); }
 .crp-dim { color: var(--muted); }
 .crp-ok { color: var(--live-on); font-weight: 700; }
 .crp-no { color: var(--muted); cursor: help; }
+
+/*
+  시작 화면 고르기 (2026-11-16) — 사이드바와 같은 덩어리로 묶어 보여 준다.
+  눈이 메뉴를 찾던 자리에서 그대로 찾게 하려는 것이다.
+*/
+.home-tab-g + .home-tab-g { margin-top: 0.7rem; }
+.home-tab-gn { font-size: 0.7rem; color: var(--muted); margin-bottom: 0.3rem; }
+.home-tab-row { display: flex; flex-wrap: wrap; gap: 5px; }
+.home-tab-said { margin-top: 0.6rem; font-size: 0.78rem; color: var(--muted); }
