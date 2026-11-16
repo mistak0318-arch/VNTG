@@ -99,7 +99,18 @@ export async function financeRatios(code: string): Promise<FinanceRatio[]> {
 }
 
 /** 가장 최근 결산 한 줄. 없으면 null */
-export async function latestRatio(code: string): Promise<FinanceRatio | null> {
+/**
+ * ⚠️ **한투가 2026-11-11 에 종료했다** — 위 `quarterFinance.ts` 머리말 참고.
+ * 이 경로는 지금 **404** 다. 신호등의 ROE·부채비율은 `enabled: false` 라 점수에는
+ * 영향이 없다. 부르지 않고 `null` 을 준다.
+ */
+export async function latestRatio(_code: string): Promise<FinanceRatio | null> {
+  /* 시그니처는 그대로 둔다 — 되살아날 때 부르는 쪽을 다시 안 고치려고 */
+  return null;
+}
+
+/** 종료 전의 호출 — 되살릴 때 쓰려고 남겨 둔다 */
+async function latestRatioRetired(code: string): Promise<FinanceRatio | null> {
   try {
     const rows = await financeRatios(code);
     return rows[0] ?? null;

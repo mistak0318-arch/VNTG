@@ -75,7 +75,28 @@ const TTL_MS = 6 * 60 * 60_000;
 const cache = new Map<string, { at: number; rows: QuarterRow[] }>();
 
 /** 최근 분기가 앞. 최대 여덟 분기(2년) */
-export async function quarterFinance(code: string, limit = 8): Promise<QuarterRow[]> {
+/**
+ * ⚠️ **한투가 2026-11-11 16:00 에 이 API 를 종료했다.**
+ *
+ * 공지: 「[국내주식] 종목분석 카테고리 7종(대차대조표·손익계산서·재무비율·수익성비율·
+ * 기타주요비율·안정성비율·성장성비율) 서비스 종료」 — 원천 정보제공처와의 **데이터
+ * 라이선스 계약** 때문이라 되살아나지 않는다.
+ *
+ * 진단으로 먼저 증상을 봤었다(2026-11-17): 경로는 남아 있는데 `OPSQ0001 호출 전처리
+ * 오류` 가 나고, 형제인 재무비율은 아예 **404** 였다. 공지가 그 둘을 다 설명한다.
+ *
+ * **부르지 않는다.** 종목마다 한투 줄을 먹고 실패만 쌓기 때문이다(한투 줄 기록에
+ * 「분기 손익」이 그대로 찍히고 있었다). 이유를 던져 화면이 그대로 말하게 한다.
+ */
+const RETIRED =
+  "한국투자증권이 2026-11-11 에 국내주식 종목분석 API 7종을 종료했습니다(데이터 라이선스 종료). 분기 실적은 다른 출처를 붙일 때까지 비어 있습니다.";
+
+export async function quarterFinance(_code: string, _limit = 8): Promise<QuarterRow[]> {
+  throw new Error(RETIRED);
+}
+
+/** 종료 전의 호출 — 되살릴 때 쓰려고 남겨 둔다 (지금은 아무도 안 부른다) */
+async function quarterFinanceRetired(code: string, limit = 8): Promise<QuarterRow[]> {
   const hit = cache.get(code);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.rows.slice(0, limit);
   if (!hantooReady()) return [];

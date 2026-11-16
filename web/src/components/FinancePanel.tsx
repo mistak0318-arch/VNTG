@@ -212,7 +212,12 @@ export function FinancePanel({
   /* 분기가 비었는데 **못 받은** 것이면 말한다 — 없는 종목과 같은 모양이었고 판정은 연간만으로 조용히 내려졌다 (2026-09-23) */
   const quartersNote =
     quarters.length === 0 && data.quartersError ? (
-      <div className="page-note">⚠️ 분기 실적을 못 받았습니다(한투: {data.quartersError}). 아래 판정은 연간만으로 낸 것입니다.</div>
+      /*
+        ⚠️ 2026-11-17 — 이제 이 자리에 오는 사유는 대개 **한투 API 종료**다. 「못 받았습니다」만
+        적으면 일시적 장애처럼 읽혀서 「새로고침하면 되겠지」가 된다. 서버가 보내는 말을
+        그대로 쓰고(이미 종료 사실과 날짜를 담고 있다) 「한투:」 접두는 뗀다 — 중복이다.
+      */
+      <div className="page-note">⚠️ {data.quartersError} 아래 판정은 연간(DART)만으로 낸 것입니다.</div>
     ) : null;
   if (periods.length === 0) {
     return (

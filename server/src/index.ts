@@ -100,7 +100,6 @@ import { shareGet } from "./shareGet.js";
 /* 복구 루틴 — 나빠진 뒤 스스로 돌아온다 (2026-10-07 밤) */
 import { startRecovery } from "./recovery.js";
 import { startHeapWho } from "./heapWho.js";
-import { probeQuarterOnce } from "./quarterProbe.js";
 import { setSharedKiwoom } from "./kiwoomShared.js";
 import { createAiRouter } from "./routes/ai.js";
 import { createAskRouter } from "./routes/ask.js";
@@ -697,8 +696,6 @@ app.listen(port, host, () => {
    * 섞여 범인을 못 집는다 — 64KB 마다 한 점이라 늘 켜 둬도 싸다. `/api/sys/heap-who`.
    */
   startHeapWho();
-  /* 분기손익 「호출 전처리 오류」 진단 — 답이 나오면 이 줄과 quarterProbe.ts 를 지운다 (2026-11-17) */
-  probeQuarterOnce();
   startRecovery((why) => {
     noteLife("EXIT", why);
     /* 쓰던 응답이 마저 나가도록 한 박자 뒤에 — OOM 즉사와 다른 점이 이것이다 */
