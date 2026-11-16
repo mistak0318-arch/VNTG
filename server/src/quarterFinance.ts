@@ -1,4 +1,5 @@
 import { hantooGet, hantooReady } from "./hantooClient.js";
+import { dartQuarters, type DartQuarter } from "./dartQuarter.js";
 
 /**
  * 분기 손익 (한투 `FHKST66430200`).
@@ -91,8 +92,47 @@ const cache = new Map<string, { at: number; rows: QuarterRow[] }>();
 const RETIRED =
   "한국투자증권이 2026-11-11 에 국내주식 종목분석 API 7종을 종료했습니다(데이터 라이선스 종료). 분기 실적은 다른 출처를 붙일 때까지 비어 있습니다.";
 
-export async function quarterFinance(_code: string, _limit = 8): Promise<QuarterRow[]> {
-  throw new Error(RETIRED);
+/**
+ * **이제 DART 가 준다** (2026-11-17).
+ *
+ * 한투가 끊긴 자리에 DART 분기보고서를 넣는다(`dartQuarter.ts`). 바깥 모양(`QuarterRow`)은
+ * **그대로**라 부르는 쪽(조건검색 다섯 칸 · 종목 상세 · `companyInfo` · `financeCache`)을
+ * 한 줄도 안 고쳤다.
+ *
+ * ⚠️ **한투보다 늦다.** 분기보고서는 분기 끝나고 45일까지 제출이라, 가장 최근 분기가
+ * 비어 있는 것은 고장이 아니라 **아직 안 나온 것**이다. DART 조차 없으면 그때야
+ * 종료 사실을 말한다.
+ *
+ * 파생값(라벨·영업이익률·QoQ·YoY)은 **예전 계산을 그대로** 쓴다 — 누적이 섞인 줄에서는
+ * 증감률을 안 적는 규칙까지 포함해서다(2026-09-11 숫자 점검에서 얻은 것).
+ */
+export async function quarterFinance(code: string, limit = 8): Promise<QuarterRow[]> {
+  const raw = await dartQuarters(code, limit).catch(() => [] as DartQuarter[]);
+  if (raw.length === 0) throw new Error(RETIRED);
+
+  /* `dartQuarters` 는 최근이 앞이다. 파생값은 **오래된 것부터** 세야 앞뒤가 맞는다 */
+  const asc = [...raw].reverse();
+  const rows: QuarterRow[] = asc.map((r, i) => {
+    const prev = asc[i - 1];
+    const yearAgo = asc[i - 4];
+    return {
+      period: r.period,
+      label: `${r.year} ${r.quarter}Q`,
+      revenue: r.revenue,
+      operatingProfit: r.operatingProfit,
+      netIncome: r.netIncome,
+      margin:
+        r.revenue !== null && r.revenue !== 0 && r.operatingProfit !== null
+          ? (r.operatingProfit / r.revenue) * 100
+          : null,
+      /* 누적인 줄이 한쪽에 끼면 증감률은 뜻이 없다 — 「두 분기 합」과 「한 분기」를 견주게 된다 */
+      qoq: r.cumulative || prev?.cumulative ? null : pctChange(r.operatingProfit, prev?.operatingProfit ?? null),
+      yoy: r.cumulative || yearAgo?.cumulative ? null : pctChange(r.operatingProfit, yearAgo?.operatingProfit ?? null),
+      cumulative: r.cumulative,
+    };
+  });
+  rows.reverse();
+  return rows.slice(0, limit);
 }
 
 /** 종료 전의 호출 — 되살릴 때 쓰려고 남겨 둔다 (지금은 아무도 안 부른다) */
