@@ -8045,10 +8045,24 @@ button.nav-group-toggle {
 .val-foot i { font-style: normal; }
 .val-foot i.up { color: var(--red); }
 .val-foot i.down { color: var(--blue); }
+/*
+  출처는 **제 줄로 내린다** (2026-11-17 — 벤티지: "얘 UI 좀 어떻게 좀 잘 해봐 엉망이야").
+
+  `margin-left: auto` 로 같은 줄 오른쪽에 밀어 두었는데, 그 문구가
+  「작년=키움 · 최근4분기·추정=네이버 컨센 11-13 · 업종=통신 상위 10종목 시총가중」
+  처럼 길어서 **줄을 통째로 먹었다.** 그러면 정작 보려던 시가총액·목표주가가 그 틈에
+  끼어 묻힌다 — 캡처가 딱 그 꼴이었다.
+
+  지우지 않고 **자리만 옮긴다.** 어디서 온 값인지는 이 앱이 계속 밝혀 온 것이고,
+  숨기면 「작년 기준인 줄 모르고」 읽는 일이 생긴다. 한 단 더 작고 흐리게 둔다.
+*/
 .val-src {
-  margin-left: auto;
-  font-size: 0.7rem;
-  opacity: 0.65;
+  flex-basis: 100%;
+  margin-left: 0;
+  margin-top: 1px;
+  font-size: 0.66rem;
+  opacity: 0.6;
+  line-height: 1.35;
 }
 @media (max-width: 480px) {
   .val-grid {
