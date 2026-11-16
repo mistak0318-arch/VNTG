@@ -24,7 +24,7 @@ import { nightFuturesSnapshot } from "./usMajor.js";
 import { fxFidSnapshot } from "./fxFidProbe.js";
 import { phaseTodaySummary } from "./marketPhase.js";
 import { hantooRealtimeStatus } from "./hantooRealtime.js";
-import { hantooQueueDepth } from "./hantooClient.js";
+import { hantooQueueDepth, hantooQueueStats } from "./hantooClient.js";
 import { afterCloseStatus, afterCloseStateSummary } from "./afterClose.js";
 import { tradingDayStatus } from "./tradingDay.js";
 import { getUsage, usageTrend } from "./apiUsage.js";
@@ -311,6 +311,12 @@ async function writeOnceInner(): Promise<void> {
     키움조회대기: { ...KiwoomClient.rateLimitStats(), 줄: KiwoomClient.queueDepth() },
     /* 한투는 초당 2.5건짜리 한 줄이다 — 느린 카드(재무·목표주가·신호등 근거·야간선물)가 전부 여기 선다 */
     한투조회줄: hantooQueueDepth(),
+    /*
+     * 한투 줄이 **나빴던 순간**까지 (2026-11-16). 순간값만 있으면 나중에 재 봐야
+     * 한가해서 1~2 로 나온다 — 실제로 그랬다. 최고 깊이·되돌려보냄·**누가 섰나**가
+     * 같이 있어야 「무엇을 고칠까」에 답이 된다.
+     */
+    한투줄기록: hantooQueueStats(),
     /* 화면이 실시간을 실제로 받아 가고 있나 — 미니창이 따로 여는 스트림이 여기 잡힌다 */
     화면스트림: {
       open: streamStats.open,

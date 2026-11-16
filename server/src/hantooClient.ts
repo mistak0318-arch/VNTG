@@ -208,6 +208,44 @@ export function hantooQueueDepth(): number {
   return queued;
 }
 
+/**
+ * **줄이 나빴던 순간을 기억한다** (2026-11-16 — 벤티지: "한투줄이 엉망인거 같다").
+ *
+ * 여태 `hantooQueueDepth()` 하나, 그것도 **순간값**뿐이었다. 그래서 벤티지가 나쁜 걸
+ * 봤다고 해도 내가 나중에 재면 한가해서 1~2 로 나온다 — 실제로 자정에 재니 그랬다.
+ * 순간을 못 보면 고칠 수가 없다.
+ *
+ * 세 가지를 남긴다. 셋이 같이 있어야 말이 된다:
+ *   · 최고 깊이 — 얼마나 나빴나
+ *   · 되돌려보냄(QUEUE_FULL) — 실제로 포기한 건수. 깊이가 20 에 닿았다는 증거다
+ *   · **누가 섰나** — 라벨별 누적. 이게 「무엇을 고칠까」의 답이다
+ *
+ * 라벨(`feature`)은 이미 모든 호출이 넘기고 있었다(`hantooGet` 의 넷째 인자) — 쓰지만
+ * 않았을 뿐이다.
+ */
+let peakQueued = 0;
+let queueFull = 0;
+const byFeature = new Map<string, number>();
+
+export function hantooQueueStats(): {
+  지금: number;
+  최고: number;
+  되돌려보냄: number;
+  상한: number;
+  누가: { 이름: string; 건수: number }[];
+} {
+  return {
+    지금: queued,
+    최고: peakQueued,
+    되돌려보냄: queueFull,
+    상한: MAX_QUEUED,
+    누가: [...byFeature.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([이름, 건수]) => ({ 이름, 건수 })),
+  };
+}
+
 /** 줄을 통째로 비운다. 비운 건수를 돌려준다 — 「비우기」 단추가 부른다 */
 export function dropHantooQueue(): number {
   const n = queued;
@@ -215,8 +253,9 @@ export function dropHantooQueue(): number {
   return n;
 }
 
-function slot(): Promise<void> {
+function slot(feature = "(이름 없음)"): Promise<void> {
   if (queued >= MAX_QUEUED) {
+    queueFull += 1;
     return Promise.reject(
       new HantooError(
         "QUEUE_FULL",
@@ -225,6 +264,8 @@ function slot(): Promise<void> {
     );
   }
   queued += 1;
+  if (queued > peakQueued) peakQueued = queued;
+  byFeature.set(feature, (byFeature.get(feature) ?? 0) + 1);
   /* 줄에 설 때의 번호. 기다리는 사이 비우기가 눌리면 번호가 달라져 있다 */
   const gen = generation;
   const mine = queue
@@ -336,7 +377,8 @@ async function hantooGetRaw<T = Record<string, unknown>>(
     e instanceof HantooError && /초당|유량|EGW00201/.test(e.message + e.code);
 
   const once = async (): Promise<T & { rt_cd?: string; msg1?: string; msg_cd?: string }> => {
-    await slot();
+    /* 라벨을 줄에 같이 세운다 — 나중에 「누가 줄을 채웠나」에 답하려고 */
+    await slot(feature);
 
     /*
      * ⚠️ **토큰은 시도할 때마다 받는다** (2026-11-07).
