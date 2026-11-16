@@ -5,6 +5,7 @@ import {
   normalizeStockCode,
   pickList,
   signClass,
+  type RankSpecGroup,
   type RawRecord,
   type ScreenHit,
   type SignalResult,
@@ -61,7 +62,17 @@ import { Unveil } from "../components/Unveil";
 /* 모집단                                                              */
 /* ------------------------------------------------------------------ */
 
-type SourceKey = "volume" | "watch" | "screen";
+/**
+ * 모집단 갈래.
+ *
+ * `rank:<키>` 는 **시세분석의 순위표**를 그대로 쓴다 (2026-11-17 — 벤티지: "종목분석
+ * 메뉴에서 시세분석에 있는 각 항목들도 선택할 수 있게 해줘 분석할때 쓰게").
+ *
+ * 여기 모집단이 셋뿐이라 「등락률 상위를 하나씩 넘겨 보기」 같은 걸 못 했다. 시세분석은
+ * 같은 순위를 **표로** 보여주는데, 종목발굴은 **한 종목씩 깊이** 보는 자리다 — 같은
+ * 목록을 다른 각도로 쓰는 것이라 목록을 공유하는 게 맞다.
+ */
+type SourceKey = "volume" | "watch" | "screen" | `rank:${string}`;
 
 interface Candidate {
   code: string;
@@ -122,6 +133,18 @@ export function StockDiscoveryPage({
 }) {
   const focus = useStockFocus();
   const [source, setSource] = useState<SourceKey>("volume");
+  /* 시세분석과 **같은 사전**을 쓴다 — 거기 목록이 늘면 여기도 같이 는다 */
+  const [rankGroups, setRankGroups] = useState<RankSpecGroup[]>([]);
+  useEffect(() => {
+    let alive = true;
+    api
+      .rankSpecs()
+      .then((r) => alive && setRankGroups(r.groups))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
   const [market, setMarket] = useState("000");
   const [list, setList] = useState<Candidate[]>([]);
   const [listLoading, setListLoading] = useState(true);
@@ -167,6 +190,34 @@ export function StockDiscoveryPage({
           price: i.price,
           changeRate: i.changeRate,
           tradeValue: null,
+        }));
+      } else if (source.startsWith("rank:")) {
+        /*
+         * **시세분석의 순위표를 그대로 쓴다** (2026-11-17).
+         *
+         * 같은 `/api/rank/{키}` 라 서버 캐시도 같이 탄다 — 시세분석에서 보던 목록을
+         * 종목발굴에서 열어도 조회가 더 들지 않는다.
+         *
+         * ⚠️ 순위마다 **열 이름이 다르다.** 키움 TR 이 제각각이라 현재가가 `cur_prc`
+         * 인 것도 `now_prc` 인 것도 있다. 서버가 늘 얹어 주는 것은 `code`·`name`·`tv`
+         * (거래대금 억원) 셋뿐이므로, 나머지는 **있을 법한 이름을 차례로** 본다.
+         * 못 찾으면 0 이다 — 넘기기 바에 값이 안 뜰 뿐 고르는 데는 지장이 없다.
+         */
+        const res = await api.rank(source.slice(5), market, "all", 100);
+        const pick = (r: Record<string, unknown>, keys: string[]): number => {
+          for (const k of keys) {
+            const n = Math.abs(Number(r[k]));
+            if (Number.isFinite(n) && n !== 0) return n;
+          }
+          return 0;
+        };
+        next = res.rows.map((r) => ({
+          code: normalizeStockCode(r.code),
+          name: r.name,
+          price: pick(r, ["cur_prc", "now_prc", "prpr", "stck_prpr", "close"]),
+          /* 등락률은 **부호를 지키려고** 따로 — `pick` 은 절댓값을 쓴다 */
+          changeRate: Number(r.flu_rt ?? r.fluRt ?? r.prdy_ctrt ?? 0) || 0,
+          tradeValue: r.tv,
         }));
       } else {
         const runs = (await api.signalScreenRuns()).runs;
@@ -359,7 +410,31 @@ export function StockDiscoveryPage({
             {s.label}
           </button>
         ))}
-        {source === "volume" &&
+        {/*
+          **시세분석의 순위를 고르는 칸** (2026-11-17). 버튼을 열다섯 개 더 늘어놓으면
+          줄이 두 겹이 되므로 하나로 접는다 — 자주 쓰는 셋(위)은 버튼으로 두고,
+          나머지는 여기서 고른다.
+        */}
+        {rankGroups.length > 0 && (
+          <select
+            className="filter-btn sd-rank-pick"
+            value={source.startsWith("rank:") ? source : ""}
+            onChange={(e) => e.target.value && setSource(e.target.value as SourceKey)}
+            title="시세분석에 있는 순위표를 그대로 모집단으로 씁니다"
+          >
+            <option value="">시세분석 순위…</option>
+            {rankGroups.map((g) => (
+              <optgroup label={g.group} key={g.group}>
+                {g.items.map((i: { key: string; label: string }) => (
+                  <option value={`rank:${i.key}`} key={i.key}>
+                    {i.label}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        )}
+        {(source === "volume" || source.startsWith("rank:")) &&
           MARKETS.map((m) => (
             <button
               key={m.key}

@@ -22180,3 +22180,22 @@ tr.gv-strong td:first-child { color: var(--text); }
 .home-tab-gn { font-size: 0.7rem; color: var(--muted); margin-bottom: 0.3rem; }
 .home-tab-row { display: flex; flex-wrap: wrap; gap: 5px; }
 .home-tab-said { margin-top: 0.6rem; font-size: 0.78rem; color: var(--muted); }
+
+/*
+  종목발굴 — 시세분석 순위 고르기 (2026-11-17).
+  버튼을 열다섯 개 더 늘어놓으면 줄이 두 겹이 되므로 하나로 접는다.
+  `filter-btn` 과 같은 키·색을 쓰되 고른 값이 보이게 폭만 조금 준다.
+*/
+.sd-rank-pick {
+  max-width: 11rem;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 1.5rem;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: right 0.72rem center, right 0.45rem center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.sd-rank-pick:focus { outline: 1px solid var(--accent); }

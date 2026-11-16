@@ -28,26 +28,40 @@ import { noteLife } from "./lifecycle.js";
 
 const PATH = "/uapi/domestic-stock/v1/finance/income-statement";
 const TR = "FHKST66430200";
+/* 한 끗 차이 형제 — 이게 되면 income-statement 쪽만의 문제다 */
+const RATIO_PATH = "/uapi/domestic-stock/v1/finance/financial-ratio";
+const RATIO_TR = "FHKST66430300";
 
-type Case = { 이름: string; params: Record<string, string> };
+type Case = { 이름: string; path: string; tr: string; params: Record<string, string> };
 
 function cases(): Case[] {
   return [
+    /* ⑤ **형제 TR** — 이게 되면 income-statement 쪽만의 문제, 안 되면 재무 묶음 전체다 */
     {
-      이름: "①지금그대로·삼성중공업",
-      params: { fid_cond_mrkt_div_code: "J", fid_input_iscd: "010140", FID_DIV_CLS_CODE: "1" },
+      이름: "⑤재무비율(형제TR)·삼성전자",
+      path: RATIO_PATH,
+      tr: RATIO_TR,
+      params: { fid_cond_mrkt_div_code: "J", fid_input_iscd: "005930", FID_DIV_CLS_CODE: "0" },
     },
     {
-      이름: "②같은조합·삼성전자",
+      이름: "①지금그대로·삼성전자",
+      path: PATH,
+      tr: TR,
       params: { fid_cond_mrkt_div_code: "J", fid_input_iscd: "005930", FID_DIV_CLS_CODE: "1" },
     },
+    /* ⑥ 경로는 그대로 두고 **TR 만 형제 것** — 짝이 안 맞으면 전처리에서 걸린다 */
     {
-      이름: "③년(0)·삼성중공업",
-      params: { fid_cond_mrkt_div_code: "J", fid_input_iscd: "010140", FID_DIV_CLS_CODE: "0" },
+      이름: "⑥경로=손익·TR=비율",
+      path: PATH,
+      tr: RATIO_TR,
+      params: { fid_cond_mrkt_div_code: "J", fid_input_iscd: "005930", FID_DIV_CLS_CODE: "1" },
     },
+    /* ⑦ TR 은 그대로 두고 **경로만 형제 것** */
     {
-      이름: "④전부대문자·삼성중공업",
-      params: { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: "010140", FID_DIV_CLS_CODE: "1" },
+      이름: "⑦경로=비율·TR=손익",
+      path: RATIO_PATH,
+      tr: TR,
+      params: { fid_cond_mrkt_div_code: "J", fid_input_iscd: "005930", FID_DIV_CLS_CODE: "1" },
     },
   ];
 }
@@ -63,8 +77,8 @@ export function probeQuarterOnce(delayMs = 120_000): void {
       for (const c of cases()) {
         try {
           const body = await hantooGet<{ output?: unknown[]; rt_cd?: string; msg1?: string }>(
-            PATH,
-            TR,
+            c.path,
+            c.tr,
             c.params,
             "분기손익 진단",
           );
@@ -72,7 +86,9 @@ export function probeQuarterOnce(delayMs = 120_000): void {
           out.push(`${c.이름}=OK ${n}행`);
         } catch (e) {
           /* 실패 사유를 **그대로** 적는다 — 요약하면 다음 사람이 또 추측한다 */
-          out.push(`${c.이름}=✗ ${e instanceof Error ? e.message : String(e)}`);
+          /* 사유 **코드까지** — 메시지만으로는 「전처리 오류」 넷이 다 같아 보인다 */
+          const code = (e as { code?: string })?.code ?? "";
+          out.push(`${c.이름}=✗ ${code ? code + " " : ""}${e instanceof Error ? e.message : String(e)}`);
         }
       }
       noteLife("START", `분기손익 진단 — ${out.join(" · ")}`);
