@@ -309,6 +309,14 @@ export class RealtimeStore {
   private pending: string[] = [];
   /** 되짚어 읽은 지난 날 파일 — 화면이 15초마다 물어도 다시 파싱하지 않게 */
   private readonly dayCache = new Map<string, { at: number; series: SeriesMap }>();
+  /**
+   * 그 날 파일에 **어떤 칸이 있었나** (2026-11-16). 지난 날은 안 바뀌므로 한 번 읽으면
+   * 영원히 맞다. 값보다 훨씬 작아 들고 있어도 싸고, 「이 날엔 없다」를 **파일을 안 열고**
+   * 답하게 해 준다 — `/series` 가 열흘치를 통째로 파싱하던 것을 막는 자리다.
+   */
+  private readonly dayKeys = new Map<string, Set<string>>();
+  /** 같은 날을 동시에 여럿이 읽지 않게 — 도는 읽기를 공유한다 */
+  private readonly dayReads = new Map<string, Promise<SeriesMap | null>>();
 
   constructor(private readonly client: RealtimeClient) {}
 
@@ -667,6 +675,18 @@ export class RealtimeStore {
 
     const key = `${type}:${item}`;
     for (const day of await this.pastDays()) {
+      /*
+       * **그 날에 이 칸이 있는지 먼저 본다** (2026-11-16).
+       *
+       * 여태 날마다 파일을 **통째로 파싱**해서 칸 하나를 꺼냈다. 한 번도 쌓인 적 없는
+       * 종목(새로 누른 것·ETF)을 열면 **열흘치를 전부 파싱하고 빈손**으로 끝난다.
+       * 길목 기록에 `/series` 가 평균 15.5초 · **최대 210초**로 찍힌 자리다.
+       *
+       * 칸 이름만 모아 두면(`dayKeys`) 없는 날은 **파일을 안 읽고** 건너뛴다. 지난 날
+       * 파일은 안 바뀌므로 이 목록은 한 번 만들면 영원히 맞다.
+       */
+      const known = this.dayKeys.get(day);
+      if (known && !known.has(key)) continue;
       const loaded = await this.readDay(day);
       const points = loaded?.[key] ?? [];
       if (points.length >= 2) return { points, day, stale: true };
@@ -691,14 +711,32 @@ export class RealtimeStore {
     }
   }
 
+  /**
+   * 지난 날 파일 하나를 읽는다 — **같은 날을 동시에 여럿이 읽지 않게** 묶어서.
+   *
+   * 화면 여럿이 같은 순간에 되짚기를 하면 예전에는 **각자 같은 파일을 파싱**했다.
+   * 보드를 세 창에 띄우면 그게 세 배다. 도는 읽기를 공유한다.
+   */
   private async readDay(day: string): Promise<SeriesMap | null> {
     const hit = this.dayCache.get(day);
-    if (hit && Date.now() - hit.at < DAY_CACHE_MS) return hit.series;
+    if (hit && Date.now() - hit.at < DAY_CACHE_MS) {
+      /* LRU — 쓴 것을 맨 뒤로 보낸다 */
+      this.dayCache.delete(day);
+      this.dayCache.set(day, hit);
+      return hit.series;
+    }
+    const sharing = this.dayReads.get(day);
+    if (sharing) return sharing;
+    const p = this.loadDay(day).finally(() => this.dayReads.delete(day));
+    this.dayReads.set(day, p);
+    return p;
+  }
+
+  private async loadDay(day: string): Promise<SeriesMap | null> {
     /* 새 형식 먼저 */
     try {
       const series = parseJsonl(await readMaybeGz(this.file(day))).series;
-      if (this.dayCache.size > 3) this.dayCache.clear();
-      this.dayCache.set(day, { at: Date.now(), series });
+      this.remember(day, series);
       return series;
     } catch {
       /* 없으면 예전 형식 */
@@ -708,12 +746,35 @@ export class RealtimeStore {
         series?: SeriesMap;
       };
       const series = raw.series ?? (raw as unknown as SeriesMap);
-      // 지난 날은 안 바뀐다 — 몇 개만 들고 있으면 충분하다
-      if (this.dayCache.size > 3) this.dayCache.clear();
-      this.dayCache.set(day, { at: Date.now(), series });
+      this.remember(day, series);
       return series;
     } catch {
+      /*
+       * 파일이 아예 없는 날도 **기억한다** — 빈 칸 목록을 넣어 두면 다음부터 그 날은
+       * `getSeriesOrLast` 가 건너뛴다. 없는 파일을 열흘 내내 다시 열지 않는다.
+       */
+      this.dayKeys.set(day, new Set());
       return null;
+    }
+  }
+
+  /**
+   * 읽은 날을 간직한다 — **칸 이름은 영원히, 값은 몇 개만.**
+   *
+   * ⚠️ 예전에는 `if (size > 3) clear()` 로 **통째로 버렸다.** 되짚기가 열흘을 훑으므로
+   * 네 번째 날에서 앞의 셋이 다 날아가고, 다음 요청이 또 처음부터 읽었다. 캐시가 있으나
+   * 마나였다. 이제 **가장 오래 안 쓴 것 하나씩** 내보낸다.
+   *
+   * 칸 이름(`dayKeys`)은 값보다 훨씬 작고 지난 날은 안 바뀌므로 그냥 들고 있는다 —
+   * 이게 「없는 날은 파일을 안 읽는다」를 가능하게 하는 자리다.
+   */
+  private remember(day: string, series: SeriesMap): void {
+    this.dayKeys.set(day, new Set(Object.keys(series)));
+    this.dayCache.set(day, { at: Date.now(), series });
+    while (this.dayCache.size > 3) {
+      const oldest = this.dayCache.keys().next().value;
+      if (oldest === undefined) break;
+      this.dayCache.delete(oldest);
     }
   }
 

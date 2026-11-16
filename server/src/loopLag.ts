@@ -27,6 +27,38 @@ import { noteLife } from "./lifecycle.js";
  */
 const h = monitorEventLoopDelay({ resolution: 20 });
 
+/**
+ * **크게 멈춘 순간의 증거** — 도는 길목 + 할당 상위 + 쪼들림.
+ *
+ * 세 가지를 한 줄에 같이 둔다. 따로 있으면 시각을 맞춰 보느라 사람이 품을 들이고,
+ * 그 품 때문에 안 보게 된다.
+ *
+ * ⚠️ 여기서 던지면 안 된다 — 진단이 서버를 흔들면 본말이 뒤집힌다. 전부 삼킨다.
+ */
+async function noteStall(maxMs: number): Promise<void> {
+  try {
+    const [{ liveRoutes }, { pressure }, { heapWho }] = await Promise.all([
+      import("./routeStats.js"),
+      import("./recovery.js"),
+      import("./heapWho.js"),
+    ]);
+    const p = pressure();
+    const 도는것 = liveRoutes(6);
+    const who = await heapWho(5).catch(() => null);
+    const 길 = 도는것.length > 0 ? 도는것.map((r) => `${r.길}(${r.초}s)`).join(" · ") : "없음";
+    const 먹은이 =
+      who?.그사이 && who.그사이.length > 0
+        ? who.그사이.slice(0, 3).map((r) => `${r.MB}MB ${r.곳}`).join(" · ")
+        : "(못 쟀다)";
+    noteLife(
+      "WARN",
+      `멈춤 ${Math.round(maxMs / 100) / 10}초 — 쪼들림 ${Math.round(p.비율 * 100)}%(${p.무엇}, 남은 램 ${p.남은램MB}MB) · 도는 길목: ${길} · 할당: ${먹은이}`,
+    );
+  } catch {
+    /* 진단이 실패해도 서버는 돈다 */
+  }
+}
+
 /** 창 하나(1분) 동안의 최고 지연 ms — health.json 이 읽어 간다 */
 let lastMaxMs = 0;
 let lastMeanMs = 0;
@@ -52,6 +84,18 @@ export function startLoopLag(): void {
         "WARN",
         `루프멈춤 최대 ${lastMaxMs}ms · 평균 ${lastMeanMs}ms · heap ${Math.round(mem.heapUsed / 1048576)}/${Math.round(mem.heapTotal / 1048576)}MB`,
       );
+      /*
+       * **크게 멈추면 그 순간의 범인 후보까지 적는다** (2026-11-16 — 벤티지가 고른 것:
+       * "느려질 때 자동으로 기록").
+       *
+       * 위 한 줄로는 「멈췄다」까지만 안다. 정작 **무엇이 돌고 있었고 누가 할당했는지**는
+       * 어디에도 안 남아서, 길목 최대값이 `/list-track` 79,133ms · `/super` 79,126ms 로
+       * **나란히** 찍혀 있어도 그 공통 벽이 무엇인지 물을 자리가 없었다.
+       *
+       * 문턱을 5초로 둔 까닭: 1초 멈춤은 하루에도 여러 번이라 그때마다 적으면 로그가
+       * 불어나고, 5초는 사람이 「멈췄다」를 넘어 **「고장났나」로 느끼는 자리**다.
+       */
+      if (lastMaxMs >= 5000) void noteStall(lastMaxMs);
     }
   }, 60_000);
   timer.unref?.();

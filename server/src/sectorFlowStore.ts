@@ -1,9 +1,10 @@
 import { joEok } from "./aiSummary.js";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { cleanupStartMinute } from "./marketHours.js";
+import { noteLife } from "./lifecycle.js";
 
 /**
  * 업종별 투자자 순매수 누적.
@@ -158,11 +159,35 @@ function bare(code: unknown): string {
 
 // ---------------------------------------------------------------- 저장소
 
+/**
+ * **읽기가 실패했나** — 읽은 쪽이 알아야 한다 (2026-11-16).
+ *
+ * 벤티지: "지수에 왜 5일치밖에 안나와. 6일치뿐이라고 나오네? 뭔가 리셋된거야?"
+ *
+ * 맞았다. 여기가 **조용히 `[]` 를 돌려주고** 있었고, 그 빈 배열에 오늘 하루를 더해
+ * `writeAll` 이 **500일치를 덮어썼다.** 파일이 한 번 깨지면 과거가 통째로 사라진다 —
+ * 그러고도 아무 데도 기록이 안 남는다.
+ *
+ * 깨지는 길은 뻔하다: `writeFile` 이 원자적이 아니라 **쓰는 중에 서버가 죽으면**
+ * 반쯤 쓰인 JSON 이 남는다. 11/10 새벽에 배포로 재시작이 여러 번 있었고 이 서버는
+ * OOM 이력도 있다([[server-oom-and-autorevive]]).
+ */
+let lastReadBroken = false;
+
 async function readAll(): Promise<SectorFlowDay[]> {
+  lastReadBroken = false;
   try {
     const parsed = JSON.parse(await readFile(FILE, "utf-8")) as SectorFlowDay[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
+    if (Array.isArray(parsed)) return parsed;
+    lastReadBroken = true;
+    return [];
+  } catch (e) {
+    /* 파일이 아예 없는 건 **처음 도는 것**이라 정상이다. 그 밖은 전부 사고다 */
+    const missing = (e as NodeJS.ErrnoException)?.code === "ENOENT";
+    if (!missing) {
+      lastReadBroken = true;
+      noteLife("FATAL", `수급 창고를 못 읽었다 — ${e instanceof Error ? e.message : String(e)} (덮어쓰지 않는다)`);
+    }
     return [];
   }
 }
@@ -171,9 +196,32 @@ async function readAll(): Promise<SectorFlowDay[]> {
 const KEEP_DAYS = 500;
 
 async function writeAll(rows: SectorFlowDay[]): Promise<void> {
+  /*
+   * ⚠️ **읽기가 깨졌으면 쓰지 않는다** (2026-11-16). 깨진 파일을 읽어 `[]` 가 됐는데
+   * 거기에 오늘을 더해 저장하면 **과거를 우리 손으로 지운다.** 그게 500일치를 6일치로
+   * 만든 길이다. 손상 파일은 `.bad` 로 밀어 두고 사람이 볼 수 있게 남긴다.
+   */
+  if (lastReadBroken) {
+    try {
+      await rename(FILE, `${FILE}.bad-${ymd(new Date())}`);
+      noteLife("FATAL", `수급 창고가 깨져 .bad 로 옮겼다 — 다음 수집부터 새로 쌓고, 과거는 백필이 메운다`);
+      lastReadBroken = false;
+    } catch {
+      /* 옮기지 못하면 이번 저장은 건너뛴다 — 덮어쓰는 것보다 안 쓰는 게 낫다 */
+      noteLife("FATAL", "수급 창고가 깨졌는데 옮기지도 못했다 — 이번 저장을 건너뛴다");
+      return;
+    }
+  }
   rows.sort((a, b) => a.date.localeCompare(b.date));
   await mkdir(DATA_DIR, { recursive: true });
-  await writeFile(FILE, JSON.stringify(rows.slice(-KEEP_DAYS)), "utf-8");
+  /*
+   * **원자적으로 쓴다** — 임시 파일에 다 쓴 뒤 이름을 바꾼다. `rename` 은 같은 볼륨에서
+   * 원자적이라, 쓰는 도중에 서버가 죽어도 **기존 파일이 온전하게 남는다.** 예전에는
+   * 곧장 덮어써서, 재시작과 겹치면 반쯤 쓰인 JSON 이 남았다.
+   */
+  const tmp = `${FILE}.tmp`;
+  await writeFile(tmp, JSON.stringify(rows.slice(-KEEP_DAYS)), "utf-8");
+  await rename(tmp, FILE);
 }
 
 export async function listSectorFlow(days?: number): Promise<SectorFlowDay[]> {
@@ -487,7 +535,23 @@ export async function captureSectorFlow(client: KiwoomClient): Promise<{ saved: 
   const hasShort = existing.some((d) =>
     [...d.kospi, ...d.kosdaq].some((r) => (r.v?.length ?? 0) < SUBJECTS.length),
   );
-  const res = await backfillSectorFlow(client, hasShort ? 70 : 3);
+  /*
+   * **날 자체가 모자라면 길게 훑는다** (2026-11-16 — 벤티지: "지수에 왜 5일치밖에 안나와").
+   *
+   * 여태 「칸이 모자란 날」만 봤다. 그래서 **파일이 통째로 날아간 경우**는 이 장치가
+   * 못 봤다 — 남은 6일은 칸이 다 차 있으니 `hasShort` 가 거짓이고, 3일만 받아서
+   * 영영 6일인 채로 머문다. 실제로 그 꼴이 났다(11/09~11/16).
+   *
+   * 화면이 60일 합산을 묻는다. 그만큼이 없으면 **되채울 때가 된 것**이다.
+   */
+  const needDays = existing.length < 60;
+  const res = await backfillSectorFlow(client, hasShort || needDays ? 70 : 3);
+  if (needDays) {
+    noteLife(
+      "START",
+      `수급 창고가 ${existing.length}일치뿐이라 70일을 훑었다 — 더함 ${res.added} · 되채움 ${res.refilled} · 이제 ${res.total}일치`,
+    );
+  }
   lastCapture = { day: todayKey, at: Date.now() }; // (2026-09-10 전수 점검) 성공 시각 — 실패는 던져서 여기 안 온다
   return res.added > 0 || res.refilled > 0
     ? { saved: true }

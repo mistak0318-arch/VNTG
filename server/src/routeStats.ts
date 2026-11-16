@@ -52,12 +52,43 @@ function norm(path: string): string {
     .replace(/\/[0-9a-f]{16,}(?=\/|$)/gi, "/{id}");
 }
 
+/**
+ * **지금 도는 요청** (2026-11-16 — 벤티지: "속도저하 이슈가 계속 나오는거 같은데").
+ *
+ * 길목 통계는 **끝난 뒤**에 쌓인다. 그래서 「루프가 28초 멈췄다」는 기록은 있는데
+ * **그때 무엇이 돌고 있었는지**는 어디에도 없었다. 길목 최대값이 `/list-track` 79,133ms ·
+ * `/super` 79,126ms 처럼 **나란히 몰려 있는 것**이 그 증거다 — 각자 느린 게 아니라
+ * 공통 벽에 같이 걸렸는데, 그 벽이 무엇인지 물을 자리가 없었다.
+ *
+ * 도는 것만 들고 있으면(끝나면 바로 지운다) 멈춤이 났을 때 범인 후보를 적을 수 있다.
+ */
+const live = new Map<number, { key: string; at: number }>();
+let liveSeq = 0;
+
+/** 지금 도는 요청 — 오래된 순. 멈춤 기록이 이걸 적는다 */
+export function liveRoutes(limit = 8): { 길: string; 초: number }[] {
+  const now = Date.now();
+  return [...live.values()]
+    .sort((a, b) => a.at - b.at)
+    .slice(0, limit)
+    .map((v) => ({ 길: v.key, 초: Math.round((now - v.at) / 100) / 10 }));
+}
+
 export function routeStats(req: Request, res: Response, next: NextFunction): void {
   if (!req.path.startsWith("/api/")) {
     next();
     return;
   }
   const t0 = Date.now();
+  const id = (liveSeq += 1);
+  live.set(id, { key: `${req.method} ${norm(req.path)}`, at: t0 });
+  /*
+   * ⚠️ `finish` 만으로는 안 지워진다 — 화면이 떠나 **끊긴 요청**은 `close` 만 온다.
+   * 그러면 이 지도가 영영 자란다(그 자체가 샘이다).
+   */
+  const drop = () => live.delete(id);
+  res.on("finish", drop);
+  res.on("close", drop);
   res.on("finish", () => {
     const ms = Date.now() - t0;
     const key = `${req.method} ${norm(req.path)}`;
