@@ -2273,7 +2273,12 @@ export const api = {
    * 움직인다)」 같은 것이 조건 이름으로 나왔고, 단위를 아무 데서도 말해 주지
    * 않아 「덩치 ≥ 3000」이 3천억인지 3천만원인지 알 수 없었다.
    */
-  condFields: () => getJson<{ fields: CondField[] }>("/api/signal/cond/fields"),
+  condFields: () =>
+    getJson<{
+      fields: CondField[];
+      /** 밸류 칸(PER·PBR)이 얼마나 차 있나 — 결과가 적을 때 「조건이 빡센가 자료가 덜 찼나」를 가른다 */
+      valuation?: { 종목수: number; 수집중: boolean };
+    }>("/api/signal/cond/fields"),
   /** 조건식 자동 실행 설정 (2026-10-26) — 켜고 끄기·언제 돌릴지. 방은 텔레그램 동향에서 */
   condAutoConfig: () => getJson<CondAutoConfig>("/api/signal/cond/auto-config"),
   condAutoConfigSave: (next: Partial<CondAutoConfig>) =>

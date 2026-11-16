@@ -100,6 +100,7 @@ import { shareGet } from "./shareGet.js";
 /* 복구 루틴 — 나빠진 뒤 스스로 돌아온다 (2026-10-07 밤) */
 import { startRecovery } from "./recovery.js";
 import { startHeapWho } from "./heapWho.js";
+import { loadStockValuation } from "./stockValuation.js";
 import { setSharedKiwoom } from "./kiwoomShared.js";
 import { createAiRouter } from "./routes/ai.js";
 import { createAskRouter } from "./routes/ask.js";
@@ -696,6 +697,12 @@ app.listen(port, host, () => {
    * 섞여 범인을 못 집는다 — 64KB 마다 한 점이라 늘 켜 둬도 싸다. `/api/sys/heap-who`.
    */
   startHeapWho();
+  /*
+   * 종목 밸류(PER·PBR)를 **메모리로 올려 둔다** (2026-11-17). 파일에 1,200종목이 있는데
+   * `health.json` 의 `종목밸류.종목수` 가 기동 직후 **0** 으로 보였다 — 통계가 메모리만
+   * 보기 때문이다. 「아직 안 읽음」과 「없음」이 밖에서 똑같아 보이면 안 된다.
+   */
+  void loadStockValuation();
   startRecovery((why) => {
     noteLife("EXIT", why);
     /* 쓰던 응답이 마저 나가도록 한 박자 뒤에 — OOM 즉사와 다른 점이 이것이다 */

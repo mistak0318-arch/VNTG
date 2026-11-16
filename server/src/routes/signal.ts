@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { stockValuationStat } from "../stockValuation.js";
 import {
   activeScreenJobs,
   diffScreenRuns,
@@ -453,7 +454,16 @@ export function createSignalRouter(client: KiwoomClient): Router {
   });
 
   router.get("/cond/fields", (_req, res) => {
-    res.json({ fields: COND_FIELDS });
+    /*
+     * **밸류 칸이 얼마나 차 있는지 같이 보낸다** (2026-11-17).
+     *
+     * PER·PBR 은 한 회차에 400종목씩 받아 **일곱 밤에 한 바퀴**다. 덜 받은 종목은 그
+     * 조건에서 **조용히 빠진다**(「PER 0」으로 굳히면 「아주 싸다」로 읽히므로). 그래서
+     * 조건을 걸었는데 결과가 적으면 **조건이 빡센 건지 자료가 덜 찬 건지** 알 길이
+     * 없었다. 화면이 그 둘을 가를 수 있게 숫자를 준다.
+     */
+    const v = stockValuationStat();
+    res.json({ fields: COND_FIELDS, valuation: { 종목수: v.종목수, 수집중: v.수집중 } });
   });
 
   router.get("/cond/presets", async (_req, res, next) => {

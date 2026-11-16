@@ -91,6 +91,8 @@ export function CondSearchPage({
    * 뭐야. 해석을 해야지 넌 AI 잖아."
    */
   const [fields, setFields] = useState<CondField[]>([]);
+  /* 밸류 칸이 얼마나 차 있나 — 아래 「마크」 묶음이 그 사실을 적는다 */
+  const [valuation, setValuation] = useState<{ 종목수: number; 수집중: boolean } | null>(null);
   const [q, setQ] = useState<CondQuery>(EMPTY);
   const [job, setJob] = useState<CondJob | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
@@ -110,7 +112,10 @@ export function CondSearchPage({
   useEffect(() => {
     void api
       .condFields()
-      .then((r) => setFields(r.fields))
+      .then((r) => {
+        setFields(r.fields);
+        setValuation(r.valuation ?? null);
+      })
       .catch(() => undefined);
     void api
       .condPresets()
@@ -492,6 +497,22 @@ export function CondSearchPage({
               return (
                 <div className="cond-group" key={g}>
                   <div className="cond-group-name">{g}</div>
+                  {/*
+                    **PER 칸은 아직 다 안 찼다** (2026-11-17). `per` 의 분모(직전 결산 EPS)는
+                    연 1회만 바뀌므로 마감 뒤에 **한 회차 400종목씩** 받는다 — 2,700종목이면
+                    일곱 밤에 한 바퀴다. 덜 받은 종목은 그 조건에서 **조용히 빠진다**
+                    (「PER 0」으로 굳히면 「아주 싸다」로 읽히므로).
+
+                    그래서 조건을 걸었는데 결과가 적으면 **조건이 빡센 건지 자료가 덜 찬
+                    건지** 알 길이 없었다. 숫자로 적어 둘을 가르게 한다.
+                  */}
+                  {g === "마크" && valuation && valuation.종목수 < 2600 && (
+                    <div className="cond-group-note">
+                      PER·PBR 칸은 지금 <b>{valuation.종목수.toLocaleString()}종목</b>에만 값이 있습니다
+                      {valuation.수집중 ? " (받는 중)" : ""} — 마감 뒤마다 400종목씩 채웁니다. 덜 받은 종목은 그
+                      조건에서 빠지므로 결과가 적게 나올 수 있습니다.
+                    </div>
+                  )}
                   <div className="mg-picker">
                     {list.map((f) => (
                       <button

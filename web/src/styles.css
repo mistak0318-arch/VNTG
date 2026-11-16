@@ -22229,3 +22229,13 @@ tr.gv-strong td:first-child { color: var(--text); }
   background-repeat: no-repeat;
 }
 .sd-rank-pick:focus { outline: 1px solid var(--accent); }
+
+/* 조건 묶음 안의 사정 한 줄 (2026-11-17) — 「왜 결과가 적은가」를 그 자리에서 말한다 */
+.cond-group-note {
+  margin: 0 0 0.4rem;
+  font-size: 0.7rem;
+  line-height: 1.5;
+  color: var(--muted);
+  word-break: keep-all;
+}
+.cond-group-note b { color: var(--text); font-variant-numeric: tabular-nums; }
