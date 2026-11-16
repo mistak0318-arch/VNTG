@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dropPhantomToday } from "./candleGuard.js";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -368,7 +368,7 @@ export async function getSuperConfig(): Promise<SuperConfig> {
 
 /** 값의 범위는 여기서 막는다 — 화면을 믿지 않는다(직접 PUT 할 수도 있다) */
 export async function saveSuperConfig(input: Partial<SuperConfig>): Promise<SuperConfig> {
-  const store = await load();
+  const store = await loadFresh();
   const cur = cfgOf(store);
   const num = (v: unknown, lo: number, hi: number, dflt: number) => {
     const n = Number(v);
@@ -395,7 +395,47 @@ export async function saveSuperConfig(input: Partial<SuperConfig>): Promise<Supe
 
 const EMPTY: Store = { entries: [], lastRunDate: null };
 
+/**
+ * **읽은 원장을 파일이 그대로인 동안 다시 쓴다** (2026-11-16 — 벤티지: "느려지는 원인
+ * 분석해서 개선").
+ *
+ * 할당 추적기가 1위로 지목한 자리다 — `superSignal.js:116 load` 가 **1분에 5.6MB**.
+ * 원장이 198KB 이니 **분당 스물여덟 번** 읽고 파싱했다는 뜻이다. `load()` 를 부르는
+ * 곳이 열다섯인데 캐시가 없었다.
+ *
+ * `JSON.parse` 는 **동기**라 그동안 이벤트 루프가 멈춘다. 길목 최대값이 `/super` 와
+ * `/list-track` 에서 나란히 79초로 찍힌 것도 이 공통 벽일 수 있다(둘 다 원장을 읽는다).
+ *
+ * 파일이 안 바뀌었으면(크기·수정시각이 같으면) 파싱 결과를 그대로 쓴다.
+ *
+ * ## ⚠️ 돌려받은 것을 고치면 안 된다
+ *
+ * `entries` **배열은 새로** 만들어 주지만 **원소는 공유**한다(원소까지 복사하면 아끼려던
+ * 비용이 되살아난다). 고칠 것은 `loadFresh()` 를 쓴다 — 저장하는 다섯 함수가 그쪽이다.
+ */
+let cached: { mtimeMs: number; size: number; store: Store } | null = null;
+
+/** 캐시를 버린다 — 저장한 뒤에 부른다 */
+function dropCache(): void {
+  cached = null;
+}
+
+/** 고칠 것이면 이쪽 — 늘 새로 읽는다 */
+async function loadFresh(): Promise<Store> {
+  dropCache();
+  return load();
+}
+
 async function load(): Promise<Store> {
+  try {
+    const st = await stat(FILE);
+    if (cached && cached.mtimeMs === st.mtimeMs && cached.size === st.size) {
+      /* 배열만 새로 — 호출자가 push 해도 캐시가 안 더러워진다 */
+      return { ...cached.store, entries: [...cached.store.entries] };
+    }
+  } catch {
+    /* stat 이 안 되면 그냥 읽는다 — 캐시를 못 쓸 뿐이다 */
+  }
   try {
     const raw = JSON.parse(await readFile(FILE, "utf-8")) as Partial<Store>;
     const entries = (Array.isArray(raw.entries) ? raw.entries : []).map((e) => ({
@@ -411,7 +451,7 @@ async function load(): Promise<Store> {
           ? [{ date: e.addedDate, text: e.note }]
           : [],
     }));
-    return {
+    const built: Store = {
       entries,
       lastRunDate: typeof raw.lastRunDate === "string" ? raw.lastRunDate : null,
       /*
@@ -421,6 +461,14 @@ async function load(): Promise<Store> {
        */
       config: raw.config,
     };
+    /* 다음 번을 위해 간직한다 — 파일이 그대로면 이 결과를 그대로 쓴다 */
+    try {
+      const st = await stat(FILE);
+      cached = { mtimeMs: st.mtimeMs, size: st.size, store: built };
+    } catch {
+      /* 간직 못 해도 값은 돌려준다 */
+    }
+    return { ...built, entries: [...built.entries] };
   } catch {
     return { ...EMPTY };
   }
@@ -474,6 +522,8 @@ export async function superRunStatus(): Promise<{
 async function save(s: Store): Promise<void> {
   await mkdir(dirname(FILE), { recursive: true });
   await writeFile(FILE, JSON.stringify(s, null, 2), "utf-8");
+  /* 방금 바꿨으니 들고 있던 것은 낡았다 — 다음 읽기가 새로 파싱한다 */
+  dropCache();
 }
 
 function todayStr(d = new Date()): string {
@@ -950,7 +1000,7 @@ export function superJob(): SuperJob {
  * (그날 이미 담은 종목은 중복으로 안 담기므로 다시 돌아도 해가 없다).
  */
 export async function runSuperSignal(client: KiwoomClient, force = false): Promise<Store> {
-  const store = await load();
+  const store = await loadFresh();
   /* 이번 회차가 쓸 설정 — 도는 도중에 바뀌어도 한 회차는 같은 값으로 끝나게 한다 */
   const runCfg = cfgOf(store);
   /*
@@ -1599,7 +1649,7 @@ export async function exitSuperEntry(
   code: string,
   note: string,
 ): Promise<SuperEntry | null> {
-  const store = await load();
+  const store = await loadFresh();
   const e = store.entries.find((x) => x.code === code);
   if (!e) return null;
   const snap = await getMarketSnapshot(client).catch(() => null);
@@ -1631,7 +1681,7 @@ export async function exitSuperEntry(
  * `note` 필드는 마지막 메모의 사본 — 표의 📝 표시가 본다.
  */
 export async function updateSuperNote(code: string, note: string): Promise<boolean> {
-  const store = await load();
+  const store = await loadFresh();
   const e = store.entries.find((x) => x.code === code);
   if (!e) return false;
   const text = note.trim();
@@ -1801,7 +1851,7 @@ export async function superDetail(client: KiwoomClient, code: string) {
 }
 
 export async function removeSuperEntry(code: string): Promise<void> {
-  const store = await load();
+  const store = await loadFresh();
   store.entries = store.entries.filter((e) => e.code !== code);
   await save(store);
 
