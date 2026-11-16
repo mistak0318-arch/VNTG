@@ -957,12 +957,23 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
           그 둘은 화면을 보는 내내 알아야 하는 값이라 설정이 아니다.
         */}
         <h2 className="board-cfg-h">
+          {/*
+            **종목명이 주인공이다** (2026-11-17 — 벤티지: "보드에 종목명 나오는 부분 있잖.
+            종목명 좀 눈에 띄게 강조 좀 해서 표시하자").
+
+            여태 `pt-n`(흐린 보조 글자) 안에 「지금 삼성전자우 (005935)」로 들어가 있어서
+            머리글과 **같은 크기·같은 색**이었다. 모니터 셋에 창을 띄우고 종목연동으로
+            쓰는 사용 방식에서 **제일 먼저 찾는 글자인데 제일 안 보였다.**
+
+            「지금」이라는 말머리는 뺐다 — 이 자리에 있는 것 자체가 「지금 이 창」이라는
+            뜻이라 글자를 쓸 값이 없다. 코드는 종목명을 확인하는 보조라 작게 뒤에 둔다.
+          */}
           <span>
             보드
             {code && (
-              <span className="pt-n">
-                {" "}
-                지금 {name} ({code})
+              <span className="board-now">
+                <b>{name}</b>
+                <i>{code}</i>
               </span>
             )}
             {!on && <span className="board-off"> 연동 꺼짐</span>}

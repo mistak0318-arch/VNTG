@@ -11085,6 +11085,36 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .board-cfg-btn { flex: none; }
 .board-off { color: var(--red); font-size: 0.8rem; }
 
+/*
+  보드 머리글의 **종목명** (2026-11-17 — 「종목명 좀 눈에 띄게 강조」).
+
+  창을 모니터 여럿에 띄워 쓰므로 **어느 창이 무슨 종목인지**가 이 줄에서 제일 먼저
+  읽혀야 한다. 「보드」보다 크고 진하게 두고, 코드는 확인용이라 작고 흐리게 뒤에 붙인다.
+
+  ⚠️ 앞에 세로 선을 둬서 「보드」와 종목명을 눈으로 가른다 — 띄어쓰기만으로는 한 덩어리로
+  읽힌다(예전이 그랬다).
+*/
+.board-now {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  margin-left: 0.5rem;
+  padding-left: 0.55rem;
+  border-left: 2px solid var(--accent);
+}
+.board-now b {
+  font-size: 1.08em;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+.board-now i {
+  font-style: normal;
+  font-size: 0.76rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
 /* 해외 관심종목 MAP — 그룹마다 한 덩어리 */
 .uwm-group + .uwm-group { margin-top: 0.7rem; }
 .uwm-group-h { display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.35rem; }
