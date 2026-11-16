@@ -743,11 +743,83 @@ export class RealtimeStore {
        */
       const known = this.dayKeys.get(day);
       if (known && !known.has(key)) continue;
-      const loaded = await this.readDay(day);
-      const points = loaded?.[key] ?? [];
-      if (points.length >= 2) return { points, day, stale: true };
+      /*
+       * **한 칸만 뽑는다** (2026-11-17). 멈춤 기록이 두 번 연달아 같은 자리를 짚었다 —
+       * `parseJsonl` 이 1분에 1,842MB · 2,400MB. 되짚기는 **칸 하나**가 필요한데 그
+       * 함수는 그 날의 **모든 칸의 모든 점**을 맵으로 만든다. 하루 파일이 수백 MB 라
+       * 그게 통째로 메모리에 선다.
+       *
+       * `scanDay` 는 줄을 훑으며 **찾는 칸만** `JSON.parse` 한다(칸 이름은 정규식으로
+       * 집는다). 덤으로 그 날의 칸 목록이 같이 나오므로, 다음부터는 위의 `known` 이
+       * 이 날을 아예 건너뛴다.
+       */
+      const hit = await this.scanDay(day, key);
+      if (hit && hit.length >= 2) return { points: hit, day, stale: true };
     }
     return { points: today, day: this.day, stale: false };
+  }
+
+  /**
+   * **지난 날 파일에서 칸 하나만 뽑는다** (2026-11-17).
+   *
+   * 되짚기가 쓰는 유일한 읽기다. 예전에는 `parseJsonl` 로 **그 날 전체**를 맵으로
+   * 만들었는데, 하루 파일이 수백 MB 라 그게 통째로 메모리에 섰다 — 멈춤 기록이 두 번
+   * 연달아 같은 자리를 짚었다(1분에 1,842MB · 2,400MB, 루프 7.2초 멈춤).
+   *
+   * 여기서는 줄을 훑으며 **찾는 칸만** `JSON.parse` 한다. 칸 이름은 정규식으로 집는다 —
+   * 모든 줄을 파싱하지 않으려는 것이 요점이다.
+   *
+   * 덤으로 **그 날의 칸 목록**이 나온다. 그걸 간직하면(`dayKeys`) 다음부터 이 날은
+   * 파일을 아예 안 연다.
+   */
+  private async scanDay(day: string, key: string): Promise<Point[] | null> {
+    let text: string;
+    try {
+      text = await readMaybeGz(this.file(day));
+    } catch {
+      try {
+        /* 예전 형식(통째로 쓴 JSON)은 줄 단위가 아니라 통째로 읽을 수밖에 없다 */
+        const raw = JSON.parse(await readMaybeGz(this.legacyFile(day))) as { series?: SeriesMap };
+        const series = raw.series ?? (raw as unknown as SeriesMap);
+        this.dayKeys.set(day, new Set(Object.keys(series)));
+        void this.saveKeys();
+        return series[key] ?? null;
+      } catch {
+        /* 그 날은 파일이 없다 — 빈 목록으로 기억해 다음에 안 연다 */
+        this.dayKeys.set(day, new Set());
+        void this.saveKeys();
+        return null;
+      }
+    }
+
+    const keys = new Set<string>();
+    const points: Point[] = [];
+    /* `"k":"0B:005930"` 에서 칸 이름만 — 줄마다 JSON.parse 하지 않으려는 것이다 */
+    const K = /"k":"([^"]+)"/;
+    let i = 0;
+    while (i < text.length) {
+      let j = text.indexOf("\n", i);
+      if (j < 0) j = text.length;
+      if (j > i) {
+        const line = text.slice(i, j);
+        const m = K.exec(line);
+        if (m) {
+          keys.add(m[1]);
+          if (m[1] === key) {
+            try {
+              const o = JSON.parse(line) as { t?: string; v?: Record<string, string> };
+              if (o.t && o.v) points.push({ t: o.t, v: o.v });
+            } catch {
+              /* 깨진 줄은 건너뛴다 */
+            }
+          }
+        }
+      }
+      i = j + 1;
+    }
+    this.dayKeys.set(day, keys);
+    void this.saveKeys();
+    return points.length > 0 ? points : null;
   }
 
   /** 오늘보다 앞선 날짜 파일 — 최근 것부터. 열흘까지만 되짚는다 */
