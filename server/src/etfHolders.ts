@@ -70,6 +70,18 @@ async function load(): Promise<Store> {
   return cache;
 }
 
+/**
+ * **종목 → 담은 ETF 목록을 통째로** (2026-11-17).
+ *
+ * `etfHoldersOf` 는 한 종목씩이고 매번 실시간 등락률을 덧씌운다. 마크를 구울 때는
+ * **2,700 종목**을 훑으므로 그 길로 가면 같은 일을 2,700번 한다. 여기서는 파일에 굳은
+ * 것을 **그대로** 준다 — 마크는 마감 뒤에 굽는 배치라 실시간 등락률이 필요 없고,
+ * 쓰는 값도 기간 수익률(`m1`)이라 장중 값과 무관하다.
+ */
+export async function allEtfHolders(): Promise<Record<string, EtfHolder[]>> {
+  return (await load()).byStock;
+}
+
 function num(v: unknown): number | null {
   const n = Number(String(v ?? "").replace(/[%,+\s]/g, ""));
   return Number.isFinite(n) ? n : null;

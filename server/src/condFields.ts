@@ -735,6 +735,46 @@ export const COND_FIELDS: CondField[] = [
     own: true,
     cost: "조회 0회",
   },
+  /*
+   * **흐름 두 칸** (2026-11-17) — 벤티지: "섹터가 상승중인지 포함하고 있는 ETF가 평균적으로
+   * 상승세인지 이런것들의 조합이면 꽤나 쓸만해지겠는데?"
+   *
+   * 위의 PER 칸들과 **같이 걸라고** 만든 것이다. 저PER 혼자서는 「싸게 죽어가는 것」을
+   * 못 거른다 — 값이 싼 까닭이 업종이 통째로 꺾였기 때문일 때가 많다. 「싸다 + 흐름이
+   * 살아 있다」로 걸러야 뜻이 생긴다.
+   */
+  {
+    key: "mkSectorRet20",
+    label: "업종 20일 수익률 (중앙값)",
+    group: "마크",
+    unit: "%",
+    hint: "그 종목 업종에 속한 종목들의 20일 수익률 중앙값입니다. 업종 지수가 아니라 종목들을 실제로 줄 세운 값이라 큰 종목 하나가 끌고 가는 걸 안 봅니다. 같은 업종에 20일치를 가진 종목이 다섯 미만이면 빈칸입니다",
+    ops: ["gte", "lte"],
+    def: 0,
+    presets: [
+      { v: 0, label: "플러스 (업종이 돈다)" },
+      { v: 5, label: "+5% 이상" },
+      { v: -5, label: "-5% 이하 (꺾인 업종)" },
+    ],
+    own: true,
+    cost: "조회 0회",
+  },
+  {
+    key: "mkEtfBackM1",
+    label: "담은 테마 ETF 1개월 (중앙값)",
+    group: "마크",
+    unit: "%",
+    hint: "그 종목을 담고 있는 테마·섹터 ETF 들의 1개월 수익률 중앙값입니다. 지수 ETF(KODEX 200 등)는 시가총액 때문에 담은 것이라 셈에서 뺍니다. ETF 인덱스는 거래대금 상위 150곳의 Top10 구성종목만 봐서, 빈칸이 「ETF 에 안 담겼다」는 뜻은 아닙니다",
+    ops: ["gte", "lte"],
+    def: 0,
+    presets: [
+      { v: 0, label: "플러스 (묶음이 간다)" },
+      { v: 5, label: "+5% 이상" },
+      { v: 10, label: "+10% 이상" },
+    ],
+    own: true,
+    cost: "조회 0회",
+  },
   {
     key: "mkVolEok",
     label: "거래대금 (그날 확정값)",
@@ -974,6 +1014,9 @@ export async function ownValues(code: string, keys: Set<string>): Promise<OwnVal
       setNum("mkPbr", m.pbr);
       setNum("mkPerVsSector", m.perVsSector);
       setNum("mkPerPctInSector", m.perPctInSector);
+      /* 흐름 둘 (2026-11-17) — 빈칸은 「모름」이라 그 조건을 건 종목만 빠진다 */
+      setNum("mkSectorRet20", m.sectorRet20);
+      setNum("mkEtfBackM1", m.etfBackM1);
       setNum("mkShortRatio", m.shortRatio);
       setFlag("mkShortCooling", m.shortCooling);
       setNum("mkProg5", m.prog5);

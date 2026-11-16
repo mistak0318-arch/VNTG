@@ -11,6 +11,8 @@ import type { DailyLedger, FlowRow } from "./dailyStore.js";
 import { loadStockValuation, valuationOf } from "./stockValuation.js";
 import { allSectorValues } from "./sectorValuation.js";
 import { getMarketSnapshot, peekSnapshot } from "./marketSnapshot.js";
+import { allEtfHolders, type EtfHolder } from "./etfHolders.js";
+import { isNotTheme } from "./signalLight.js";
 
 /**
  * **전 종목 마크** (2026-09-16) — 조회 0회.
@@ -134,6 +136,49 @@ export interface StockMark {
    * 부르면 안 된다.
    */
   perPctInSector: number | null;
+  /**
+   * **그 종목 업종이 오르고 있나** — 같은 업종 종목들의 20일 수익률 **중앙값**(%) (2026-11-17).
+   *
+   * 벤티지: "섹터가 상승중인지 … 이런것들의 조합이면 꽤나 쓸만해지겠는데?"
+   *
+   * 업종 **지수**를 안 쓰고 그 업종 **종목들의 실제 수익률**을 쓴다. 지수는 시총가중이라
+   * 큰 종목 하나가 끌고 가면 나머지가 빠져도 올라간다 — 「업종이 도는가」를 물을 때
+   * 알고 싶은 건 그게 아니다. 그리고 마크는 이미 전 종목 일봉을 손에 들고 있어
+   * **조회가 0회**다.
+   *
+   * ⚠️ **평균이 아니라 중앙값**이다. 한 종목이 +300% 면 평균은 그 하나로 뒤집힌다.
+   *
+   * 같은 업종에 20일치를 가진 종목이 다섯 미만이면 `null` — 셋으로 낸 중앙값은
+   * 업종의 흐름이 아니다.
+   *
+   * ## 실측 (2026-11-16 기준)
+   *
+   * 업종 28개가 찼고 둘만 표본이 모자라 빠졌다(은행 1종목 · 출판/매체복제 2종목).
+   * 전기/전자 **−16.8%**(388종목)인데 삼성전자는 −12.75% 다 — **큰 종목이 덜 빠졌다.**
+   * 시총가중 지수를 봤으면 업종이 실제보다 나아 보였을 자리고, 중앙값을 쓴 까닭이 바로 이것이다.
+   */
+  sectorRet20: number | null;
+  /**
+   * **이 종목을 담은 테마 ETF 들이 오르고 있나** — 1개월 수익률 중앙값(%) (2026-11-17).
+   *
+   * ⚠️ **지수 ETF 는 뺀다.** KODEX 200 은 그 종목을 **시가총액 때문에** 담았지 테마라서
+   * 담은 게 아니다. 다 세면 이 값이 시장 전체로 수렴해 아무 말도 못 한다. 거르는 규칙은
+   * 신호등의 `isNotTheme()` 을 **그대로** 쓴다 — 판정을 두 벌로 두면 언젠가 갈라진다.
+   *
+   * 테마 ETF 가 둘 미만이면 `null`. 하나짜리는 「묶음이 간다」가 아니다.
+   *
+   * ## 실측 (2026-11-16 인덱스)
+   *
+   * ETF 인덱스에 든 종목 242개 중 **값이 붙는 건 90개**다(테마 ETF 0개 47 · 둘 미만 105).
+   * 인덱스가 거래대금 상위 150곳의 **Top10 구성종목만** 보므로 그렇다 — 빈칸이 많은 건
+   * 재료의 한계이고, 화면 설명에 그대로 적었다.
+   *
+   * 거른 56곳은 지수·레버리지·커버드콜·배당이 맞았다. 다만 **`KODEX 방산TOP10` 하나는
+   * 테마인데 빠진다** — `isNotTheme` 의 `TOP10` 규칙에 걸린다. 그 규칙은 신호등 ETF 뒷배가
+   * 같이 쓰는 것이고 지금은 동결 중이라 손대지 않았다(방산주는 `PLUS K방산`·`TIGER K방산&우주`
+   * 가 있어 표본이 남는다). 12월 말 해제 때 볼 자리로 TODO 에 적어 뒀다.
+   */
+  etfBackM1: number | null;
 }
 
 export interface MarksFile {
@@ -191,6 +236,20 @@ function sma(closes: number[], n: number): number | null {
 
 function avg(v: number[]): number | null {
   return v.length === 0 ? null : v.reduce((a, b) => a + b, 0) / v.length;
+}
+
+/**
+ * **중앙값** — 추세를 묶을 때는 평균을 쓰지 않는다 (2026-11-17).
+ *
+ * 업종에 한 종목이 +300% 면 평균은 그 하나로 뒤집힌다(관리종목·테마 급등이 흔하다).
+ * 짝수 개면 가운데 둘의 평균. 받은 배열을 **복사해서** 정렬한다 — 부른 쪽의 배열을
+ * 뒤섞으면 그 배열로 백분위를 내는 자리가 조용히 틀린다.
+ */
+function median(v: number[]): number | null {
+  if (v.length === 0) return null;
+  const s = [...v].sort((a, b) => a - b);
+  const m = s.length >> 1;
+  return s.length % 2 === 1 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
 
 /* ------------------------------------------------------------------ */
@@ -271,6 +330,13 @@ async function buildStockMarksOnce(client: KiwoomClient): Promise<{ day: string;
     /** 업종별로 PER 을 모아 둔다 — 백분위는 루프가 끝나야 낼 수 있다 */
     const perBySector = new Map<string, number[]>();
     const myPer = new Map<string, number>();
+    /*
+     * **업종 추세** (2026-11-17) — 같은 업종 종목들의 20일 수익률을 모아 둔다.
+     * 둘째 바퀴에서 중앙값을 내 각 종목에 적는다. 일봉은 이미 손에 있어 조회 0회다.
+     */
+    const ret20BySector = new Map<string, number[]>();
+    /** 담은 ETF 지도 — 한 번만 읽는다(종목마다 부르면 2,700번이다) */
+    const etfByStock = await allEtfHolders().catch(() => ({}) as Record<string, EtfHolder[]>);
 
     const files = (await readdir(DAILY_DIR).catch(() => [] as string[])).filter((f) => f.endsWith(".json"));
     progress.total = files.length;
@@ -332,6 +398,34 @@ async function buildStockMarksOnce(client: KiwoomClient): Promise<{ day: string;
       const highs250 = bs.slice(-250).map((b) => b.h).filter((h) => h > 0);
       const newHigh250 = last !== null && highs250.length >= 120 ? last >= Math.max(...highs250) : null;
       const gapMa20 = last !== null && ma20 !== null && ma20 > 0 ? ((last - ma20) / ma20) * 100 : null;
+      /*
+       * **20일 수익률** — 업종 추세의 재료. 20봉 전 종가와 견준다(21개가 있어야 20봉 전이 있다).
+       * 자기 값은 마크에 안 적는다 — 이미 `gapMa20`·`high60` 이 비슷한 질문에 답한다.
+       * 여기서는 **업종별로 모으는 데만** 쓴다.
+       */
+      const ret20 = closesArr.length >= 21 ? (last! / closesArr[closesArr.length - 21] - 1) * 100 : null;
+      if (ret20 !== null) {
+        const sec0 = sectorOf(code);
+        if (sec0) {
+          const arr = ret20BySector.get(sec0);
+          if (arr) arr.push(ret20);
+          else ret20BySector.set(sec0, [ret20]);
+        }
+      }
+
+      /*
+       * **담은 테마 ETF 의 1개월 수익률 중앙값** (2026-11-17).
+       *
+       * 지도는 바퀴 밖에서 한 번 읽었다. 지수 ETF 를 `isNotTheme` 으로 걸러 내고,
+       * 테마가 둘 이상일 때만 중앙값을 적는다. ETF 는 같은 코드가 여러 번 들어올
+       * 일이 없어(역인덱스를 ETF 당 한 번 쓴다) 중복은 걱정하지 않는다.
+       */
+      const holders = etfByStock[code] ?? [];
+      const themeM1 = holders
+        .filter((h) => !isNotTheme(h.name))
+        .map((h) => h.m1)
+        .filter((x): x is number => x !== null && Number.isFinite(x));
+      const etfBackM1 = themeM1.length >= 2 ? median(themeM1) : null;
 
       /*
        * **거래대금은 곱해서 낸다.** 일봉의 `v` 는 **거래량(주)** 다(`dailyCloses.ts` 의 `trde_qty`).
@@ -418,6 +512,8 @@ async function buildStockMarksOnce(client: KiwoomClient): Promise<{ day: string;
         /* 업종 비교는 전부 모은 뒤에 — 아래 둘째 바퀴 */
         perVsSector: null,
         perPctInSector: null,
+        sectorRet20: null,
+        etfBackM1: etfBackM1 === null ? null : Math.round(etfBackM1 * 10) / 10,
       };
       progress.marked += 1;
     }
@@ -428,11 +524,23 @@ async function buildStockMarksOnce(client: KiwoomClient): Promise<{ day: string;
      */
     for (const [sec, list] of perBySector) list.sort((a, b) => a - b);
     const MIN_PEERS = 5;
+    /*
+     * 업종 추세는 업종당 한 번만 낸다 — 종목마다 중앙값을 다시 내면 같은 산수를
+     * 2,600번 한다(업종은 서른 몇 개뿐이다).
+     */
+    const sectorRet20 = new Map<string, number>();
+    for (const [sec, list] of ret20BySector) {
+      if (list.length < MIN_PEERS) continue;
+      const m = median(list);
+      if (m !== null) sectorRet20.set(sec, Math.round(m * 10) / 10);
+    }
     for (const [code, mark] of Object.entries(marks)) {
-      const per = myPer.get(code);
-      if (per === undefined) continue;
       const sec = sectorOf(code);
       if (!sec) continue;
+      const sr = sectorRet20.get(sec);
+      if (sr !== undefined) mark.sectorRet20 = sr;
+      const per = myPer.get(code);
+      if (per === undefined) continue;
       /* 배수 — 업종 평균(시총가중) 대비. 「평균보다 몇 배 비싼가」 */
       const avg = sectorPer.get(sec);
       if (avg !== undefined && avg > 0) mark.perVsSector = Math.round((per / avg) * 100) / 100;
