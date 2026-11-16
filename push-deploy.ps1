@@ -44,6 +44,19 @@ if (-not $DeployOnly) {
 $hash = (git rev-parse --short HEAD).Trim()
 "commit  $hash  " + (git log -1 --pretty=%s)
 
+# **푸시 안 된 HEAD 를 배포하라고 하면 미니PC 가 받을 게 없다** (2026-11-17).
+# `-DeployOnly` 는 「이미 푸시한 HEAD」를 전제로 하는데, 손으로 커밋하고 이 깃발만
+# 세우면 깃발의 해시는 새 커밋이고 미니PC 의 `git pull` 은 옛 커밋에 머문다. 끝없이
+# MISMATCH 가 찍힌다 — 위의 대조가 느슨하면 그걸 성공으로 읽는다. 그래서 전제를 **확인**한다.
+if ($DeployOnly) {
+  git merge-base --is-ancestor HEAD "@{upstream}" 2>$null
+  if ($LASTEXITCODE -ne 0) {
+    "push    HEAD 가 아직 안 올라갔다 — 먼저 푸시한다"
+    git push -q
+    if ($LASTEXITCODE -ne 0) { throw "git push failed" }
+  }
+}
+
 if ($NoDeploy) { "deploy  skipped"; exit 0 }
 
 $t0 = Get-Date
@@ -55,16 +68,26 @@ $t0 = Get-Date
 Set-Content "$drop\deploy.flag" -Value $hash -Encoding ascii -Force
 "flag    " + $t0.ToString("HH:mm:ss") + "  " + $hash
 
+# **해시가 어디에 적혔는지를 봐야 한다** (2026-11-17). 여태 상태 줄에 해시가 「들어 있나」만
+# 봤는데, 못 올라간 줄에도 해시가 적힌다:
+#
+#     OK 2026-11-17 8:08:35 5da6983 MISMATCH want=17a245c head=5da6983
+#
+# `want=` 가 내가 **원한** 해시라서 그대로 통과했다 — 0초 만에 `status OK` 를 찍고
+# 「배포됐다」고 말했지만 미니PC 는 여전히 옛 커밋이었다. 대조 장치가 세 번째 조각에서
+# 또 끊긴 셈이다(깃발이 빈 파일이던 10/13 과 같은 종류). **`MATCH <해시>` 만 통과시킨다** —
+# `MISMATCH` 뒤에는 늘 ` want=` 가 오므로 뒤돌아보기로 가른다.
+$ok = "(?<!MIS)MATCH\s+" + [regex]::Escape($hash)
 $deadline = $t0.AddSeconds($TimeoutSec)
 while ((Get-Date) -lt $deadline) {
   $st = Get-Content "$drop\deploy.status" -ErrorAction SilentlyContinue
-  if (($st -join " ") -match [regex]::Escape($hash)) { break }
+  if (($st -join " ") -match $ok) { break }
   Start-Sleep -Seconds 3
 }
 
 $elapsed = [int]((Get-Date) - $t0).TotalSeconds
 $st = Get-Content "$drop\deploy.status" -ErrorAction SilentlyContinue
-if (-not (($st -join " ") -match [regex]::Escape($hash))) {
+if (-not (($st -join " ") -match $ok)) {
   "TIMEOUT after ${elapsed}s - status: $($st -join ' ')"
   exit 2
 }
