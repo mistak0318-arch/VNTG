@@ -1,5 +1,5 @@
 import { noteFrame } from "./afterProbe.js";
-import { appendFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import { gunzipSync } from "node:zlib";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -34,6 +34,8 @@ import type { RealtimeClient, RealtimeFrame } from "./realtimeClient.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(here, "..", "data", "realtime");
+/* 날짜별 **칸 이름만** 담는다 — 값이 아니라 이름이라 몇 KB 다 (2026-11-17) */
+const KEYS_FILE = join(DATA_DIR, "dayKeys.json");
 
 /**
  * 시계열로 남길 TR — 나머지는 최신값만.
@@ -315,12 +317,66 @@ export class RealtimeStore {
    * 답하게 해 준다 — `/series` 가 열흘치를 통째로 파싱하던 것을 막는 자리다.
    */
   private readonly dayKeys = new Map<string, Set<string>>();
+  /** 칸 목록을 파일에 적는 중인가 — 연달아 부르면 한 번으로 묶는다 */
+  private keysSaving: NodeJS.Timeout | null = null;
+
+  /**
+   * **칸 목록을 파일로 남긴다** (2026-11-17 — 벤티지: "지금 봐봐 느려졌다").
+   *
+   * 멈춤 기록이 잡은 그 사건이다:
+   *
+   *     00:11:09  멈춤 7.2초 — 할당: 2,400.8MB realtimeStore.js:206 parseJsonl
+   *     00:12:47  루프 최고 242ms · 같은 자리 1MB 미만
+   *
+   * 백 초 만에 2,400MB 가 1MB 로 떨어졌다 — **재시작 직후의 예열**이었다. 칸 목록이
+   * 메모리에만 있어서 서버가 뜰 때마다 비고, 그걸 채우느라 지난 열흘 파일을 다시
+   * 통째로 파싱한다. 그 몇 분 동안 루프가 멈추고 한투 줄이 14 까지 밀린다.
+   * 오늘 배포를 여섯 번 했으니 벤티지는 그걸 여섯 번 겪었다.
+   *
+   * 지난 날 파일은 **안 바뀐다.** 그러니 칸 목록도 안 바뀌고, 파일에 적어 두면 재시작을
+   * 건너 산다. 크기는 날마다 몇 KB 뿐이다(값이 아니라 이름만 담는다).
+   */
+  private async saveKeys(): Promise<void> {
+    if (this.keysSaving) return;
+    /* 되짚기가 열흘을 훑으면 열 번 불린다 — 2초 뒤에 한 번만 적는다 */
+    this.keysSaving = setTimeout(() => {
+      this.keysSaving = null;
+      void (async () => {
+        try {
+          const obj: Record<string, string[]> = {};
+          for (const [day, keys] of this.dayKeys) obj[day] = [...keys];
+          await mkdir(DATA_DIR, { recursive: true });
+          /* 원자적으로 — 쓰는 중에 죽으면 깨진 파일이 남는다(수급 창고에서 당했다) */
+          const tmp = `${KEYS_FILE}.tmp`;
+          await writeFile(tmp, JSON.stringify(obj), "utf-8");
+          await rename(tmp, KEYS_FILE);
+        } catch {
+          /* 못 적어도 돈다 — 다음 기동이 다시 읽을 뿐이다 */
+        }
+      })();
+    }, 2000);
+    this.keysSaving.unref?.();
+  }
+
+  /** 뜰 때 한 번 — 있으면 예열이 통째로 사라진다 */
+  private async loadKeys(): Promise<void> {
+    try {
+      const obj = JSON.parse(await readFile(KEYS_FILE, "utf-8")) as Record<string, string[]>;
+      for (const [day, keys] of Object.entries(obj)) {
+        if (Array.isArray(keys)) this.dayKeys.set(day, new Set(keys));
+      }
+    } catch {
+      /* 없으면 예전처럼 읽어 가며 채운다 */
+    }
+  }
   /** 같은 날을 동시에 여럿이 읽지 않게 — 도는 읽기를 공유한다 */
   private readonly dayReads = new Map<string, Promise<SeriesMap | null>>();
 
   constructor(private readonly client: RealtimeClient) {}
 
   async start(): Promise<void> {
+    /* 칸 목록이 먼저다 — 이게 있으면 되짚기가 지난 파일을 안 연다(예열이 사라진다) */
+    await this.loadKeys();
     await this.load();
     this.client.onFrame((f) => this.take(f));
     // 흘러간 시간은 안 돌아온다 — 자주 적되 바뀐 게 있을 때만
@@ -770,6 +826,7 @@ export class RealtimeStore {
    */
   private remember(day: string, series: SeriesMap): void {
     this.dayKeys.set(day, new Set(Object.keys(series)));
+    void this.saveKeys();
     this.dayCache.set(day, { at: Date.now(), series });
     while (this.dayCache.size > 3) {
       const oldest = this.dayCache.keys().next().value;
