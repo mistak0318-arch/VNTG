@@ -20280,7 +20280,11 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .pgt-row { display: flex; flex-direction: column; gap: 3px; }
 .pgt-head { display: flex; align-items: baseline; gap: 6px; font-size: 0.78rem; }
 .pgt-head .pt-n { font-size: 0.68rem; }
-.pgt-nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+/*
+ * 폭을 묶어 둔다 — 넓은 모니터에서 네 칸이 카드 폭만큼 늘어나면 숫자가 빈 상자 왼쪽에
+ * 외따로 떠서 읽기 나빠진다(1000px 에서 실측). 칸이 커진다고 더 읽히는 값이 아니다.
+ */
+.pgt-nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; max-width: 36rem; }
 .pgt-cell {
   display: flex; flex-direction: column; gap: 1px; min-width: 0;
   padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel-2);
