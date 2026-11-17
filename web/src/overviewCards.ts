@@ -53,6 +53,11 @@ export const OVERVIEW_CARDS: Record<OverviewSub, CardDef[]> = {
     { key: "breadth", label: "시장 체온계" },
     { key: "sectors", label: "테마 흐름" },
     { key: "moneyFlow", label: "돈의 방향 (한미 ETF)" },
+    /*
+     * 프로그램 동향 (2026-11-17) — 「돈의 방향」 바로 뒤다. 한미 ETF 로 **어디로** 가는지 본
+     * 다음 물음이 「큰 손이 실제로 담고 있나」이고, 비차익 순매수가 그 답이다.
+     */
+    { key: "program", label: "프로그램 동향 (차익·비차익)" },
     { key: "topTraders", label: "수익률 상위 고객 · 네이버페이 랭킹" },
   ],
   flow: [{ key: "flow", label: "투자자별 수급" }],

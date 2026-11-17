@@ -20269,6 +20269,28 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .pulse-kq { font-style: normal; font-size: 0.6rem; border: 1px solid var(--border); border-radius: 3px; padding: 0 2px; }
 .pulse-foot { font-size: 0.68rem; margin-top: 2px; }
 
+/*
+ * 프로그램 동향 카드 — 차익·비차익 (2026-11-17)
+ *
+ * 네 칸(비차익·차익·합계·비차익 5일)을 시장마다 한 줄로. 폰에서는 **2열로 접는다** —
+ * `auto-fit` 은 폭에 따라 3열이 되기도 해서 코스피·코스닥의 칸 자리가 서로 어긋난다.
+ * 열 수를 고정해야 위아래가 같은 자리에 선다(10/27 금리 카드에서 겪은 그것).
+ */
+.pgt { display: flex; flex-direction: column; gap: 8px; }
+.pgt-row { display: flex; flex-direction: column; gap: 3px; }
+.pgt-head { display: flex; align-items: baseline; gap: 6px; font-size: 0.78rem; }
+.pgt-head .pt-n { font-size: 0.68rem; }
+.pgt-nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.pgt-cell {
+  display: flex; flex-direction: column; gap: 1px; min-width: 0;
+  padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel-2);
+}
+.pgt-k { font-size: 0.66rem; color: var(--muted); white-space: nowrap; }
+.pgt-v { font-size: 0.86rem; font-weight: 600; }
+@media (max-width: 720px) {
+  .pgt-nums { grid-template-columns: repeat(2, 1fr); }
+}
+
 /* 뉴스·텔레 며칠 안 — 단추 줄 (2026-09-10) */
 .buzz-days { display: inline-flex; align-items: center; gap: 2px; }
 .buzz-days .filter-btn { padding-left: 6px; padding-right: 6px; }
