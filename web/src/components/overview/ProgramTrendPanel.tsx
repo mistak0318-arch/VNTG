@@ -73,6 +73,15 @@ interface Side {
 export function ProgramTrendPanel() {
   const [sides, setSides] = useState<Side[]>([]);
   const [err, setErr] = useState<string | null>(null);
+  /*
+   * **한 번이라도 받아 봤나** (2026-11-17) — 처음엔 이 칸이 없었다.
+   *
+   * 그래서 응답이 **비어 있으면** `sides` 가 빈 채로 남고 화면은 영영 「불러오는 중…」
+   * 이었다. 벤티지가 "프로그램 수급 현황 어디다 넣은거야? 안보이네" 라고 한 자리가 여기다 —
+   * **카드는 있는데 아무 말도 안 하니 없는 것과 똑같았다.** 「아직 안 받음」과 「받았는데
+   * 없음」은 다른 말이고, 화면이 그 둘을 가려야 한다.
+   */
+  const [tried, setTried] = useState(false);
   /* 숨은 탭에서는 안 돈다 — 카드마다 지켜야 하는 규칙이다(2026-09-23 전수검토) */
   const tabActive = useTabActive();
 
@@ -110,6 +119,8 @@ export function ProgramTrendPanel() {
         setErr(null);
       } catch (e) {
         if (alive) setErr(e instanceof Error ? e.message : "못 받음");
+      } finally {
+        if (alive) setTried(true);
       }
     };
     void load();
@@ -122,7 +133,17 @@ export function ProgramTrendPanel() {
   }, [tabActive]);
 
   if (err && sides.length === 0) return <div className="error-banner">{err}</div>;
-  if (sides.length === 0) return <div className="empty">불러오는 중…</div>;
+  if (sides.length === 0) {
+    /* 받아 봤는데 비었으면 **그렇게 적는다** — 「불러오는 중」으로 두면 고장과 구별이 안 된다 */
+    return tried ? (
+      <div className="empty">
+        프로그램 매매 자료가 비어 있습니다 — 키움 일자별(ka90010)이 빈 응답을 줬습니다. 장중이면
+        잠시 뒤 다시 차고, 계속 비면 「프로그램 매매」 메뉴에서도 같은지 보세요.
+      </div>
+    ) : (
+      <div className="empty">불러오는 중…</div>
+    );
+  }
 
   return (
     <div className="pgt">
