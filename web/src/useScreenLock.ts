@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createHotkeyMatcher, LOCK_HOTKEYS, type Hotkey as SharedHotkey } from "./hotkey";
 import { setLockPaused } from "./lockPause";
-import { removePref, setPref } from "./prefs";
+import { isLocked, lockAll, subscribeLock, unlockThisWindow } from "./lockState";
+import { setPref } from "./prefs";
 
 /**
  * 화면 잠금 — **자리를 비울 때 눈에서 가린다.**
@@ -88,33 +89,32 @@ function read(): LockConfig {
   }
 }
 
-/** 새로고침으로 잠금을 넘기지 못하게 — 잠긴 사실을 남긴다 */
-const LOCKED_KEY = "vntg.lock.locked";
+/*
+ * 새로고침으로 잠금을 넘기지 못하게 — 잠긴 사실을 남긴다.
+ *
+ * **표식을 다루는 자리는 `lockState.ts` 한 곳이다** (2026-11-17). 잠금 명령은 모든 창에
+ * 가고 **푸는 건 그 창만**이라, 「켜짐/꺼짐 한 칸」으로는 담을 수 없게 됐다. 여기서
+ * 표식을 직접 쓰면 창별 자물쇠를 모르는 손이 하나 더 생긴다 — 2026-09-01 에 겪은
+ * 「읽는 쪽과 쓰는 쪽이 다른 곳을 보던」 그 병이다.
+ */
 
 export function useScreenLock() {
   const [config, setConfig] = useState<LockConfig>(read);
-  const [locked, setLocked] = useState(() => localStorage.getItem(LOCKED_KEY) === "1");
+  const [locked, setLocked] = useState(isLocked);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const lock = useCallback(() => {
+    lockAll();
     setLocked(true);
     /* 실시간(SSE)도 멈춘다 — 잠긴 동안 vntgts.com 으로 트래픽이 안 나가게 (2026-09-09) */
     setLockPaused(true);
-    try {
-      setPref(LOCKED_KEY, "1");
-    } catch {
-      /* 못 적어도 이번 세션에는 잠긴다 */
-    }
   }, []);
 
+  /** 이 창만 푼다 — 곁창은 잠긴 채다 (2026-11-17 벤티지 요청) */
   const unlock = useCallback(() => {
+    unlockThisWindow();
     setLocked(false);
-    setLockPaused(false); // 풀면 실시간이 다시 붙는다
-    try {
-      removePref(LOCKED_KEY);
-    } catch {
-      /* 무시 */
-    }
+    setLockPaused(false); // 풀면 이 창의 실시간이 다시 붙는다
   }, []);
 
   const save = useCallback((next: LockConfig) => {
@@ -178,18 +178,16 @@ export function useScreenLock() {
    * 실시간 정지(`lockPause`)는 `storage` 로 창끼리 따라가는데 **잠금 화면 자체는** 안
    * 따라갔다. 미니창에서 Ctrl+Q → 본창은 시세만 멎고 덮개는 없었다 — 회색 점에 값은
    * 그대로인 채로. 미니창을 닫아 버리면 본창은 풀 길이 없어 새로고침해야 했다(그러면
-   * 그때 잠긴다). 잠금 표식은 하나(`LOCKED_KEY`)이므로 그걸 보는 창은 모두 같이 잠기고,
-   * 어느 창에서 풀든 표식이 지워져 모두 풀린다.
+   * 그때 잠긴다).
+   *
+   * 2026-11-17: 듣는 자리를 `lockState` 로 옮겼다 — 거기서 **잠금 명령만** 창끼리 돌고,
+   * 푸는 것은 창마다 자기 자물쇠를 뗀다. 그래서 여기 들어오는 소식은 **잠김뿐**이다.
    */
   useEffect(() => {
-    const onStorage = (e: StorageEvent) => {
-      if (e.key !== LOCKED_KEY) return;
-      const next = e.newValue === "1";
-      setLocked(next);
-      setLockPaused(next); // 이 창의 실시간도 같이 (storage 는 다른 창에서만 오므로 여기서 직접)
-    };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    return subscribeLock((v) => {
+      setLocked(v);
+      setLockPaused(v);
+    });
   }, []);
 
   return { config, save, locked, lock, unlock };

@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { lockedForThisWindow, subscribeLock } from "./lockState";
 
 /**
  * **잠그면 실시간을 멈춘다** (2026-09-09).
@@ -21,19 +22,23 @@ import { useSyncExternalStore } from "react";
  * (`TabActiveContext` 와 같은 손). 잠금은 `localStorage` 에 적히므로 **다른 창까지**
  * `storage` 이벤트로 함께 멈춘다 — 미니창을 잠그면 본창의 실시간도 선다. 회사에서는
  * 그게 맞다(한 자리를 뜨는 것이다).
+ *
+ * ## 푸는 것은 창마다 (2026-11-17)
+ *
+ * 잠금 명령은 여전히 모든 창에 가지만 **푸는 건 그 창만**이다(`lockState.ts`). 그래서
+ * 여기 멈춤도 창마다다 — 푼 창은 실시간이 다시 붙고, 잠긴 채인 곁창은 계속 조용하다.
+ * 자리에 앉아 한 창을 풀었다면 그 창의 트래픽은 나가도 되는 것이 맞다.
+ *
+ * 「지금 이 창이 잠겼나」 판정은 **`lockState` 한 곳**에서 한다 — 여기서 표식을 다시
+ * 읽으면 판정이 두 벌이 되고, 창별 자물쇠를 못 보는 쪽이 창 전체를 멈춘다.
  */
-
-const KEY = "vntg.lock.locked";
 
 let locked = read();
 const listeners = new Set<() => void>();
 
 function read(): boolean {
-  try {
-    return localStorage.getItem(KEY) === "1";
-  } catch {
-    return false;
-  }
+  /* 화면이 그려지기 전에도 답해야 한다 — 잠긴 채 새로고침하면 첫 fetch 부터 막아야 하니까 */
+  return lockedForThisWindow();
 }
 
 function emit(): void {
@@ -47,18 +52,16 @@ export function setLockPaused(next: boolean): void {
   emit();
 }
 
-/* 다른 창이 잠그면(=`storage` 이벤트) 이 창도 따라 멈춘다 */
-if (typeof window !== "undefined") {
-  window.addEventListener("storage", (e) => {
-    if (e.key === KEY) {
-      const next = read();
-      if (next !== locked) {
-        locked = next;
-        emit();
-      }
-    }
-  });
-}
+/*
+ * 다른 창이 잠그면 이 창도 따라 멈춘다 — `storage` 를 여기서 또 듣지 않는다.
+ * 듣는 자리는 `lockState` 한 곳이고(창별 자물쇠까지 거기서 챈다) 여기는 그 결론만 받는다.
+ */
+subscribeLock((v) => {
+  if (v !== locked) {
+    locked = v;
+    emit();
+  }
+});
 
 /** 지금 잠겨 있나 — 잠겨 있으면 실시간을 놓는다 */
 export function useLockPaused(): boolean {

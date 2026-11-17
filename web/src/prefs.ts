@@ -109,6 +109,13 @@ const LOCAL_ONLY = [
 function isGlobal(key: string): boolean {
   // vntg.pushApplied.* 는 「이 기기가 어느 배포까지 받았나」 도장이라 기기별이어야 한다
   if (key.startsWith("vntg.pushApplied.")) return false;
+  /*
+   * vntg.lock.held.<창id> 는 **그 창의 자물쇠**다 (2026-11-17, `lockState.ts`).
+   * 올라가면 안 된다 — 다른 기기에 남의 창 자물쇠가 생기면 「아직 잠긴 창이 있다」로
+   * 읽혀서 잠금 명령이 영영 안 치워진다(그 뒤로 새로 띄우는 창이 다 잠긴 채 뜬다).
+   * 접두사라 아래 `LOCAL_ONLY` 목록(정확히 일치)으로는 못 걸린다.
+   */
+  if (key.startsWith("vntg.lock.held.")) return false;
   return key.startsWith("vntg.") && !LOCAL_ONLY.includes(key);
 }
 
