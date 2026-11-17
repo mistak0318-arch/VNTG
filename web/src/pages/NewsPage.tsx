@@ -6,6 +6,7 @@ import { MainNewsPanel } from "../components/MainNewsPanel";
 import { MineNewsPanel } from "../components/MineNewsPanel";
 import { DisclosureList, NewsList } from "../components/NewsDisclosurePanel";
 import { NaverFinanceFrame } from "../components/NaverFinanceFrame";
+import { TabScroller } from "../components/TabScroller";
 import { SectorNews } from "../components/SectorNews";
 import { KeywordFlowPanel } from "../components/KeywordFlowPanel";
 import { useDragOrder } from "../useDragOrder";
@@ -219,7 +220,19 @@ export function NewsPage({ onSelectStock }: { onSelectStock: (code: string, name
         </>
       ) : (
         <>
-          <nav className="detail-tabs">
+          {/*
+            **탭 줄을 넘길 수 있게** (2026-11-17 — 벤티지: "뉴스의 서브탭들 드래그가 안되네
+            옆에 긴것들이 짤려. 스크롤바를 넣고 휠로도 좌우 갈수 있게").
+
+            탭 줄은 `overflow-x: auto` 였지만 스크롤바를 숨겨 놔서 PC 에서는 뒤쪽 탭에 갈
+            길이 없었다. 게다가 이 줄은 **끌면 순서가 바뀌는** 줄이라(`tabDrag`) 끌어서
+            넘기는 길도 막혀 있었다 — 그래서 벤티지에게는 「드래그가 안 되는」 것으로 보였다.
+
+            `TabScroller` 가 이미 그 일을 한다(휠을 가로로 · 좌우 버튼 · 고른 탭 끌어오기).
+            종목 상세·테마DB·앱 탭이 쓰는 그것이다 — 여기만 안 쓰고 있었다.
+            스크롤바는 `.detail-tabs.nt-bar` 로 이 줄에만 가늘게 띄운다.
+          */}
+          <TabScroller className="detail-tabs nt-bar" activeKey={srcTab}>
             {tabOrder.map((k, i) => (
               <span key={k} className="nt-tab">
                 {tabEdit && (
@@ -259,7 +272,7 @@ export function NewsPage({ onSelectStock }: { onSelectStock: (code: string, name
             >
               {tabEdit ? "✓ 완료" : "↔ 순서"}
             </button>
-          </nav>
+          </TabScroller>
 
           {srcTab === "flow" ? (
             /*

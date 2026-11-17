@@ -1456,6 +1456,39 @@ body {
   display: none;
 }
 
+/*
+ * **뉴스 탭 줄만 스크롤바를 보인다** (2026-11-17 — 벤티지: "스크롤바를 넣고 휠로도
+ * 좌우 갈수 있게 설정 좀 해줘").
+ *
+ * 위에서 `.detail-tabs` 는 스크롤바를 숨긴다 — 폰에서는 손가락으로 밀면 되니까 맞다.
+ * 그런데 뉴스 탭은 **열한 개에 이름이 길어** 뒤쪽이 통째로 잘리고, 이 줄은 끌면 순서가
+ * 바뀌는 줄이라 끌어서 넘길 수도 없다. 그래서 **여기만** 가늘게 띄운다 — 넘길 것이
+ * 있다는 것 자체가 보여야 한다. 손가락으로 미는 폰에서는 숨겨 둔다(자리만 먹는다).
+ *
+ * ⚠️ `.detail-tabs` 뒤에 와야 이긴다(같은 특이도면 나중 규칙). 위로 올리면 조용히 묻힌다.
+ */
+@media (hover: hover) and (min-width: 721px) {
+  .detail-tabs.nt-bar {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+    padding-bottom: 2px;
+  }
+  .detail-tabs.nt-bar::-webkit-scrollbar {
+    display: block;
+    height: 6px;
+  }
+  .detail-tabs.nt-bar::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+  }
+  .detail-tabs.nt-bar::-webkit-scrollbar-thumb:hover {
+    background: var(--muted);
+  }
+  .detail-tabs.nt-bar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
 .detail-tab {
   flex: none;
   background: none;
