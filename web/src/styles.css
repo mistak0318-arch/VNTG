@@ -20325,32 +20325,29 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .pgt-k { font-size: 0.66rem; color: var(--muted); white-space: nowrap; }
 .pgt-v { font-size: 0.86rem; font-weight: 600; }
 /*
- * 시장 이름 줄이 **단추**다 (2026-11-17) — 누르면 일별 추이가 펼쳐진다.
- * 단추처럼 안 보이게 두되(카드 안의 제목이다) 손은 올라가는 손가락으로 바꾼다.
+ * **추이 그림** (2026-11-17, 두 번째 판) — 위는 20일 누적 영역, 아래는 일별 띠.
+ *
+ * 첫 판은 한 그림에 셋(일별·차익·누적)을 얹어 폰에서 **셋 다 못 읽었다.** 자를 둘로
+ * 나누고 차익은 뺐다 — 자세한 까닭은 `ProgramTrendPanel.tsx` 머리말.
+ *
+ * ⚠️ `preserveAspectRatio="none"` 이라 **세로가 폭에 안 끌려간다.** 폰에서 그림이
+ * 납작해지던 자리다(viewBox 320×132 를 폭에 맞춰 늘리면 세로가 반이 된다).
+ * 그래서 높이를 CSS 로 못 박는다.
  */
-button.pgt-head {
-  background: none;
-  border: none;
-  padding: 0;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-  text-align: left;
-}
-button.pgt-head:hover b { color: var(--blue); }
+.pgt-chart { margin-top: 6px; max-width: 36rem; }
+.pgt-chart svg { width: 100%; height: 132px; display: block; }
 /* 비차익 — 실제 자금의 방향. 플러스는 붉게(국내 관행) */
-.pgt-bar.up { fill: var(--red); opacity: 0.8; }
-.pgt-bar.down { fill: var(--blue); opacity: 0.8; }
+.pgt-bar.up { fill: var(--red); opacity: 0.85; }
+.pgt-bar.down { fill: var(--blue); opacity: 0.85; }
 .pgt-bar.today { opacity: 1; }
-/* 차익은 참고라 뒤에 흐리게 — 비차익을 가리면 안 된다 */
-.pgt-arb { fill: var(--muted); opacity: 0.25; }
-/* 누적선 — 「며칠째 어느 쪽인가」 */
-.pgt-cum { fill: none; stroke: var(--text); stroke-width: 1.4; opacity: 0.75; }
-/*
- * 차트도 **숫자 칸과 같은 폭**으로 묶는다 (실측 980px). 안 묶으면 차트만 카드 폭
- * 전체로 늘어나 숫자 네 칸과 오른쪽 끝이 어긋난다 — 한 카드인데 두 덩어리로 보인다.
- */
-.pgt .to-chart { max-width: 36rem; }
+/* 누적 — 0 아래면 그동안 판 쪽. 채워야 「어느 쪽이 쌓였나」가 한눈에 온다 */
+.pgt-area { stroke: none; opacity: 0.18; }
+.pgt-area.up { fill: var(--red); }
+.pgt-area.down { fill: var(--blue); }
+.pgt-cum { fill: none; stroke-width: 1.6; }
+.pgt-cum.up { stroke: var(--red); }
+.pgt-cum.down { stroke: var(--blue); }
+.pgt-end { font-size: 9px; font-weight: 600; fill: var(--text); }
 @media (max-width: 720px) {
   .pgt-nums { grid-template-columns: repeat(2, 1fr); }
 }

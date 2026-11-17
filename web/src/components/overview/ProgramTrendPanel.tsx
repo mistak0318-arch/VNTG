@@ -68,110 +68,130 @@ interface Side {
   /** 비차익 5일 누적 — 하루치는 우연이다 */
   nonArb5: number;
   days5: number;
-  /** 일별 추이 — **오래된 것이 앞**. 펼쳤을 때 그린다 */
+  /** 일별 추이 — **오래된 것이 앞**. 접지 않고 바로 그린다 */
   series: { day: string; nonArb: number; arb: number }[];
 }
 
 /**
- * **일별 추이** (2026-11-17 — 벤티지: "동향 볼 수 있게 그래프로도 표현해주면 안되나?
- * 시황카드들처럼 말야 클릭하면 차트도 나오고 동향도 나오고 일별로").
+ * **일별 추이** (2026-11-17 — 벤티지: "동향 볼 수 있게 그래프로도 표현해주면 안되나?").
  *
- * 거래대금 카드(`TurnoverPanel`)와 **같은 꼴**로 그린다 — 줄을 누르면 아래로 펼쳐지는
- * 막대 그래프. 같은 화면의 카드가 저마다 다른 모양이면 읽는 법을 매번 새로 배워야 한다.
+ * ## 처음 그린 것은 못 읽는 그림이었다
  *
- * ## 무엇을 그리나
+ * 처음엔 거래대금 카드를 본떠 **한 그림에 셋**을 넣었다 — 일별 비차익 막대 · 흐린 차익
+ * 막대 · 누적선. 폰에서 보니(벤티지 캡처) **셋 다 못 읽었다.**
  *
- *   막대   **비차익** 일별 순매수. 0 선 위아래로 갈린다 — 실제 자금의 방향
- *   선     **비차익 누적**. 하루치는 우연이라 「며칠째 어느 쪽인가」가 진짜 신호다
- *   회색   차익 — 참고로만 흐리게. 선물 가격차 정리라 방향성 베팅이 아니다
+ *   · 눈금을 **큰 날 하나가 정했다.** ±27,011억이 되니 나머지 열아홉 날이 다 뭉갰다
+ *   · 같은 자에 **일별과 누적**을 같이 얹었다. 자릿수가 다른 둘을 한 자로 재면 하나는
+ *     납작해진다 — 여기서는 누적선이 거의 수평선이 됐다
+ *   · 차익 막대가 뒤에 깔려 비차익을 가렸다. 그 값은 **이미 위 숫자 칸에 있다**
  *
- * 누적선은 **창 안에서만** 더한다(40일). 전체 누적이 아니라 「요즘 흐름」이다.
+ * ## 다시 — 자를 둘로 나누고, 한 그림에 하나씩
  *
- * 조회는 0회다 — 일자별 응답이 **이미 시계열 전체**를 준다. 위에서 최신 한 줄만 쓰고
- * 나머지를 버리고 있었을 뿐이다.
- */
-function TrendChart({ rows }: { rows: { day: string; nonArb: number; arb: number }[] }) {
-  const win = rows.slice(-40);
+ *   위(영역)   비차익 **20일 누적**. 0 선을 반드시 품는다 — 「0 위냐 아래냐」가 뜻이다.
+ *              0 아래면 그동안 판 쪽이고, 선이 꺾여 오르면 사기 시작한 것이다
+ *   아래(띠)   **일별** 비차익. 자가 따로라 큰 날이 있어도 위 흐름이 안 뭉개진다
+ *
+ * 차익은 그림에서 뺐다 — 참고 값은 위 숫자 칸으로 충분하고, 작은 화면에서 선 하나를
+ * 더 그리는 값은 늘 **읽기 어려워지는 쪽**이었다.
+ *
+ * 눈금도 **끝 값 하나와 0 만** 적는다. 중간 눈금은 폰에서 읽히지도 않으면서 자리만 먹는다.
+ *
+ * 20일인 까닭은 폰 폭에서 **막대가 손가락만 해지는 수**가 그쯤이기 때문이다(40일은 실
+ * 선처럼 보였다).
+ *
+ * **펼치지 않고 바로 보인다** (벤티지: "그냥 클릭말고 바로 보여주고"). 조회는 0회라
+ * 접어 둘 이유가 애초에 없었다 — 일자별 응답이 이미 시계열 전체를 준다.
+ */function TrendChart({ rows }: { rows: { day: string; nonArb: number; arb: number }[] }) {
+  const win = rows.slice(-20);
   if (win.length < 2) return <div className="empty">추이를 그릴 만큼 쌓이지 않았습니다.</div>;
 
-  const W = 640;
-  const H = 130;
-  const PAD = { l: 4, r: 56, t: 10, b: 16 };
   /** 억 단위로 — 백만원을 그대로 그리면 눈금이 못 읽는 수가 된다 */
   const e = (v: number) => v / 100;
-  const vals = win.flatMap((r) => [e(r.nonArb), e(r.arb)]);
-  const span = Math.max(1, ...vals.map(Math.abs));
-  const bw = (W - PAD.l - PAD.r) / win.length;
-  /** 0 선을 가운데 두고 위아래로 */
-  const mid = PAD.t + (H - PAD.t - PAD.b) / 2;
-  const yOf = (v: number) => mid - ((H - PAD.t - PAD.b) / 2) * (v / span);
-
-  /* 누적 — 창 안에서만. 오른쪽 축은 따로 잰다(일별과 자릿수가 다르다) */
+  /* 창 안에서만 더한다 — 전체 누적이 아니라 「요즘 흐름」이다 */
   let acc = 0;
   const cum = win.map((r) => {
     acc += e(r.nonArb);
     return acc;
   });
-  const cSpan = Math.max(1, ...cum.map(Math.abs));
-  const cY = (v: number) => mid - ((H - PAD.t - PAD.b) / 2) * (v / cSpan);
-  const path = cum.map((v, i) => `${i === 0 ? "M" : "L"}${PAD.l + i * bw + bw / 2},${cY(v)}`).join(" ");
+
+  const W = 320;
+  const AH = 86; // 누적 영역
+  const BH = 26; // 일별 띠
+  const GAP = 8;
+  const H = AH + GAP + BH + 12;
+  const PAD = { l: 2, r: 44 };
+  const iw = W - PAD.l - PAD.r;
+  const bw = iw / win.length;
+
+  /* ── 누적 — 0 을 반드시 품는다. 안 그러면 「0 위냐 아래냐」가 안 보인다 ── */
+  const cHi = Math.max(0, ...cum);
+  const cLo = Math.min(0, ...cum);
+  const cSpan = Math.max(1, cHi - cLo);
+  const cY = (v: number) => 2 + (AH - 4) * (1 - (v - cLo) / cSpan);
+  const zero = cY(0);
+  const pts = cum.map((v, i) => `${PAD.l + i * bw + bw / 2},${cY(v)}`);
+  const line = `M${pts.join(" L")}`;
+  const area = `M${PAD.l + bw / 2},${zero} L${pts.join(" L")} L${PAD.l + (win.length - 1) * bw + bw / 2},${zero} Z`;
+  const last = cum[cum.length - 1];
+
+  /* ── 일별 띠 — 누적과 **자를 따로 쓴다.** 큰 날 하나가 눈금을 정해도 누적은 안 뭉개진다 ── */
+  const dTop = AH + GAP;
+  const dSpan = Math.max(1, ...win.map((r) => Math.abs(e(r.nonArb))));
+  const dMid = dTop + BH / 2;
+  const dY = (v: number) => dMid - (BH / 2 - 1) * (v / dSpan);
+
   const n0 = (v: number) => `${v > 0 ? "+" : ""}${Math.round(v).toLocaleString("ko-KR")}`;
+  /** 오른쪽 글자가 위아래로 안 잘리게 — 글자 기준선은 글자 높이만큼 안쪽에 있어야 한다 */
+  const clampY = (y: number) => Math.min(AH - 2, Math.max(9, y + 3));
 
   return (
-    <div className="to-chart">
-      <svg viewBox={`0 0 ${W} ${H}`} role="img">
-        {/* 0 선 — 이 그래프에서 제일 중요한 선이다. 위아래가 곧 뜻이다 */}
-        <line className="tc-grid" x1={PAD.l} x2={W - PAD.r} y1={mid} y2={mid} />
-        <text className="tc-tick" x={W - PAD.r + 4} y={yOf(span) + 3}>
-          {n0(span)}억
+    <div className="pgt-chart">
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" preserveAspectRatio="none">
+        {/* 누적 0 선 — 이 그림에서 제일 중요한 선이다. 위아래가 곧 뜻이다 */}
+        <line className="tc-grid" x1={PAD.l} x2={W - PAD.r} y1={zero} y2={zero} />
+        <path className={`pgt-area ${last >= 0 ? "up" : "down"}`} d={area} />
+        <path className={`pgt-cum ${last >= 0 ? "up" : "down"}`} d={line} />
+        {/*
+          끝 값과 0 만 적는다 — 중간 눈금은 작은 화면에서 읽히지도 않으면서 자리만 먹는다.
+          **글자를 그림 안쪽으로 물린다**: 누적이 내내 0 아래면 0 선이 맨 위에 붙어 글자가
+          위로 잘렸다(폰 실측). 선이 아니라 글자만 물리므로 가리키는 자리는 안 틀어진다.
+        */}
+        <text className="pgt-end" x={W - PAD.r + 4} y={clampY(cY(last))}>
+          {n0(last)}억
         </text>
-        <text className="tc-tick" x={W - PAD.r + 4} y={mid + 3}>
+        <text className="tc-tick" x={W - PAD.r + 4} y={clampY(zero)}>
           0
         </text>
-        <text className="tc-tick" x={W - PAD.r + 4} y={yOf(-span) + 3}>
-          {n0(-span)}억
-        </text>
+
+        {/* 일별 띠 */}
+        <line className="tc-grid" x1={PAD.l} x2={W - PAD.r} y1={dMid} y2={dMid} />
         {win.map((r, i) => {
           const v = e(r.nonArb);
-          const a = e(r.arb);
-          const x = PAD.l + i * bw;
           return (
-            <g key={r.day}>
-              {/* 차익은 뒤에 흐리게 — 참고일 뿐이라 비차익을 가리면 안 된다 */}
-              <rect
-                className="pgt-arb"
-                x={x + bw * 0.1}
-                y={Math.min(mid, yOf(a))}
-                width={bw * 0.8}
-                height={Math.max(0.5, Math.abs(mid - yOf(a)))}
-              />
-              <rect
-                className={`pgt-bar ${v >= 0 ? "up" : "down"}${i === win.length - 1 ? " today" : ""}`}
-                x={x + bw * 0.25}
-                y={Math.min(mid, yOf(v))}
-                width={bw * 0.5}
-                height={Math.max(1, Math.abs(mid - yOf(v)))}
-              >
-                <title>
-                  {r.day.slice(4, 6)}/{r.day.slice(6, 8)} · 비차익 {n0(v)}억 · 차익 {n0(a)}억
-                </title>
-              </rect>
-            </g>
+            <rect
+              key={r.day}
+              className={`pgt-bar ${v >= 0 ? "up" : "down"}${i === win.length - 1 ? " today" : ""}`}
+              x={PAD.l + i * bw + bw * 0.22}
+              y={Math.min(dMid, dY(v))}
+              width={bw * 0.56}
+              height={Math.max(1, Math.abs(dMid - dY(v)))}
+            >
+              <title>
+                {r.day.slice(4, 6)}/{r.day.slice(6, 8)} · 비차익 {n0(v)}억 · 차익 {n0(e(r.arb))}억
+              </title>
+            </rect>
           );
         })}
-        <path className="pgt-cum" d={path} />
-        {/* 달 경계 — 거래대금 차트와 같은 눈금 */}
-        {win.map((r, i) =>
-          i > 0 && r.day.slice(4, 6) !== win[i - 1].day.slice(4, 6) ? (
-            <text key={`m${r.day}`} className="tc-tick" x={PAD.l + i * bw} y={H - 4}>
-              {Number(r.day.slice(4, 6))}월
-            </text>
-          ) : null,
-        )}
+        <text className="tc-tick" x={PAD.l} y={H - 2}>
+          {win[0].day.slice(4, 6)}/{win[0].day.slice(6, 8)}
+        </text>
+        <text className="tc-tick" x={W - PAD.r + 4} y={H - 2}>
+          오늘
+        </text>
       </svg>
       <div className="pulse-foot pt-n">
-        막대 = <b>비차익</b> 일별(0 선 위아래) · 흐린 막대 = 차익 · 선 = 비차익 <b>{win.length}일 누적</b>.
-        누적이 꾸준히 오르면 실제 자금이 들어오는 중입니다. 막대에 손을 올리면 그날 값이 나옵니다.
+        위 = 비차익 <b>{win.length}일 누적</b>(0 아래면 그동안 판 쪽) · 아래 = 일별.
+        <b>자를 따로 씁니다</b> — 큰 날 하나가 눈금을 정해도 누적 흐름이 안 뭉개지게.
       </div>
     </div>
   );
@@ -189,8 +209,6 @@ export function ProgramTrendPanel() {
    * 없음」은 다른 말이고, 화면이 그 둘을 가려야 한다.
    */
   const [tried, setTried] = useState(false);
-  /** 펼친 시장 — 한 번에 하나만. 둘 다 펼치면 카드가 요약이 아니게 된다 */
-  const [open, setOpen] = useState<Market | null>(null);
   /* 숨은 탭에서는 안 돈다 — 카드마다 지켜야 하는 규칙이다(2026-09-23 전수검토) */
   const tabActive = useTabActive();
 
@@ -267,17 +285,10 @@ export function ProgramTrendPanel() {
     <div className="pgt">
       {sides.map((s) => (
         <div className="pgt-row" key={s.market}>
-          {/* 누르면 추이가 펼쳐진다 — 거래대금 카드와 같은 조작 (2026-11-17) */}
-          <button
-            type="button"
-            className="pgt-head"
-            onClick={() => setOpen(open === s.market ? null : s.market)}
-            title="누르면 일별 추이가 펼쳐집니다"
-          >
-            <i className="sf-caret">{open === s.market ? "▾" : "▸"}</i>
+          <div className="pgt-head">
             <b>{s.label}</b>
             <span className="pt-n">{s.at}</span>
-          </button>
+          </div>
           <div className="pgt-nums">
             <div className="pgt-cell" title="선물과 무관하게 주식 바스켓 자체를 사고판 것 — 실제 자금의 방향">
               <span className="pgt-k">비차익</span>
@@ -296,7 +307,7 @@ export function ProgramTrendPanel() {
               <span className={`pgt-v num ${cls(s.nonArb5)}`}>{eok(s.nonArb5)}</span>
             </div>
           </div>
-          {open === s.market && <TrendChart rows={s.series} />}
+          <TrendChart rows={s.series} />
         </div>
       ))}
       <div className="pulse-foot pt-n">
