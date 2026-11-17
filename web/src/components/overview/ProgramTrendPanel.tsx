@@ -68,6 +68,113 @@ interface Side {
   /** 비차익 5일 누적 — 하루치는 우연이다 */
   nonArb5: number;
   days5: number;
+  /** 일별 추이 — **오래된 것이 앞**. 펼쳤을 때 그린다 */
+  series: { day: string; nonArb: number; arb: number }[];
+}
+
+/**
+ * **일별 추이** (2026-11-17 — 벤티지: "동향 볼 수 있게 그래프로도 표현해주면 안되나?
+ * 시황카드들처럼 말야 클릭하면 차트도 나오고 동향도 나오고 일별로").
+ *
+ * 거래대금 카드(`TurnoverPanel`)와 **같은 꼴**로 그린다 — 줄을 누르면 아래로 펼쳐지는
+ * 막대 그래프. 같은 화면의 카드가 저마다 다른 모양이면 읽는 법을 매번 새로 배워야 한다.
+ *
+ * ## 무엇을 그리나
+ *
+ *   막대   **비차익** 일별 순매수. 0 선 위아래로 갈린다 — 실제 자금의 방향
+ *   선     **비차익 누적**. 하루치는 우연이라 「며칠째 어느 쪽인가」가 진짜 신호다
+ *   회색   차익 — 참고로만 흐리게. 선물 가격차 정리라 방향성 베팅이 아니다
+ *
+ * 누적선은 **창 안에서만** 더한다(40일). 전체 누적이 아니라 「요즘 흐름」이다.
+ *
+ * 조회는 0회다 — 일자별 응답이 **이미 시계열 전체**를 준다. 위에서 최신 한 줄만 쓰고
+ * 나머지를 버리고 있었을 뿐이다.
+ */
+function TrendChart({ rows }: { rows: { day: string; nonArb: number; arb: number }[] }) {
+  const win = rows.slice(-40);
+  if (win.length < 2) return <div className="empty">추이를 그릴 만큼 쌓이지 않았습니다.</div>;
+
+  const W = 640;
+  const H = 130;
+  const PAD = { l: 4, r: 56, t: 10, b: 16 };
+  /** 억 단위로 — 백만원을 그대로 그리면 눈금이 못 읽는 수가 된다 */
+  const e = (v: number) => v / 100;
+  const vals = win.flatMap((r) => [e(r.nonArb), e(r.arb)]);
+  const span = Math.max(1, ...vals.map(Math.abs));
+  const bw = (W - PAD.l - PAD.r) / win.length;
+  /** 0 선을 가운데 두고 위아래로 */
+  const mid = PAD.t + (H - PAD.t - PAD.b) / 2;
+  const yOf = (v: number) => mid - ((H - PAD.t - PAD.b) / 2) * (v / span);
+
+  /* 누적 — 창 안에서만. 오른쪽 축은 따로 잰다(일별과 자릿수가 다르다) */
+  let acc = 0;
+  const cum = win.map((r) => {
+    acc += e(r.nonArb);
+    return acc;
+  });
+  const cSpan = Math.max(1, ...cum.map(Math.abs));
+  const cY = (v: number) => mid - ((H - PAD.t - PAD.b) / 2) * (v / cSpan);
+  const path = cum.map((v, i) => `${i === 0 ? "M" : "L"}${PAD.l + i * bw + bw / 2},${cY(v)}`).join(" ");
+  const n0 = (v: number) => `${v > 0 ? "+" : ""}${Math.round(v).toLocaleString("ko-KR")}`;
+
+  return (
+    <div className="to-chart">
+      <svg viewBox={`0 0 ${W} ${H}`} role="img">
+        {/* 0 선 — 이 그래프에서 제일 중요한 선이다. 위아래가 곧 뜻이다 */}
+        <line className="tc-grid" x1={PAD.l} x2={W - PAD.r} y1={mid} y2={mid} />
+        <text className="tc-tick" x={W - PAD.r + 4} y={yOf(span) + 3}>
+          {n0(span)}억
+        </text>
+        <text className="tc-tick" x={W - PAD.r + 4} y={mid + 3}>
+          0
+        </text>
+        <text className="tc-tick" x={W - PAD.r + 4} y={yOf(-span) + 3}>
+          {n0(-span)}억
+        </text>
+        {win.map((r, i) => {
+          const v = e(r.nonArb);
+          const a = e(r.arb);
+          const x = PAD.l + i * bw;
+          return (
+            <g key={r.day}>
+              {/* 차익은 뒤에 흐리게 — 참고일 뿐이라 비차익을 가리면 안 된다 */}
+              <rect
+                className="pgt-arb"
+                x={x + bw * 0.1}
+                y={Math.min(mid, yOf(a))}
+                width={bw * 0.8}
+                height={Math.max(0.5, Math.abs(mid - yOf(a)))}
+              />
+              <rect
+                className={`pgt-bar ${v >= 0 ? "up" : "down"}${i === win.length - 1 ? " today" : ""}`}
+                x={x + bw * 0.25}
+                y={Math.min(mid, yOf(v))}
+                width={bw * 0.5}
+                height={Math.max(1, Math.abs(mid - yOf(v)))}
+              >
+                <title>
+                  {r.day.slice(4, 6)}/{r.day.slice(6, 8)} · 비차익 {n0(v)}억 · 차익 {n0(a)}억
+                </title>
+              </rect>
+            </g>
+          );
+        })}
+        <path className="pgt-cum" d={path} />
+        {/* 달 경계 — 거래대금 차트와 같은 눈금 */}
+        {win.map((r, i) =>
+          i > 0 && r.day.slice(4, 6) !== win[i - 1].day.slice(4, 6) ? (
+            <text key={`m${r.day}`} className="tc-tick" x={PAD.l + i * bw} y={H - 4}>
+              {Number(r.day.slice(4, 6))}월
+            </text>
+          ) : null,
+        )}
+      </svg>
+      <div className="pulse-foot pt-n">
+        막대 = <b>비차익</b> 일별(0 선 위아래) · 흐린 막대 = 차익 · 선 = 비차익 <b>{win.length}일 누적</b>.
+        누적이 꾸준히 오르면 실제 자금이 들어오는 중입니다. 막대에 손을 올리면 그날 값이 나옵니다.
+      </div>
+    </div>
+  );
 }
 
 export function ProgramTrendPanel() {
@@ -82,6 +189,8 @@ export function ProgramTrendPanel() {
    * 없음」은 다른 말이고, 화면이 그 둘을 가려야 한다.
    */
   const [tried, setTried] = useState(false);
+  /** 펼친 시장 — 한 번에 하나만. 둘 다 펼치면 카드가 요약이 아니게 된다 */
+  const [open, setOpen] = useState<Market | null>(null);
   /* 숨은 탭에서는 안 돈다 — 카드마다 지켜야 하는 규칙이다(2026-09-23 전수검토) */
   const tabActive = useTabActive();
 
@@ -110,6 +219,15 @@ export function ProgramTrendPanel() {
               all: net(r0.allNet, r0.allBuy, r0.allSell),
               nonArb5: five.reduce((a, r) => a + net(r.nonArbNet, r.nonArbBuy, r.nonArbSell), 0),
               days5: five.length,
+              /* 일자별은 최신이 앞 — 그래프는 왼쪽이 과거라 뒤집는다 */
+              series: [...rows]
+                .slice(0, 60)
+                .reverse()
+                .map((r: ProgramRow) => ({
+                  day: r.time.length >= 8 ? r.time.slice(0, 8) : r.time,
+                  nonArb: net(r.nonArbNet, r.nonArbBuy, r.nonArbSell),
+                  arb: net(r.arbNet, r.arbBuy, r.arbSell),
+                })),
             };
             return side;
           }),
@@ -149,10 +267,17 @@ export function ProgramTrendPanel() {
     <div className="pgt">
       {sides.map((s) => (
         <div className="pgt-row" key={s.market}>
-          <div className="pgt-head">
+          {/* 누르면 추이가 펼쳐진다 — 거래대금 카드와 같은 조작 (2026-11-17) */}
+          <button
+            type="button"
+            className="pgt-head"
+            onClick={() => setOpen(open === s.market ? null : s.market)}
+            title="누르면 일별 추이가 펼쳐집니다"
+          >
+            <i className="sf-caret">{open === s.market ? "▾" : "▸"}</i>
             <b>{s.label}</b>
             <span className="pt-n">{s.at}</span>
-          </div>
+          </button>
           <div className="pgt-nums">
             <div className="pgt-cell" title="선물과 무관하게 주식 바스켓 자체를 사고판 것 — 실제 자금의 방향">
               <span className="pgt-k">비차익</span>
@@ -171,6 +296,7 @@ export function ProgramTrendPanel() {
               <span className={`pgt-v num ${cls(s.nonArb5)}`}>{eok(s.nonArb5)}</span>
             </div>
           </div>
+          {open === s.market && <TrendChart rows={s.series} />}
         </div>
       ))}
       <div className="pulse-foot pt-n">

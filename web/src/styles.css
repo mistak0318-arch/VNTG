@@ -20324,6 +20324,33 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 }
 .pgt-k { font-size: 0.66rem; color: var(--muted); white-space: nowrap; }
 .pgt-v { font-size: 0.86rem; font-weight: 600; }
+/*
+ * 시장 이름 줄이 **단추**다 (2026-11-17) — 누르면 일별 추이가 펼쳐진다.
+ * 단추처럼 안 보이게 두되(카드 안의 제목이다) 손은 올라가는 손가락으로 바꾼다.
+ */
+button.pgt-head {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+button.pgt-head:hover b { color: var(--blue); }
+/* 비차익 — 실제 자금의 방향. 플러스는 붉게(국내 관행) */
+.pgt-bar.up { fill: var(--red); opacity: 0.8; }
+.pgt-bar.down { fill: var(--blue); opacity: 0.8; }
+.pgt-bar.today { opacity: 1; }
+/* 차익은 참고라 뒤에 흐리게 — 비차익을 가리면 안 된다 */
+.pgt-arb { fill: var(--muted); opacity: 0.25; }
+/* 누적선 — 「며칠째 어느 쪽인가」 */
+.pgt-cum { fill: none; stroke: var(--text); stroke-width: 1.4; opacity: 0.75; }
+/*
+ * 차트도 **숫자 칸과 같은 폭**으로 묶는다 (실측 980px). 안 묶으면 차트만 카드 폭
+ * 전체로 늘어나 숫자 네 칸과 오른쪽 끝이 어긋난다 — 한 카드인데 두 덩어리로 보인다.
+ */
+.pgt .to-chart { max-width: 36rem; }
 @media (max-width: 720px) {
   .pgt-nums { grid-template-columns: repeat(2, 1fr); }
 }
