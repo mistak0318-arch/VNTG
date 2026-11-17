@@ -22322,3 +22322,14 @@ tr.gv-strong td:first-child { color: var(--text); }
   word-break: keep-all;
 }
 .cond-group-note b { color: var(--text); font-variant-numeric: tabular-nums; }
+
+/*
+ * 꾸러미 시험 — 폰에서는 「왜」를 접는다 (2026-11-17 밤).
+ *
+ * 이 표의 요점은 **두 묶음의 d20 을 맞대는 것**인데, 「왜」(재료 넷)가 폭을 먹어
+ * 390px 에서 d5·d10·d20 이 전부 화면 밖으로 밀렸다. 가로로 밀어야 보이는 숫자는
+ * 맞댈 수 없는 숫자다 — 좁을 때는 근거보다 성적이 먼저다.
+ */
+@media (max-width: 720px) {
+  .data-table .sh-why { display: none; }
+}

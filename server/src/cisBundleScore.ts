@@ -141,6 +141,42 @@ export function pctRanks(rows: Sample[], key: keyof Sample, dir: 1 | -1): Map<Sa
  * 주려면 그걸 정할 표본이 또 필요한데 지금 표본이 한 계절뿐이기 때문이다 —
  * 한 계절에 맞춘 무게는 다음 계절에 틀린다. 같은 무게가 가장 정직하다.
  */
+/**
+ * **대조군 — 옛 방식 근사** (2026-11-17 밤).
+ *
+ * 꾸러미만 재면 숫자가 **좋은지 나쁜지 알 수 없다.** 처음 계획은 「꾸러미 vs 실계좌」였는데
+ * 실계좌는 거의 안 산다 — 11/17 항해일지는 스캔 55번이 **전부 시장문**에서 막혀 0건이고,
+ * 그 문이 열리기를 기다리는 할 일은 9/15 부터 열려 있다. 3주 뒤에 「꾸러미 5/일 vs
+ * 실계좌 0건」이 남으면 비교가 아니다. 그래서 **같은 날·같은 체·같은 자**로 잰 상대를
+ * 하나 더 적는다.
+ *
+ * 상대는 **20일 상승폭 상위**다. 실측에서 **-3.5 / 41% / 블록 0/4** 였던 그 집합이고,
+ * 항해일지가 여태 한 것(주도주 스캔 = 오늘 제일 뜨거운 것)의 근사다.
+ *
+ * ⚠️ 이 대조군은 **옛 방식보다 유리하다** — 체(`passesSieve`)를 먼저 지나므로 과열
+ * (`vGrow` 150%↑ · 20일선 +25%↑)이 빠진다. 옛 방식에는 그 체가 없었다. 꾸러미가
+ * 이겨도 **「체 덕인지 순위 덕인지」는 이걸로 안 갈린다** — 갈리는 것은 같은 체 위에서
+ * 「끝까지 오른 것」과 「적당히 오르는 것」 중 무엇을 골라야 하나다. 그게 이번 물음이다.
+ */
+export function rankMomentum(pool: Sample[]): BundlePick[] {
+  const out: BundlePick[] = [];
+  for (const s of pool) {
+    const r = s.rise20;
+    if (r === null || r === undefined || !Number.isFinite(r)) continue;
+    out.push({
+      code: s.code,
+      name: s.name,
+      score: Math.round(r * 10) / 10,
+      parts: [{ k: "20일 상승폭", v: Math.round(r * 10) / 10 }],
+      price: s.cur ?? 0,
+      volEok: Math.round(s.volEok ?? 0),
+      mktCap: s.mktCap === null ? null : Math.round(s.mktCap),
+    });
+  }
+  out.sort((a, b) => b.score - a.score);
+  return out;
+}
+
 export function rankBundle(pool: Sample[]): BundlePick[] {
   const rVol = pctRanks(pool, "volat20", -1);
   const out: BundlePick[] = [];

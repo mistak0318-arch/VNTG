@@ -19,6 +19,7 @@ import {
   type CisStats,
   type CisUsageRow,
   type CisShadowFile,
+  type CisShadowPick,
   type CisWatchEvent,
   type PublishJob,
 } from "../api";
@@ -1846,6 +1847,56 @@ function BucketTable({
  * ⚠️ 표본 130일이 **전부 약세장**이라 저변동이 한 계절에 맞춰진 것일 수 있다. 그래서
  * 사지 않고 **고른 것만** 쌓는다 — 벤티지가 고른 길이다.
  */
+/**
+ * 한 묶음의 다섯 — 꾸러미와 대조군이 **같은 표**를 쓴다. 모양이 갈리면 눈으로 맞댈 수 없다.
+ */
+function ShadowArm({ title, picks }: { title: string; picks: CisShadowPick[] }) {
+  return (
+    <>
+      <h3 className="section-heading" style={{ marginTop: "0.6rem" }}>
+        {title}
+      </h3>
+      <div className="data-table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>종목</th>
+              <th className="num">점수</th>
+              {/* 폰에서는 접는다 — 이 표의 요점은 두 묶음의 d20 을 맞대는 것이다 */}
+              <th className="sh-why">왜</th>
+              <th className="num">진입</th>
+              <th className="num">d5</th>
+              <th className="num">d10</th>
+              <th className="num">d20</th>
+              <th className="num">최고/최저</th>
+            </tr>
+          </thead>
+          <tbody>
+            {picks.map((p) => (
+              <tr key={p.code}>
+                <td>{p.name}</td>
+                <td className="num">{p.score}</td>
+                <td className="pt-n sh-why" style={{ fontSize: "0.72rem" }}>
+                  {p.parts.map((x) => `${x.k} ${Math.round(x.v)}`).join(" · ")}
+                </td>
+                <td className="num">{p.entry === null ? "—" : p.entry.toLocaleString("ko-KR")}</td>
+                {([p.d5, p.d10, p.d20] as (number | null)[]).map((v, i) => (
+                  <td key={i} className={`num ${v === null ? "" : v > 0 ? "positive" : v < 0 ? "negative" : ""}`}>
+                    {v === null ? "—" : `${v > 0 ? "+" : ""}${v.toFixed(1)}`}
+                  </td>
+                ))}
+                <td className="num pt-n" style={{ fontSize: "0.72rem" }}>
+                  {p.mfe20 === null ? "—" : `+${p.mfe20.toFixed(1)} / ${p.mae20?.toFixed(1) ?? "—"}`}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
 function ShadowTab() {
   const [file, setFile] = useState<CisShadowFile | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -1861,18 +1912,41 @@ function ShadowTab() {
   if (!file) return <div className="empty">불러오는 중…</div>;
 
   const days = [...file.days].sort((a, b) => b.date.localeCompare(a.date));
-  /* 성적이 찬 것만 모아 평균 — 아직 안 찬 칸을 0 으로 세면 「본전」으로 읽힌다 */
-  const done = days.flatMap((d) => d.picks).filter((p) => p.d20 !== null);
   const avg = (v: number[]) => (v.length ? v.reduce((a, b) => a + b, 0) / v.length : null);
-  const d20s = done.map((p) => p.d20!);
-  const stopHit = done.filter((p) => (p.mae20 ?? 0) <= -7).length;
+  /**
+   * 한 묶음의 성적 — **성적이 찬 것만** 모아서 센다. 아직 20일이 안 지난 칸을 0 으로
+   * 세면 「본전」으로 읽힌다.
+   */
+  const sum = (picks: CisShadowPick[]) => {
+    const done = picks.filter((p) => p.d20 !== null);
+    const d20s = done.map((p) => p.d20!);
+    return {
+      all: picks.length,
+      done: done.length,
+      avg: avg(d20s),
+      win: done.length ? (100 * done.filter((p) => p.d20! > 0).length) / done.length : null,
+      stop: done.length ? (100 * done.filter((p) => (p.mae20 ?? 0) <= -7).length) / done.length : null,
+    };
+  };
+  const A = sum(days.flatMap((d) => d.picks));
+  const B = sum(days.flatMap((d) => d.base ?? []));
+  const pc = (v: number | null, d = 2) => (v === null ? "—" : `${v > 0 ? "+" : ""}${v.toFixed(d)}%`);
+  const cls = (v: number | null) => (v === null ? "" : v > 0 ? "positive" : v < 0 ? "negative" : "");
+  const gap = A.avg !== null && B.avg !== null ? A.avg - B.avg : null;
 
   return (
     <>
       <div className="page-note">
-        새 꾸러미가 매일 고른 다섯입니다. <b>사지는 않습니다</b> — 고른 것만 적고 성적을 쌓습니다.
-        성적은 <b>고른 날 다음 날 시가</b>부터 셉니다(종가를 보고 그 종가에 살 수는 없으니까요).
-        실계좌 성적은 「통계」 탭에 있습니다.
+        매일 <b>두 묶음</b>을 고릅니다 — 새 <b>꾸러미</b>와, 같은 체 안에서 20일 상승폭이 가장 큰
+        <b> 대조군</b>(항해일지가 여태 한 방식의 근사). <b>사지는 않습니다</b> — 고른 것만 적고
+        성적을 쌓습니다. 성적은 <b>고른 날 다음 날 시가</b>부터 셉니다(종가를 보고 그 종가에
+        살 수는 없으니까요).
+      </div>
+      <div className="table-note">
+        왜 대조군이 필요한가: 처음엔 실계좌(「통계」 탭)와 맞대려 했지만 <b>실계좌는 거의
+        안 삽니다</b> — 11/17 에도 스캔 55번이 전부 시장 문에서 막혀 0건이었습니다. 한쪽만
+        재면 숫자가 좋은지 나쁜지 말할 수 없으므로, <b>같은 날·같은 체·같은 자</b>로 잰 상대를
+        나란히 둡니다.
       </div>
 
       {days.length === 0 ? (
@@ -1882,76 +1956,80 @@ function ShadowTab() {
       ) : (
         <>
           <section className="card">
-            <h2>여태</h2>
-            <div className="summary-grid">
-              <div className="summary-item">
-                <div className="label">고른 날</div>
-                <div className="value num">{days.length}일</div>
-              </div>
-              <div className="summary-item">
-                <div className="label">성적이 찬 종목</div>
-                <div className="value num">
-                  {done.length} / {days.flatMap((d) => d.picks).length}
-                </div>
-              </div>
-              <div className="summary-item">
-                <div className="label">20일 평균</div>
-                <div className={`value num ${(avg(d20s) ?? 0) > 0 ? "positive" : (avg(d20s) ?? 0) < 0 ? "negative" : ""}`}>
-                  {avg(d20s) === null ? "—" : `${avg(d20s)! > 0 ? "+" : ""}${avg(d20s)!.toFixed(2)}%`}
-                </div>
-              </div>
-              <div className="summary-item">
-                <div className="label">-7% 에 닿은 것</div>
-                <div className="value num">{done.length ? `${stopHit} (${Math.round((100 * stopHit) / done.length)}%)` : "—"}</div>
-              </div>
+            <h2>
+              여태 <span className="pt-n">고른 날 {days.length}일</span>
+            </h2>
+            <div className="data-table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>묶음</th>
+                    <th className="num">성적이 찬 것</th>
+                    <th className="num">20일 평균</th>
+                    <th className="num">승률</th>
+                    <th className="num">-7% 닿음</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    { k: "꾸러미 (적당한 쪽)", s: A },
+                    { k: "대조군 (20일 상승폭 상위)", s: B },
+                  ].map((r) => (
+                    <tr key={r.k}>
+                      <td>{r.k}</td>
+                      <td className="num">
+                        {r.s.all === 0 ? "—" : `${r.s.done} / ${r.s.all}`}
+                      </td>
+                      <td className={`num ${cls(r.s.avg)}`}>{pc(r.s.avg)}</td>
+                      <td className="num">{r.s.win === null ? "—" : `${Math.round(r.s.win)}%`}</td>
+                      <td className="num">{r.s.stop === null ? "—" : `${Math.round(r.s.stop)}%`}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
             <div className="table-note">
-              20일이 아직 안 지난 종목은 평균에서 빠집니다. 「-7% 에 닿은 것」은 보유 중 최저가가
-              진입가 대비 -7% 아래로 간 것 — 실계좌였다면 손절됐을 자리입니다.
+              {gap === null ? (
+                <>
+                  20일이 지난 종목이 아직 없어 <b>맞댈 수가 없습니다</b> — 첫 줄이 20거래일을
+                  넘겨야 두 묶음의 평균이 나옵니다(그 전에도 d5·d10 은 아래 표에서 보입니다).
+                </>
+              ) : (
+                <>
+                  꾸러미가 대조군보다{" "}
+                  <b className={cls(gap)}>
+                    {gap > 0 ? "+" : ""}
+                    {gap.toFixed(2)}%p
+                  </b>{" "}
+                  {gap > 0 ? "앞섭니다" : gap < 0 ? "뒤집니다" : "같습니다"}. 실측 예상은
+                  +7%p 쯤이었습니다(+3.6 vs -3.5). 표본이 적을 때 뒤집히는 건 흔하므로{" "}
+                  <b>2~3주는 봐야</b> 합니다.
+                </>
+              )}
+              {B.all === 0 && (
+                <>
+                  {" "}
+                  대조군은 11/17 밤에 붙였습니다 — 그 전에 적힌 날에는 꾸러미만 있습니다.
+                </>
+              )}
+            </div>
+            <div className="table-note">
+              20일이 아직 안 지난 종목은 평균에서 빠집니다. 「-7% 닿음」은 보유 중 최저가가
+              진입가 대비 -7% 아래로 간 비율 — 실계좌였다면 손절됐을 자리입니다.
             </div>
           </section>
 
           {days.map((d) => (
             <section className="card" key={d.date}>
               <h2>
-                {d.date.slice(4, 6)}/{d.date.slice(6, 8)} <span className="pt-n">체 통과 {d.pool}종목 중 다섯</span>
+                {d.date.slice(4, 6)}/{d.date.slice(6, 8)} <span className="pt-n">체 통과 {d.pool}종목 중 다섯 + 다섯</span>
               </h2>
-              <div className="data-table-wrap">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>종목</th>
-                      <th className="num">점수</th>
-                      <th>왜</th>
-                      <th className="num">진입</th>
-                      <th className="num">d5</th>
-                      <th className="num">d10</th>
-                      <th className="num">d20</th>
-                      <th className="num">최고/최저</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {d.picks.map((p) => (
-                      <tr key={p.code}>
-                        <td>{p.name}</td>
-                        <td className="num">{p.score}</td>
-                        <td className="pt-n" style={{ fontSize: "0.72rem" }}>
-                          {p.parts.map((x) => `${x.k} ${Math.round(x.v)}`).join(" · ")}
-                        </td>
-                        <td className="num">{p.entry === null ? "—" : p.entry.toLocaleString("ko-KR")}</td>
-                        {([p.d5, p.d10, p.d20] as (number | null)[]).map((v, i) => (
-                          <td key={i} className={`num ${v === null ? "" : v > 0 ? "positive" : v < 0 ? "negative" : ""}`}>
-                            {v === null ? "—" : `${v > 0 ? "+" : ""}${v.toFixed(1)}`}
-                          </td>
-                        ))}
-                        <td className="num pt-n" style={{ fontSize: "0.72rem" }}>
-                          {p.mfe20 === null ? "—" : `+${p.mfe20.toFixed(1)} / ${p.mae20?.toFixed(1) ?? "—"}`}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <ShadowArm title="꾸러미 — 적당한 쪽" picks={d.picks} />
+              {d.base && d.base.length > 0 ? (
+                <ShadowArm title="대조군 — 20일 상승폭 상위" picks={d.base} />
+              ) : (
+                <div className="table-note">대조군은 11/17 밤부터 적습니다 — 이 날은 꾸러미만 있습니다.</div>
+              )}
             </section>
           ))}
         </>

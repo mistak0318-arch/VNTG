@@ -2,7 +2,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadLiveFeats } from "./signalSamples.js";
-import { passesSieve, rankBundle, type BundlePick } from "./cisBundleScore.js";
+import { passesSieve, rankBundle, rankMomentum, type BundlePick } from "./cisBundleScore.js";
 import { loadCloses } from "./dailyCloses.js";
 
 /**
@@ -12,11 +12,18 @@ import { loadCloses } from "./dailyCloses.js";
  * 신호등 +0.6/53%) **표본 130일이 전부 약세장**이라, 저변동 비중이 한 계절에 맞춰진
  * 것일 수 있다. 그걸 확인할 길은 **앞으로 쌓는 것**뿐이다.
  *
- * ## 무엇을 남기나
+ * ## 무엇을 남기나 — **두 줄이다**
  *
- * 거래일마다 한 줄. 꾸러미가 그날 고른 상위 다섯과, 그때 시세. 사지는 않는다 —
- * **고른 것만** 적는다. 항해일지가 실제로 산 것은 이미 항해일지 원장에 있으므로,
- * 2~3주 뒤에 둘을 맞대면 「누가 더 잘 골랐나」가 나온다.
+ * 거래일마다 두 묶음. 같은 날·같은 체·같은 자로 잰다. 사지는 않는다 — **고른 것만** 적는다.
+ *
+ *   `picks`  꾸러미 상위 다섯 (섹터상대·20일추세·저변동·이격, 적당한 쪽)
+ *   `base`   **대조군** — 20일 상승폭 상위 다섯 (실측 -3.5/41%/블록 0/4)
+ *
+ * ⚠️ **처음 계획은 「꾸러미 vs 실계좌」였고 그건 안 된다** (11/17 밤에 알았다). 실계좌는
+ * 거의 안 산다 — 그날 항해일지는 스캔 55번이 전부 시장문에서 막혀 0건이었고, 그 문이
+ * 열리기를 기다리는 할 일은 9/15 부터 열려 있다. 3주 뒤에 「5/일 vs 0건」이 남으면
+ * 비교가 아니다. 그래서 상대를 **이 파일 안에서** 만든다 — 꾸러미가 좋은지 나쁜지는
+ * 같은 자로 잰 다른 고르기와 맞대야만 말할 수 있다.
  *
  * ## ⚠️ 성적은 **다음 날 시가**부터 센다
  *
@@ -53,6 +60,11 @@ export interface ShadowDay {
   /** 체를 지난 종목 수 — 풀이 얼마나 넓었나 */
   pool: number;
   picks: ShadowPick[];
+  /**
+   * 대조군 — 20일 상승폭 상위. 11/17 밤에 붙였으므로 **그 전 줄에는 없다**(옛 줄은
+   * 빈 배열로 읽힌다). 화면이 「대조군 없음」과 「대조군 0승」을 가를 수 있어야 한다.
+   */
+  base?: ShadowPick[];
 }
 
 export interface ShadowFile {
@@ -93,30 +105,50 @@ export async function runShadowPick(): Promise<{ date: string; picked: number; n
     return { date: "", picked: 0, note: "오늘치 재료가 없다 — 마감 뒤 정리가 아직 안 돌았다" };
   }
   const file = await load();
-  if (file.days.some((d) => d.date === live.date)) {
-    return { date: live.date, picked: 0, note: "그날은 이미 골랐다" };
-  }
+  const blank = (p: BundlePick): ShadowPick => ({
+    ...p,
+    entry: null,
+    d1: null,
+    d5: null,
+    d10: null,
+    d20: null,
+    mfe20: null,
+    mae20: null,
+  });
   const pool = live.rows.filter(passesSieve);
   const ranked = rankBundle(pool).slice(0, PICK_N);
+  const base = rankMomentum(pool).slice(0, PICK_N);
+
+  /*
+   * 이미 고른 날이면 **꾸러미는 손대지 않는다** — 다시 고르면 그날 적어 둔 것이 바뀌어
+   * 기록이 아니게 된다. 다만 대조군이 비어 있으면(11/17 밤 전에 적힌 줄) 그것만 채운다.
+   */
+  const had = file.days.find((d) => d.date === live.date);
+  if (had) {
+    if (had.base && had.base.length > 0) {
+      return { date: live.date, picked: 0, note: "그날은 이미 골랐다" };
+    }
+    had.base = base.map(blank);
+    file.updatedAt = new Date().toISOString();
+    await save(file);
+    return { date: live.date, picked: 0, note: `대조군만 채움 ${base.length}` };
+  }
+
   file.days.push({
     date: live.date,
     pickedAt: new Date().toISOString(),
     pool: pool.length,
-    picks: ranked.map((p) => ({
-      ...p,
-      entry: null,
-      d1: null,
-      d5: null,
-      d10: null,
-      d20: null,
-      mfe20: null,
-      mae20: null,
-    })),
+    picks: ranked.map(blank),
+    base: base.map(blank),
   });
   file.days.sort((a, b) => a.date.localeCompare(b.date));
   file.updatedAt = new Date().toISOString();
   await save(file);
-  return { date: live.date, picked: ranked.length, note: `체 통과 ${pool.length} 중 ${ranked.length}` };
+  return {
+    date: live.date,
+    picked: ranked.length,
+    note: `체 통과 ${pool.length} 중 꾸러미 ${ranked.length} · 대조군 ${base.length}`,
+  };
 }
 
 /**
@@ -134,7 +166,8 @@ export async function fillShadowOutcomes(): Promise<{ filled: number; pending: n
   let pending = 0;
 
   for (const day of file.days) {
-    for (const p of day.picks) {
+    /* 꾸러미와 대조군을 **같은 손으로** 센다 — 자가 갈라지면 비교가 무너진다 */
+    for (const p of [...day.picks, ...(day.base ?? [])]) {
       if (p.d20 !== null) continue;
       const bs = barsOf[p.code] ?? [];
       const i = bs.findIndex((b) => b.d === day.date);

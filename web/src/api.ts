@@ -7779,6 +7779,11 @@ export interface CisShadowDay {
   /** 체를 지난 종목 수 */
   pool: number;
   picks: CisShadowPick[];
+  /**
+   * **대조군** — 같은 날·같은 체 안에서 20일 상승폭 상위 다섯(실측 -3.5/41%/블록 0/4).
+   * 11/17 밤에 붙였으므로 **그 전 줄에는 없다** — 화면이 「없음」과 「0승」을 가를 것.
+   */
+  base?: CisShadowPick[];
 }
 export interface CisShadowFile {
   updatedAt: string;
