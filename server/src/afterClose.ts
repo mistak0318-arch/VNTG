@@ -17,6 +17,7 @@ import { marketPulse } from "./marketPulse.js";
 import { getTradeStats } from "./tradeStats.js";
 import { pushNotice } from "./notifyCenter.js";
 import { buildSamplesFromLedger } from "./samplesFromLedger.js";
+import { fillShadowOutcomes, runShadowPick } from "./cisShadow.js";
 import { runAllRaces } from "./cisScenario.js";
 import { getCommonStockCodes } from "./stockListCache.js";
 import { refreshStockValuation, stockValuationStat } from "./stockValuation.js";
@@ -107,6 +108,7 @@ const STEPS: { key: string; label: string }[] = [
   { key: "trade", label: "수출입" },
   { key: "finance", label: "실적 캐시" },
   { key: "samples", label: "표본" },
+  { key: "shadow", label: "항해일지 꾸러미 (나란히)" },
   { key: "race", label: "시나리오 레이스" },
   /*
    * **마무리 회차** (2026-09-16) — 정규 회차(15:40)에는 안 돈다. 20:10 에 따로 돈다.
@@ -858,6 +860,25 @@ export async function runAfterClose(
     }, () => {
       const p = ledgerSamplesProgress();
       return p.total > 0 && p.done < p.total ? { done: p.done, total: p.total, note: `${p.obs.toLocaleString()}관측` } : null;
+    });
+
+  /*
+   * ⑨-2 **항해일지 꾸러미 — 나란히 재기** (2026-11-17).
+   *
+   * 바로 위 ⑨ 가 표본을 만들면서 **오늘치 재료**(`signalSamplesLive.json`)도 같은 손으로
+   * 남겼다. 그걸로 새 꾸러미가 오늘 고를 다섯을 적고, 쌓인 줄의 성적을 일봉으로 채운다.
+   *
+   * **사지는 않는다** — 벤티지가 "먼저 나란히 재 본다"를 골랐다. 실측은 분명했지만
+   * (꾸러미 +3.2/61% vs 신호등 +0.6/53%) 표본이 전부 약세장이라 한 계절에 맞춰진 것일 수
+   * 있고, 그건 앞으로 쌓아야만 갈린다.
+   *
+   * 조회 0회(파일만). 실패해도 파이프라인을 안 세운다 — 이건 관찰이지 오늘 장사가 아니다.
+   */
+  if (want("shadow"))
+    await step("shadow", "항해일지 꾸러미 (나란히)", async () => {
+      const picked = await runShadowPick();
+      const filled = await fillShadowOutcomes();
+      return `${picked.date || "—"} ${picked.picked}개 · ${picked.note} · 성적 채움 ${filled.filled} (대기 ${filled.pending})`;
     });
 
   /*

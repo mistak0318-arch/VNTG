@@ -409,6 +409,45 @@ export interface SampleFile {
   samples: Sample[];
 }
 
+/**
+ * **오늘치 재료** (2026-11-17) — 결과 칸이 없는 맨 끝 봉.
+ *
+ * 표본(`SampleFile`)은 20일 뒤가 있어야 만들어지므로 늘 한 달쯤 뒤쳐진다. 항해일지가
+ * **오늘** 고르려면 오늘 재료가 필요한데, 그걸 다른 데서 다시 만들면 실측과 실전이 두
+ * 벌이 된다. 그래서 `samplesFromLedger` 가 **같은 루프에서** 맨 끝 봉을 이리로 담는다.
+ *
+ * ⚠️ `rows` 의 `d1`~`d60`·`mfe20`·`mae20` 는 **전부 null** 이다. 성적을 재는 데 쓰면 안 된다 —
+ * 여기 있는 건 「무엇을 고를까」의 재료뿐이다.
+ */
+export interface LiveFeatFile {
+  builtAt: string;
+  /** 어느 날 종가 기준인가 */
+  date: string;
+  rows: Sample[];
+}
+
+const LIVE_FILE = join(DATA_DIR, "signalSamplesLive.json");
+let liveCache: LiveFeatFile | null = null;
+
+export async function saveLiveFeats(f: LiveFeatFile): Promise<void> {
+  liveCache = f;
+  await fs.mkdir(DATA_DIR, { recursive: true });
+  /* 원자적으로 — 2MB 를 덮다 죽으면 반쪽 파일이 남고 다음 날 꾸러미가 통째로 빈다 */
+  const tmp = `${LIVE_FILE}.${process.pid}.tmp`;
+  await fs.writeFile(tmp, JSON.stringify(f), "utf-8");
+  await fs.rename(tmp, LIVE_FILE);
+}
+
+export async function loadLiveFeats(): Promise<LiveFeatFile | null> {
+  if (liveCache) return liveCache;
+  try {
+    liveCache = JSON.parse(await fs.readFile(LIVE_FILE, "utf-8")) as LiveFeatFile;
+    return liveCache;
+  } catch {
+    return null;
+  }
+}
+
 let cache: SampleFile | null = null;
 
 export async function saveSamples(f: SampleFile): Promise<void> {

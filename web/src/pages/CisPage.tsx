@@ -18,6 +18,7 @@ import {
   type CisSlotEntry,
   type CisStats,
   type CisUsageRow,
+  type CisShadowFile,
   type CisWatchEvent,
   type PublishJob,
 } from "../api";
@@ -73,6 +74,8 @@ const TABS = [
   { key: "fills", label: "매매일지", hint: "체결 원장 — 산 이유와 판 이유" },
   { key: "account", label: "계좌", hint: "보유·현금·빚·목표 진척" },
   { key: "stats", label: "통계", hint: "승률·손익비·평가액 곡선" },
+  /* 꾸러미 나란히 재기 (2026-11-17) — 통계 옆이 맞다. 둘 다 「잘 하고 있나」를 묻는 자리다 */
+  { key: "shadow", label: "꾸러미 시험", hint: "새 꾸러미가 고른 것 — 사지 않고 성적만 쌓는다" },
   { key: "usage", label: "활용법", hint: "어느 화면을 보고 판단했나" },
   { key: "config", label: "설정", hint: "규칙·시간대·AI·모드" },
 ];
@@ -494,6 +497,7 @@ export function CisPage({ onSelectStock }: { onSelectStock?: (code: string, name
       {tab === "fills" && <FillsTab account={account} onSelectStock={onSelectStock} />}
       {tab === "account" && <AccountTab account={account} onSelectStock={onSelectStock} />}
       {tab === "stats" && <StatsTab account={account} />}
+      {tab === "shadow" && <ShadowTab />}
       {tab === "usage" && <UsageTab account={account} />}
       {tab === "config" && config && (
         <ConfigTab
@@ -1819,6 +1823,145 @@ function BucketTable({
         </table>
       </div>
       <div className="table-note">{hint} 건수 5 미만은 흐리게 — 표본이 적으면 믿을 값이 아닙니다.</div>
+    </>
+  );
+}
+
+/* ══════════════════════════════════════════════════════ 꾸러미 시험 */
+
+/**
+ * **꾸러미 시험** (2026-11-17) — 새 투자 로직을 실계좌에 물리기 전에 나란히 재는 자리.
+ *
+ * 벤티지: "신호등이 신뢰할만한 값이 아닌거 같아. 니가 생각하는 신뢰할만한 데이터 꾸러미
+ * 조합을 해서 다시 항해일지의 투자 로직을 재편성 해서 구성해볼래?"
+ *
+ * 실측에서 지금 신호등은 **+0.6 / 승률 52%**(시총 중립 20일)였다 — 가르는 힘이 없다.
+ * 원인은 「추세」를 **끝까지 오른 것**으로 읽은 것이었다. 20일 상승폭 상위를 사면 네 블록
+ * 모두 졌고(-3.5), **적당히** 오른 것은 네 블록 모두 이겼다(+1.9).
+ *
+ * 새 꾸러미는 체(거래대금·시총·안쏠림·흑자) 뒤에 네 재료를 같은 무게로 평균한다 —
+ * 섹터상대 적당 · 20일추세 적당 · 저변동 · 20일선 이격 좁음. 실측 **+3.6 / 63% / 4개
+ * 블록 모두 양수**.
+ *
+ * ⚠️ 표본 130일이 **전부 약세장**이라 저변동이 한 계절에 맞춰진 것일 수 있다. 그래서
+ * 사지 않고 **고른 것만** 쌓는다 — 벤티지가 고른 길이다.
+ */
+function ShadowTab() {
+  const [file, setFile] = useState<CisShadowFile | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .cisShadow()
+      .then(setFile)
+      .catch((e: Error) => setErr(e.message));
+  }, []);
+
+  if (err) return <div className="error-banner">{err}</div>;
+  if (!file) return <div className="empty">불러오는 중…</div>;
+
+  const days = [...file.days].sort((a, b) => b.date.localeCompare(a.date));
+  /* 성적이 찬 것만 모아 평균 — 아직 안 찬 칸을 0 으로 세면 「본전」으로 읽힌다 */
+  const done = days.flatMap((d) => d.picks).filter((p) => p.d20 !== null);
+  const avg = (v: number[]) => (v.length ? v.reduce((a, b) => a + b, 0) / v.length : null);
+  const d20s = done.map((p) => p.d20!);
+  const stopHit = done.filter((p) => (p.mae20 ?? 0) <= -7).length;
+
+  return (
+    <>
+      <div className="page-note">
+        새 꾸러미가 매일 고른 다섯입니다. <b>사지는 않습니다</b> — 고른 것만 적고 성적을 쌓습니다.
+        성적은 <b>고른 날 다음 날 시가</b>부터 셉니다(종가를 보고 그 종가에 살 수는 없으니까요).
+        실계좌 성적은 「통계」 탭에 있습니다.
+      </div>
+
+      {days.length === 0 ? (
+        <div className="empty">
+          아직 고른 날이 없습니다 — 마감 뒤 정리(15:55)가 한 번 돌면 첫 줄이 생깁니다.
+        </div>
+      ) : (
+        <>
+          <section className="card">
+            <h2>여태</h2>
+            <div className="summary-grid">
+              <div className="summary-item">
+                <div className="label">고른 날</div>
+                <div className="value num">{days.length}일</div>
+              </div>
+              <div className="summary-item">
+                <div className="label">성적이 찬 종목</div>
+                <div className="value num">
+                  {done.length} / {days.flatMap((d) => d.picks).length}
+                </div>
+              </div>
+              <div className="summary-item">
+                <div className="label">20일 평균</div>
+                <div className={`value num ${(avg(d20s) ?? 0) > 0 ? "positive" : (avg(d20s) ?? 0) < 0 ? "negative" : ""}`}>
+                  {avg(d20s) === null ? "—" : `${avg(d20s)! > 0 ? "+" : ""}${avg(d20s)!.toFixed(2)}%`}
+                </div>
+              </div>
+              <div className="summary-item">
+                <div className="label">-7% 에 닿은 것</div>
+                <div className="value num">{done.length ? `${stopHit} (${Math.round((100 * stopHit) / done.length)}%)` : "—"}</div>
+              </div>
+            </div>
+            <div className="table-note">
+              20일이 아직 안 지난 종목은 평균에서 빠집니다. 「-7% 에 닿은 것」은 보유 중 최저가가
+              진입가 대비 -7% 아래로 간 것 — 실계좌였다면 손절됐을 자리입니다.
+            </div>
+          </section>
+
+          {days.map((d) => (
+            <section className="card" key={d.date}>
+              <h2>
+                {d.date.slice(4, 6)}/{d.date.slice(6, 8)} <span className="pt-n">체 통과 {d.pool}종목 중 다섯</span>
+              </h2>
+              <div className="data-table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>종목</th>
+                      <th className="num">점수</th>
+                      <th>왜</th>
+                      <th className="num">진입</th>
+                      <th className="num">d5</th>
+                      <th className="num">d10</th>
+                      <th className="num">d20</th>
+                      <th className="num">최고/최저</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {d.picks.map((p) => (
+                      <tr key={p.code}>
+                        <td>{p.name}</td>
+                        <td className="num">{p.score}</td>
+                        <td className="pt-n" style={{ fontSize: "0.72rem" }}>
+                          {p.parts.map((x) => `${x.k} ${Math.round(x.v)}`).join(" · ")}
+                        </td>
+                        <td className="num">{p.entry === null ? "—" : p.entry.toLocaleString("ko-KR")}</td>
+                        {([p.d5, p.d10, p.d20] as (number | null)[]).map((v, i) => (
+                          <td key={i} className={`num ${v === null ? "" : v > 0 ? "positive" : v < 0 ? "negative" : ""}`}>
+                            {v === null ? "—" : `${v > 0 ? "+" : ""}${v.toFixed(1)}`}
+                          </td>
+                        ))}
+                        <td className="num pt-n" style={{ fontSize: "0.72rem" }}>
+                          {p.mfe20 === null ? "—" : `+${p.mfe20.toFixed(1)} / ${p.mae20?.toFixed(1) ?? "—"}`}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          ))}
+        </>
+      )}
+
+      <div className="st-cfg-note">
+        ⚠️ 이 꾸러미를 고른 근거(실측 +3.6 / 승률 63% / 네 블록 모두 양수)는 <b>130거래일이
+        전부 약세장이던 표본</b>에서 나왔습니다. 강세장 표본이 0일이라 <b>저변동 비중이 한
+        계절에 맞춰진 것일 수 있습니다.</b> 그래서 바로 안 물리고 여기서 먼저 쌓습니다.
+      </div>
     </>
   );
 }

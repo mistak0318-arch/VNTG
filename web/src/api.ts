@@ -1628,6 +1628,8 @@ export const api = {
       `/api/cis/days?account=${account}&limit=${limit}`,
     ),
   cisStats: (account: string) => getJson<CisStats>(`/api/cis/stats?account=${account}`),
+  /** 꾸러미 나란히 재기 — 계좌와 무관하다(사지 않으므로) */
+  cisShadow: () => getJson<CisShadowFile>("/api/cis/shadow"),
   cisRaces: () => getJson<CisRaceStore>("/api/cis/races"),
   cisUsage: (account: string) =>
     getJson<{ rows: CisUsageRow[] }>(`/api/cis/usage?account=${account}`),
@@ -7747,6 +7749,40 @@ export interface CisBucket {
   avgPnl: number;
   payoff: number | null;
   avgHold: number;
+}
+
+/**
+ * **꾸러미 나란히 재기** (2026-11-17) — 서버 `cisShadow.ts` 와 같은 모양.
+ *
+ * 새 꾸러미가 매일 고른 다섯. **사지 않는다** — 고른 것만 적고 성적을 쌓는다.
+ * 성적은 **고른 날 다음 봉의 시가**부터 센다(표본과 같은 규칙).
+ */
+export interface CisShadowPick {
+  code: string;
+  name: string;
+  score: number;
+  parts: { k: string; v: number }[];
+  price: number;
+  volEok: number;
+  mktCap: number | null;
+  entry: number | null;
+  d1: number | null;
+  d5: number | null;
+  d10: number | null;
+  d20: number | null;
+  mfe20: number | null;
+  mae20: number | null;
+}
+export interface CisShadowDay {
+  date: string;
+  pickedAt: string;
+  /** 체를 지난 종목 수 */
+  pool: number;
+  picks: CisShadowPick[];
+}
+export interface CisShadowFile {
+  updatedAt: string;
+  days: CisShadowDay[];
 }
 
 export interface CisStats {

@@ -18,6 +18,7 @@ import type { CisRules } from "../cisTrader.js";
 import { METHOD_LABEL, runPension } from "../cisPensionRun.js";
 import { clearWatchEvents, watchEvents, watchStatus } from "../cisWatch.js";
 import { auditAccount, verifyFill } from "../cisVerify.js";
+import { shadowLedger } from "../cisShadow.js";
 
 /**
  * 항해일지 API (옛 이름 「CIS 일지」 — 2026-09-04 개명).
@@ -258,6 +259,20 @@ export function createCisRouter(client: KiwoomClient): Router {
       const id = acc(req.query.account);
       const days = await listDays(limit, id);
       res.json({ days, state: readState(days) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * **꾸러미 — 나란히 재기** (2026-11-17).
+   *
+   * 새 꾸러미가 매일 고른 다섯과 그 성적. **사지는 않는다** — 벤티지가 "먼저 나란히
+   * 재 본다"를 골랐다. 파일 하나만 읽으므로 조회 0회다.
+   */
+  router.get("/shadow", async (_req, res, next) => {
+    try {
+      res.json(await shadowLedger());
     } catch (err) {
       next(err);
     }

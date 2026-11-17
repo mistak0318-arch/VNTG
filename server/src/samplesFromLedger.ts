@@ -6,7 +6,7 @@ import { loadCloses } from "./dailyCloses.js";
 import { getCommonStockCodes, getStockIndex } from "./stockListCache.js";
 import { betaFrom, buildEtfCtx, buildThemeCtx } from "./signalBacktest.js";
 import { yahooChart } from "./yahooChart.js";
-import { MA_PERIODS, outcomeOf, saveSamples, type Feat, type Sample } from "./signalSamples.js";
+import { MA_PERIODS, outcomeOf, saveLiveFeats, saveSamples, type Feat, type Sample } from "./signalSamples.js";
 import type { DailyLedger, FlowRow } from "./dailyStore.js";
 import { loadFinanceCache, marginTrendAt, profitAt, quarterAt, type FinanceCache } from "./financeCache.js";
 import { peerMarginTrend, peerRet, sectorPeersOf } from "./sectorPeers.js";
@@ -221,6 +221,8 @@ export function buildSamplesFromLedger(
       const secRetMemo = new Map<string, number | null>();
 
       const out: Sample[] = [];
+      /** 맨 끝 봉 — 결과 칸이 없는 「오늘치 재료」. 항해일지 꾸러미가 이걸로 고른다 */
+      const live: Sample[] = [];
 
       for (const f of files) {
         progress.done += 1;
@@ -312,8 +314,20 @@ export function buildSamplesFromLedger(
           const date = flow[fi].d;
           const bi = barAt.get(date);
           if (bi === undefined) continue;
-          /* 20일 뒤가 없으면 채점을 못 한다 — 최근 20봉은 표본이 아니다 */
-          if (bi + HORIZON >= bs.length) continue;
+          /*
+           * 20일 뒤가 없으면 채점을 못 한다 — 최근 20봉은 표본이 아니다.
+           *
+           * **다만 맨 끝 봉 하나는 따로 담는다** (2026-11-17). 항해일지가 오늘 고르려면
+           * 오늘치 재료가 있어야 하는데, 표본은 앞날이 있어야 만들어지므로 늘 한 달쯤
+           * 뒤쳐져 있다. 그렇다고 재료를 **다른 곳에서 다시 만들면** 실측과 실전이 두 벌이
+           * 된다 — 이 앱에서 두 벌이 된 판정은 늘 갈라졌다.
+           *
+           * 그래서 **같은 루프, 같은 `feat`** 로 만들고 결과 칸만 없는 줄을 따로 파일에
+           * 둔다(`signalSamplesLive.json`). 표본 파일은 건드리지 않으므로 기존에 그걸 읽는
+           * 곳들은 아무것도 달라지지 않는다.
+           */
+          const isLive = bi === bs.length - 1;
+          if (bi + HORIZON >= bs.length && !isLive) continue;
           if (bi < 64) continue;
 
           const cur = closesAll[bi];
@@ -515,13 +529,16 @@ export function buildSamplesFromLedger(
            * 2026-10-19 에 d10·d60 과 MFE/MAE(보유 중 최고·최저)를 더했다. 같은 일봉을
            * 한 번 더 훑을 뿐이라 **조회가 늘지 않는다.**
            */
-          out.push({
+          const row = {
             ...feat,
             code,
             name,
             date,
             ...outcomeOf(bs, bi, (b) => b),
-          });
+          };
+          /* 맨 끝 봉은 앞날이 없어 결과 칸이 전부 null 이다 — 표본이 아니라 **오늘치 재료**다 */
+          if (isLive) live.push(row);
+          else out.push(row);
         }
       }
 
@@ -532,6 +549,17 @@ export function buildSamplesFromLedger(
         codeCount: files.length - progress.skipped,
         samples: out,
       });
+      /*
+       * 오늘치 재료 — 표본과 **같은 손으로** 만든 줄이다. 한 줄도 못 만들었으면
+       * 안 쓴다(있던 파일을 빈 것으로 덮으면 그날 꾸러미가 통째로 빈다).
+       */
+      if (live.length > 0) {
+        await saveLiveFeats({
+          builtAt: new Date().toISOString(),
+          date: live[0].date,
+          rows: live,
+        });
+      }
     } catch (e) {
       progress.error = e instanceof Error ? e.message : String(e);
     }
