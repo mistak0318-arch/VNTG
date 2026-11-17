@@ -506,8 +506,11 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
           비차익거래 이렇게 표시하던게 잇엇잖아"). 「주도주·급소」의 프로그램은 **종목 순위**고
           「돈의 흐름 ▸ 지금」의 프로그램 30분은 **합계 하나**다 — 차익·비차익을 가른 시장 전체
           수급은 여기가 유일하다. 가르지 않으면 차익의 잡음이 비차익의 신호를 덮는다.
+
+          ⚠️ **요약 탭이다**(벤티지: "요약으로 가는게 맞을듯"). 처음엔 시황에 뒀는데 못 찾았다 —
+          자리를 옮긴 카드는 **쓰는 사람이 어디서 찾는지**가 정답이지 내 분류가 아니다.
         */}
-        {show("market") && (
+        {show("summary") && (
           <OverviewCard order={cards.orderOf("program")} title="프로그램 동향 (차익·비차익)">
             <div className="ov-card-b">
               <ProgramTrendPanel />
