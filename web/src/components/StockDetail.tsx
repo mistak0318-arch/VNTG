@@ -385,13 +385,14 @@ export function StockDetail({
             const base = Math.abs(Number(info.base_pric)) || 0;
             /* 일봉 날짜는 YYYYMMDD — 정규장 파일 날짜(YYYY-MM-DD)와 같은 날이면 그날의 전일종가를 기준으로 */
             const lastSameDay = lastSession && lastSession.date === reg.date.replace(/-/g, "") ? lastSession.base : null;
+            /* 나누는 값은 **거래소 기준가부터** — 까닭은 `PriceHeader` 의 같은 자리에 적어 뒀다(2026-11-20) */
             const prev =
-              reg.prevClose && reg.prevClose > 0
-                ? reg.prevClose
+              reg.date === todayKst && base > 0
+                ? base
                 : lastSameDay && lastSameDay > 0
                   ? lastSameDay
-                  : reg.date === todayKst && base > 0
-                    ? base
+                  : reg.prevClose && reg.prevClose > 0
+                    ? reg.prevClose
                     : null;
             const regRate = prev ? ((reg.close - prev) / prev) * 100 : null;
             /*

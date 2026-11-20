@@ -311,15 +311,32 @@ export function PriceHeader({
     if (!regular || !(regular.close > 0)) return null;
     const todayKst = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
     const base = Math.abs(Number(info?.base_pric)) || 0;
-    /* 앞 장 파일이 없으면 그날 일봉의 전일종가 — 새벽엔 키움 기준가가 이미 새 날 것이라 못 쓴다 */
+    /* 그날 일봉의 전일종가(= 종가 − 전일대비) — 키움이 그날 기준가로 적어 준 값이다 */
     const lastSameDay = last && last.date === regular.date.replace(/-/g, "") ? last.base : null;
+    /*
+     * **나누는 값은 거래소 기준가부터** (2026-11-20 — 벤티지: "얘네는 또 왜 안 맞어").
+     *
+     * 삼성전자 그날 화면: 전일종가 **196,900**, 큰 숫자 -7.31%, 저·시·고도 전부 196,900 으로 나뉘어 있는데
+     * **정규장 종가만 -6.10%** 였다. -6.10% 가 나오려면 나눈 값이 195,000 이어야 한다 — 야후·키움 기준가
+     * 둘 다 11/19 정규장 종가를 196,900 으로 준다(= -7.01%). **한 화면이 자를 두 개 쓰고 있었다.**
+     *
+     * 앞 장 파일(`prevClose`)을 맨 앞에 뒀던 게 원인이다. 그 파일은 우리가 15:40 에 찍는 것이라
+     *   · 하루라도 안 찍히면 `latestRegularCloses` 가 **「그 날짜 이하 가장 최근」**으로 조용히 떨어진다
+     *     (실측: 로컬 서버는 11/19 파일이 없어 11/17 로 떨어져 같은 자리가 -3.78% 로 나왔다)
+     *   · 찍혀 있어도 그 시각 조회값이 종가와 다르면 그대로 굳는다
+     * 둘 다 **아무 표시 없이** 틀린다.
+     *
+     * 그래서 순서를 뒤집는다 — 오늘 정규장이면 **거래소 기준가**(`base_pric`), 아니면 **그날 일봉의
+     * 전일종가**, 우리 파일은 맨 뒤. 앞의 둘은 거래소가 정한 값이고, 화면의 다른 숫자가 전부 그걸로
+     * 나뉘고 있다. 권리락·배당락 날에도 거래소 등락률과 저절로 같아진다.
+     */
     const prev =
-      regular.prevClose && regular.prevClose > 0
-        ? regular.prevClose
+      regular.date === todayKst && base > 0
+        ? base
         : lastSameDay && lastSameDay > 0
           ? lastSameDay
-          : regular.date === todayKst && base > 0
-            ? base
+          : regular.prevClose && regular.prevClose > 0
+            ? regular.prevClose
             : null;
     return prev ? ((regular.close - prev) / prev) * 100 : null;
   })();
@@ -507,6 +524,15 @@ export function PriceHeader({
               {Number.isFinite(fluRt) && fluRt > 0 ? "+" : ""}
               {Number.isFinite(fluRt) ? fluRt.toFixed(2) : "-"}%
             </span>
+            {/*
+             * **장외엔 무엇 대비인지 적는다** (2026-11-20 — 벤티지가 같은 화면의 -0.33% 와 -7.31% 를
+             * 동그라미 치고 "얘네는 또 왜 안 맞어").
+             *
+             * 둘 다 같은 182,500 인데 **나누는 값이 다르다** — 여기는 전일종가(196,900), 아래 「애프터」
+             * 칸은 정규장 종가(183,100). 아래 칸은 `정규장 대비` 라고 적혀 있는데 **큰 숫자만 아무 말이
+             * 없어서**, 한쪽이 틀린 것처럼 보였다. 정규장 중엔 견줄 상대가 없으니 안 적는다.
+             */}
+            {regular && regular.close > 0 && <small className="ph-basis">전일 대비</small>}
           </div>
         )}
         {!rolled && showNxtLine && nxt && (
