@@ -45,7 +45,7 @@ if errorlevel 1 (
 
 echo.
 echo [3/3] 예약작업 걸기 - VNTG DEPLOY WATCH (1분마다)
-schtasks /Create /TN "VNTG DEPLOY WATCH" /TR "\"%~dp0deploy-watch.cmd\"" /SC MINUTE /MO 1 /RL HIGHEST /F
+schtasks /Create /TN "VNTG DEPLOY WATCH" /TR "\"%SystemRoot%\System32\wscript.exe\" \"%~dp0deploy-watch-hidden.vbs\"" /SC MINUTE /MO 1 /RL HIGHEST /F
 if errorlevel 1 (
   echo.
   echo *** 예약작업 등록에 실패했습니다. ***

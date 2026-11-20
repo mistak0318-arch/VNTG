@@ -113,6 +113,35 @@ if not defined WANT (
   echo MISMATCH want=%WANT% head=%GOT%>> "%ST%"
 )
 if exist "%DROP%\deploy.want" del /q "%DROP%\deploy.want"
+
+REM ---------------------------------------------------------------------------
+REM  KEEP THE WATCHER SILENT  (2026-11-20)
+REM
+REM  Vantage: the cmd window kept jumping to the front and made the mini PC
+REM  awkward to use.  The watcher polls 11 times 5s apart every minute, so its
+REM  console is on screen nearly all the time -- and it prints nothing at all.
+REM
+REM  Point the task at wscript (no console of its own) + deploy-watch-hidden.vbs,
+REM  which starts the same .cmd with window style 0 and waits for it.
+REM
+REM  Two things were measured on the main PC before this shipped:
+REM    1) a direct .cmd task action opens a visible window, the wscript action
+REM       opens none, and the job runs either way;
+REM    2) schtasks /Create /F over a task that has a RUNNING instance does NOT
+REM       kill that instance -- which is the only reason it is safe to do this
+REM       from inside a deploy that the watcher itself is running.
+REM
+REM  It sits AFTER the verdict is written, so it cannot colour the deploy result,
+REM  and it is skipped once the task already points at the .vbs.  If it ever goes
+REM  wrong the watcher stops and deploys stop landing: watch.alive is the tell,
+REM  and setup-deploy-watch.cmd run as administrator puts it back.
+REM ---------------------------------------------------------------------------
+schtasks /Query /TN "VNTG DEPLOY WATCH" /FO LIST /V 2>nul | findstr /i "deploy-watch-hidden" >nul
+if errorlevel 1 (
+  echo.>> "%LOG%"
+  echo -- registering the watcher to run hidden -->> "%LOG%"
+  schtasks /Create /TN "VNTG DEPLOY WATCH" /TR "\"%SystemRoot%\System32\wscript.exe\" \"%VNTG_HOME%deploy-watch-hidden.vbs\"" /SC MINUTE /MO 1 /RL HIGHEST /F>> "%LOG%" 2>&1
+)
 exit /b 0
 
 :nogit
