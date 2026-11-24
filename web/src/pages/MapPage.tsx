@@ -147,20 +147,25 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
         setNaverError(e.message);
       });
   }, []);
+  /*
+   * **모드와 상관없이 받는다** (2026-11-24). 맨 위의 「지금 몰린 테마 5」가 이 값을 쓰는데,
+   * 그 줄은 내 태그를 보고 있든 관심종목을 보고 있든 늘 떠 있어야 한다 — 「시장에 돈이
+   * 어디로 몰렸나」는 내가 어느 판을 보고 있느냐와 상관없는 물음이다.
+   * 서버가 캐시해 두는 값이라 모드를 오가도 조회가 안 는다.
+   */
   useEffect(() => {
-    if (mode !== "naver" || naver !== null) return;
+    if (naver !== null) return;
     loadNaver();
-  }, [mode, naver, loadNaver]);
+  }, [naver, loadNaver]);
   /*
    * **한 번 받으면 끝이던 것을 주기 갱신으로** (2026-09-18 전수검증 D1).
    * 다른 모드(테마·업종 180초, 관심종목 20~120초)는 스스로 다시 받는데 네이버 테마만
    * 페이지를 연 시각에 멈춰 있었다. 테마·업종과 같은 180초로, 조용히(스켈레톤 없이) 갈아끼운다.
    */
   useEffect(() => {
-    if (mode !== "naver") return;
     const timer = setInterval(loadNaver, 180_000);
     return () => clearInterval(timer);
-  }, [mode, loadNaver]);
+  }, [loadNaver]);
   /*
    * **테마를 숨기면 다시 받는다** (2026-08-31 — "어제 만든 숨기기 기능 작동안한다").
    *
@@ -208,6 +213,33 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
     /* 그리는 차례는 등락률 순 그대로 — 고르는 자(거래대금)와 보는 자(등락률)는 다르다 */
     return rows.slice().sort((a, b) => b.changeRate - a.changeRate);
   })();
+
+  /*
+   * **지금 가장 몰린 테마 다섯** (2026-11-24 — 벤티지: "최상단에 지금 가장 집중되고 있는
+   * 테마를 보여줬으면 좋겠는데? … 가장 거래대금도 많고 상승률도 좋은 5개 테마").
+   *
+   * ## 점수를 안 만들었다 — **거르고 나서 고른다**
+   *
+   * 「거래대금 × 등락률」 같은 합성 점수를 만들면 또 검증 안 된 자가 생기고, 무엇보다
+   * **왜 이게 1등인지 화면이 설명을 못 한다.** 그래서 CIS 순서를 그대로 따른다 —
+   *
+   *     ① 체: 거래대금 상위 20개만 남긴다 (돈이 실제로 몰린 판)
+   *     ② 추세: 그 안에서 등락률 순으로 다섯
+   *
+   * 화면에도 그 말을 그대로 적는다(「거래대금 상위 20 중 많이 오른 순」). 합산도 가중치도
+   * 없으니 숫자를 보고 바로 맞대 볼 수 있다.
+   *
+   * ⚠️ 모드와 **상관없이** 네이버 테마로 뽑는다. 내 태그를 보고 있든 관심종목을 보고 있든
+   * 「시장에 돈이 어디로 몰렸나」는 같은 물음이다.
+   */
+  const HOT_POOL = 20;
+  const hotThemes = (naver ?? [])
+    .filter((t) => !t.gone)
+    .slice()
+    .sort((a, b) => b.tradeValue - a.tradeValue)
+    .slice(0, HOT_POOL)
+    .sort((a, b) => b.changeRate - a.changeRate)
+    .slice(0, 5);
 
   async function loadMine(force = false) {
     /* 응답 순서 지킴 (2026-09-18 전수검증 D20) — 태그 변경·새로고침이 겹칠 때 옛 응답이 새 것을 덮지 않게 */
@@ -379,6 +411,40 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
                   : null
         }
       />
+      {/*
+        **지금 몰린 테마 다섯** — 모드 버튼보다 위다 (2026-11-24). 지도는 「전부」를 보여 주고
+        이 줄은 「그중 지금」을 말한다. 지도를 훑기 전에 눈이 먼저 닿아야 하므로 맨 위다.
+      */}
+      {hotThemes.length > 0 && (
+        <div className="hot-themes">
+          <div className="hot-head">
+            <b>지금 몰린 테마</b>
+            <em className="pt-n">거래대금 상위 {HOT_POOL} 중 많이 오른 순</em>
+          </div>
+          <div className="hot-row">
+            {hotThemes.map((t, i) => (
+              <button
+                key={t.key}
+                className="hot-tile"
+                onClick={() => setConstituent({ kind: "theme", code: t.key, name: t.name })}
+                title={`${t.name} — 거래대금 ${Math.round(t.tradeValue).toLocaleString("ko-KR")}억 · 오른 종목 ${t.up}/${t.up + t.down} · 누르면 구성종목`}
+              >
+                <em className="hot-rank">{i + 1}</em>
+                <span className="hot-name">{t.name}</span>
+                <b className={`hot-rate ${t.changeRate > 0 ? "positive" : t.changeRate < 0 ? "negative" : ""}`}>
+                  {t.changeRate > 0 ? "+" : ""}
+                  {t.changeRate.toFixed(2)}%
+                </b>
+                <span className="hot-sub pt-n">
+                  {Math.round(t.tradeValue).toLocaleString("ko-KR")}억 · ▲{t.up}/{t.up + t.down}
+                  {t.streak > 1 ? ` · ${t.streak}일↑` : ""}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/*
         모드 버튼 — **끌어서 순서를 바꾼다** (2026-08-28 요청). CSS order 로만 움직이므로
         버튼이 다시 만들어지지 않는다. 설정 > 서브탭 순서에도 같은 목록이 있다.

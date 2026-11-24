@@ -22632,3 +22632,89 @@ tr.gv-strong td:first-child { color: var(--text); }
     font-size: 1rem;
   }
 }
+
+/*
+  ── MAP 「지금 몰린 테마」 다섯 (2026-11-24) ─────────────────────────────
+
+  벤티지: "최상단에 지금 가장 집중되고 있는 테마를 보여줬으면 좋겠는데? … 가장 거래대금도
+  많고 상승률도 좋은 5개 테마를 상단에"
+
+  지도는 **전부**를 보여 주고 이 줄은 **그중 지금**을 말한다. 그래서 타일처럼 보이되
+  지도와 섞이지 않게 **가로 한 줄**로 둔다 — 세로로 쌓으면 지도의 일부로 읽힌다.
+  좁은 화면에서는 줄바꿈 대신 **옆으로 밀어** 본다. 다섯 개가 두 줄로 접히면
+  「다섯」이라는 뜻이 흐려지고 지도가 아래로 밀린다.
+*/
+.hot-themes {
+  margin: 2px 0 10px;
+}
+.hot-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+.hot-head b {
+  font-size: 0.86rem;
+}
+.hot-head em {
+  font-style: normal;
+  font-size: 0.7rem;
+}
+.hot-row {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  /* 밀어 보는 줄이라 스크롤 막대가 자리를 먹지 않게 */
+  scrollbar-width: thin;
+  padding-bottom: 2px;
+}
+.hot-tile {
+  flex: 1 1 0;
+  min-width: 124px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 6px;
+  align-items: center;
+  text-align: left;
+  padding: 7px 9px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+}
+.hot-tile:hover {
+  background: var(--panel-2);
+}
+/* 등수 — 작게. 순위 자체가 뜻이 아니라 **차례**라는 표시다 */
+.hot-rank {
+  grid-row: 1 / 3;
+  font-style: normal;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--muted);
+  min-width: 14px;
+  text-align: center;
+}
+.hot-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hot-rate {
+  grid-column: 2;
+  font-size: 1rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+.hot-sub {
+  grid-column: 2;
+  font-size: 0.66rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
