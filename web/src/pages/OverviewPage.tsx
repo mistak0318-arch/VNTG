@@ -14,6 +14,7 @@ import {
   type ThemeRow,
   type ViRow,
   type UsMajorResult,
+  type RadarData,
   type RateRow,
   type TopTraderRow,
 } from "../api";
@@ -50,13 +51,29 @@ import { TopicPulseBlock } from "../components/TopicPulse";
 import { NaverBriefingBlock } from "../components/NaverBriefingBlock";
 import { InquiryRankPanel } from "../components/overview/InquiryRankPanel";
 import { ProgramTrendPanel } from "../components/overview/ProgramTrendPanel";
+/* 레이더 (2026-11-24) — 카드 여섯. 재료는 위의 섹션 훅을 그대로 넘겨받는다 */
+import { RadarCallPut, RadarFutures, RadarKrFlow, RadarOil, RadarRates, RadarUsFutures } from "../components/overview/RadarPanels";
+/* MAP 탭 — 메뉴의 「테마/업종 MAP」과 **같은 페이지**를 끼워 넣는다 */
+import { MapPage } from "./MapPage";
 import { WatchStar } from "../useWatchedCodes";
 import { SuperMark } from "../useSuperMarks";
 
-type SubTab = "summary" | "market" | "flow" | "rank" | "us";
+type SubTab = "summary" | "map" | "radar" | "market" | "flow" | "rank" | "us";
 
 const SUBTABS: { key: SubTab; label: string }[] = [
   { key: "summary", label: "요약" },
+  /*
+   * **MAP 과 레이더를 요약과 시황 사이에** (2026-11-24 — 벤티지: "시황 대시보드에 요약/시황/미국
+   * 사이에 요약/MAP/레이더/시황/미국 이렇게").
+   *
+   * MAP 은 왼쪽 메뉴의 「🗺️ 테마/업종 MAP」과 **같은 화면**이다. 메뉴에서 빼지 않았다 —
+   * 지우는 게 아니라 길을 하나 더 내는 것이고, 안 쓰게 되면 그때 빼면 된다.
+   * 그 페이지가 제 서브탭(내 태그·관심종목·네이버 테마…)을 들고 오므로 **탭 안에 탭**이 된다.
+   * 그래서 카드 격자에 섞지 않고 **한 칸을 통째로** 준다(아래 `ov-span-all`).
+   */
+  { key: "map", label: "MAP" },
+  /* 레이더 — 선물·옵션·미국선물·금리·유가를 한 자리에서. 조회는 안 는다(`RadarPanels` 머리) */
+  { key: "radar", label: "레이더" },
   /*
    * 「시황」 (2026-10-15) — 요약에서 **골라 보는 카드**를 옮겨 받은 자리.
    * 요약은 한 화면에서 끝나야 하고, 주도주·화제·체온계·테마는 들여다보는 것이라
@@ -156,6 +173,11 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
   const global = useSection<GlobalQuote[]>("global", 15_000);
   const usMajor = useSection<UsMajorResult>("usMajor", 15_000);
   const rates = useSection<RateRow[]>("rates", 30_000);
+  /*
+   * 레이더가 **새로 받는 둘**(옵션 전광판·미국 20년물). 나머지 넷은 위의 훅을 그대로 쓴다.
+   * 서버 TTL 이 60초라 그 절반으로 둔다 — 레이더 탭을 안 보고 있어도 비용은 같다(공용 캐시).
+   */
+  const radar = useSection<RadarData>("radar", 30_000);
   const topTraders = useSection<TopTraderRow[]>("topTraders", 120_000);
   /* 시장 렌즈 — 체온계·테마 흐름 두 카드가 나눠 본다 (한 번만 받는다) */
   const { lens, reload: reloadLens } = useMarketLens();
@@ -300,8 +322,9 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
    * 순서를 바꾸는 손잡이는 **설정 > 화면 > 시황 카드 순서**에 있다.
    * 배치는 한 번 정하면 끝나는 값이라, 매일 보는 화면의 맨 윗줄을 차지할 이유가 없다.
    */
+  /* `us`·`map` 은 카드 격자가 아니라 **화면 하나**라 순서를 매길 것이 없다 */
   const keysHere =
-    sub === "us" ? [] : (OVERVIEW_CARDS[sub as OverviewSub] ?? []).map((c) => c.key);
+    sub === "us" || sub === "map" ? [] : (OVERVIEW_CARDS[sub as OverviewSub] ?? []).map((c) => c.key);
   /*
    * 저장 자리를 `overview2` 로 올림 (2026-09-10 저녁) — 기본 차례를 바꿨다(주도주·조회순위가 앞, 테마 흐름이 뒤).
    * 예전 저장본을 그대로 쓰면 새 카드가 맨 뒤에 붙고 옛 차례가 남는다.
@@ -428,6 +451,53 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
           국내 카드 사이에 섞으면 「미국장 도는 동안 보는 자리」라는 뜻이 사라진다.
         */}
         {sub === "us" && <UsBoardPanel />}
+
+        {/*
+          **MAP — 메뉴의 그 화면을 그대로** (2026-11-24). 복사본이 아니라 같은 `MapPage` 다.
+          두 벌로 만들면 한쪽만 고치는 날이 반드시 온다. 카드 격자에 섞지 않고 한 칸을
+          통째로 주는 까닭은 저 페이지가 제 서브탭과 새로고침 줄을 들고 오기 때문이다.
+        */}
+        {sub === "map" && (
+          <div className="ov-span-all">
+            <MapPage onSelectStock={onSelectStock} />
+          </div>
+        )}
+
+        {/* ---------------- 레이더 ---------------- */}
+        {sub === "radar" && (
+          <>
+            <OverviewCard order={cards.orderOf("krFlow")} title="코스피·코스닥 수급" updatedAt={flow.updatedAt} onRefresh={flow.refresh} loading={flow.loading} error={flow.error}>
+              <div className="ov-card-b">
+                <RadarKrFlow flow={flow.data} />
+              </div>
+            </OverviewCard>
+            <OverviewCard order={cards.orderOf("k200fut")} title="코스피200 선물" updatedAt={indices.updatedAt} onRefresh={indices.refresh} loading={indices.loading} error={indices.error}>
+              <div className="ov-card-b">
+                <RadarFutures indices={indices.data} />
+              </div>
+            </OverviewCard>
+            <OverviewCard order={cards.orderOf("callput")} title="옵션 심리 (VKOSPI)" updatedAt={global.updatedAt} onRefresh={global.refresh} loading={global.loading} error={global.error}>
+              <div className="ov-card-b">
+                <RadarCallPut global={global.data} />
+              </div>
+            </OverviewCard>
+            <OverviewCard order={cards.orderOf("usFut")} title="미국 지수선물" updatedAt={global.updatedAt} onRefresh={global.refresh} loading={global.loading} error={global.error}>
+              <div className="ov-card-b">
+                <RadarUsFutures global={global.data} />
+              </div>
+            </OverviewCard>
+            <OverviewCard order={cards.orderOf("usRate")} title="미국 금리 (10·20·30년)" updatedAt={usMajor.updatedAt} onRefresh={usMajor.refresh} loading={usMajor.loading} error={usMajor.error}>
+              <div className="ov-card-b">
+                <RadarRates usMajor={usMajor.data} radar={radar.data} />
+              </div>
+            </OverviewCard>
+            <OverviewCard order={cards.orderOf("oil")} title="유가·금" updatedAt={usMajor.updatedAt} onRefresh={usMajor.refresh} loading={usMajor.loading} error={usMajor.error}>
+              <div className="ov-card-b">
+                <RadarOil usMajor={usMajor.data} />
+              </div>
+            </OverviewCard>
+          </>
+        )}
 
         {/*
           국내 시장 신호등도 맨 위다. 미국 전광판과 같은 자리에 같은 모양으로 둔다 —

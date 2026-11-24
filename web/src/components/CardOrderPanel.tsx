@@ -31,10 +31,12 @@ export function CardOrderPanel() {
 }
 
 /** 지금 대시보드에 실제로 떠 있는 탭 (`OverviewPage.SUBTABS` 와 맞춘다) */
-const VISIBLE: OverviewSub[] = ["summary", "market"];
+const VISIBLE: OverviewSub[] = ["summary", "radar", "market"];
 
 const SUB_LABEL: Record<OverviewSub, string> = {
   summary: "요약",
+  /* 2026-11-24 — 선물·옵션·미국선물·금리·유가를 한 자리에서 보는 탭 */
+  radar: "레이더",
   /* 2026-10-15 — 요약에서 「골라 보는 카드」를 옮겨 받은 탭 */
   market: "시황",
   flow: "수급",

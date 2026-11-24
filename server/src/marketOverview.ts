@@ -4,6 +4,7 @@ import { topTraders } from "./topTraders.js";
 import { rateBoard } from "./rateBoard.js";
 import { recordFlow } from "./flowIntraday.js";
 import { kospi200Futures, type FuturesQuote } from "./kospiFutures.js";
+import { usLongRates, type UsLongRates } from "./usLongRates.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { getSharesMap } from "./stockListCache.js";
 import { SUBJECTS, listMarketTotals } from "./sectorFlowStore.js";
@@ -60,6 +61,18 @@ const SECTION_TTL_MS = {
   topTraders: 300_000,
   /* 금리 — 하루에 몇 번 안 바뀐다 */
   rates: 60_000,
+  /*
+   * **레이더** (2026-11-24) — 시장상황 레이더 탭이 쓰는 자리.
+   *
+   * 갈래 거의 전부가 **이미 다른 섹션이 받고 있다**(지수·수급은 `indices`·`flow`,
+   * 나스닥100 선물과 VKOSPI 는 `global`, 유가·미국 10/30년은 `usMajor`). 레이더 화면은
+   * 그 훅을 그대로 다시 쓰므로 **조회가 하나도 안 는다.**
+   *
+   * 이 섹션이 새로 받는 것은 **미국 20년물(FRED) 하나**다 — 야후에 20년물이 없다.
+   * FRED 는 제 안에서 6시간 캐시라 여기 주기와 상관없이 하루 네 번이고, 60초는
+   * 「화면이 들여다보는 주기」일 뿐이다.
+   */
+  radar: 60_000,
 } as const;
 
 export type SectionName = keyof typeof SECTION_TTL_MS;
@@ -695,7 +708,32 @@ const FETCHERS: Record<SectionName, (client: KiwoomClient) => Promise<unknown>> 
   usMajor: () => usMajorIndices(),
   topTraders: (c: KiwoomClient) => topTraders(c),
   rates: () => rateBoard(),
+  radar: () => fetchRadar(),
 };
+
+/**
+ * 레이더가 **새로 받는 것** — 지금은 미국 장기금리 하나뿐이다.
+ *
+ * ## 여기 옵션이 없는 까닭 (2026-11-24 실측, 네 군데 다 재 봄)
+ *
+ * 벤티지가 레이더에 「선물 콜옵션/풋옵션 매매 현황」을 넣자고 했다. **어느 채널에도 없다** —
+ *
+ *   1. 한투 국내선물옵션 **43개 기능 전수 확인** — 투자자별 매매동향이 아예 없다(시세·주문·잔고뿐)
+ *   2. 한투 옵션 전광판(`display-board-callput`)은 **맨 위 100행만** 준다. 실측:
+ *      행사가 1347.5~1595 구간이 왔는데 코스피200 은 **778** 이다 — ATM 근처엔 닿지도 않는다.
+ *      (전부 OTM 콜 / ITM 풋, 콜 거래량 87 · 풋 0). `FID_COND_MRKT_CLS_CODE` 를 ""·W·M·MKI·WKI
+ *      로 바꿔 봐도 창이 안 옮겨간다. 그래서 **풋콜 레이쇼도 못 낸다**
+ *   3. 네이버 `m.stock` 은 선물(FUT)·코스피·코스피200 수급은 주는데 **콜/풋은 빈 응답**이고,
+ *      옛 HTML 표(`investorDealTrendDay`)는 「더 이상 제공하지 않습니다」로 닫혔다
+ *   4. KRX 정보데이터시스템은 **로그인 벽**(KRX Data Marketplace)으로 바뀌었다
+ *
+ * 그 자리는 **VKOSPI** 로 메웠다 — 코스피200 **옵션 값**에서 나오는 변동성지수라 「옵션 쪽이
+ * 겁먹었나」를 말해 주고, `global` 섹션이 이미 받고 있어 **조회가 0회** 늘어난다.
+ * 투자자별이 꼭 필요해지면 KRX 계정 말고는 길이 없다(`docs/다음작업_TODO.md`).
+ */
+async function fetchRadar(): Promise<{ usRates: UsLongRates }> {
+  return { usRates: await usLongRates() };
+}
 
 async function refresh(section: SectionName, client: KiwoomClient): Promise<void> {
   const entry = getEntry(section);

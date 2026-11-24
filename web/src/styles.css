@@ -22344,3 +22344,207 @@ tr.gv-strong td:first-child { color: var(--text); }
 @media (max-width: 720px) {
   .data-table .sh-why { display: none; }
 }
+
+/*
+  ── 시장상황 레이더 (2026-11-24) ─────────────────────────────────────────
+
+  카드 여섯이 **같은 모양으로** 읽혀야 한다. 출처가 제각각(한투·네이버·야후·FRED)이라
+  칸마다 생김새가 다르면 「어느 숫자가 어느 자리 것인지」를 매번 다시 찾게 된다.
+
+  규칙 셋:
+    · 한 줄 = 이름 / 값 / 변화 / 단서. 값은 **오른쪽 정렬·tabular-nums** 로 자릿수를 맞춘다
+    · 단위와 기준(억원·계약·「11/20 확정」)은 **흐린 글씨로 값 옆에** — 지우지 말 것.
+      2026-11-20 에 기준을 안 적어 같은 가격이 두 등락률로 보인 적이 있다
+    · 375px 에서 **아무 줄도 안 꺾인다** — 이름은 줄여도 숫자는 안 줄인다
+*/
+.rdr {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 0.86rem;
+}
+.rdr-asof {
+  font-size: 0.72rem;
+}
+/* 수급 한 줄 — 이름 + 투자자 셋 + 단위 */
+.rdr-flow {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr 1fr auto;
+  align-items: baseline;
+  gap: 6px;
+}
+.rdr-flow-k {
+  font-style: normal;
+  color: var(--muted);
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+.rdr-flow-v {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.25;
+}
+.rdr-flow-v i {
+  font-style: normal;
+  font-size: 0.66rem;
+  color: var(--muted);
+}
+.rdr-flow-v b {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.rdr-unit {
+  font-style: normal;
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+/* 누적처럼 **곁들이는 줄**은 선 하나로 가른다 — 오늘 값과 섞이면 안 된다 */
+.rdr-sub {
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+/* 큰 숫자 한 줄 (선물 현재가) */
+.rdr-big {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.rdr-big b {
+  font-size: 1.35rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.rdr-big-s {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.rdr-tag {
+  font-style: normal;
+  font-size: 0.7rem;
+  margin-left: auto;
+}
+/* 이름:값 짝들 — 좁으면 두 칸, 넓으면 세 칸 */
+.rdr-kv {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  gap: 6px;
+}
+.rdr-kv > span {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+.rdr-kv i {
+  font-style: normal;
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+.rdr-kv b {
+  font-variant-numeric: tabular-nums;
+}
+/* 값 한 줄 (지수선물·금리·유가) */
+.rdr-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: baseline;
+  gap: 8px;
+}
+/*
+  금리 줄만 「지금 / 11/20 확정」 단서가 하나 더 붙는다. `:has()` 로 알아서 늘리게
+  했다가 **줄 모양이 브라우저 기능 하나에 달리는 게 싫어** 클래스로 바꿨다 —
+  안 먹히면 넷째 칸이 다음 줄로 흘러 기준 표시가 값에서 떨어진다.
+*/
+.rdr-row.rdr-row4 {
+  grid-template-columns: 1fr auto auto auto;
+}
+.rdr-row-k {
+  font-style: normal;
+  color: var(--muted);
+  font-size: 0.78rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rdr-row-v {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.rdr-row-p {
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  min-width: 52px;
+  text-align: right;
+}
+.rdr-row-s {
+  font-style: normal;
+  font-size: 0.68rem;
+  white-space: nowrap;
+  min-width: 46px;
+  text-align: right;
+}
+/* 콜·풋 */
+.rdr-cp {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.rdr-cp-h {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.rdr-cp-h em {
+  font-style: normal;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.rdr-cp-r {
+  font-size: 0.78rem;
+}
+.rdr-cp-r b {
+  font-variant-numeric: tabular-nums;
+}
+/*
+  콜과 풋의 몫을 한 띠로. **숫자 둘보다 기울기가 먼저 읽힌다** — 0.97 과 1.21 의 차이는
+  눈으로 재야 하는데, 띠는 한 번에 보인다.
+*/
+.rdr-cp-bar {
+  display: flex;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--border);
+}
+.rdr-cp-bar i.call {
+  background: var(--red);
+}
+.rdr-cp-bar i.put {
+  background: var(--blue);
+}
+.rdr-cp-n {
+  display: flex;
+  gap: 8px;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+.rdr-cp-n em {
+  font-style: normal;
+  margin-left: auto;
+}
+/* 카드 밑의 한마디 — 읽히되 숫자를 안 가린다 */
+.rdr-note {
+  font-size: 0.7rem;
+  line-height: 1.45;
+  border-top: 1px solid var(--border);
+  padding-top: 5px;
+}
+.rdr-empty {
+  font-size: 0.78rem;
+  padding: 6px 0;
+}

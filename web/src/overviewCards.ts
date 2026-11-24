@@ -9,7 +9,7 @@
  * 카드를 새로 만들면 이 배열에도 넣어야 화면에 뜬다.
  */
 
-export type OverviewSub = "summary" | "market" | "flow" | "rank";
+export type OverviewSub = "summary" | "market" | "radar" | "flow" | "rank";
 
 export interface CardDef {
   key: string;
@@ -65,6 +65,22 @@ export const OVERVIEW_CARDS: Record<OverviewSub, CardDef[]> = {
     { key: "sectors", label: "테마 흐름" },
     { key: "moneyFlow", label: "돈의 방향 (한미 ETF)" },
     { key: "topTraders", label: "수익률 상위 고객 · 네이버페이 랭킹" },
+  ],
+  /*
+   * **레이더** (2026-11-24 — 벤티지가 갈래를 직접 댔다: "선물 콜옵션/풋옵션 매매 현황,
+   * 코스피 200 선물 수급 현황, 코스피, 코스닥 수급 현황, 나스닥 100 선물 현황, 유가지수,
+   * 10년물 20년물 금리현황").
+   *
+   * 차례는 **우리 장에서 시작해 바깥으로** — 현물 수급 → 선물 → 옵션 → 미국 선물 → 금리 → 유가.
+   * 아침에 거꾸로(밖에서 안으로) 읽고 싶으면 이 탭의 카드 순서를 바꾸면 된다.
+   */
+  radar: [
+    { key: "krFlow", label: "코스피·코스닥 수급" },
+    { key: "k200fut", label: "코스피200 선물" },
+    { key: "callput", label: "옵션 심리 (VKOSPI)" },
+    { key: "usFut", label: "미국 지수선물" },
+    { key: "usRate", label: "미국 금리 (10·20·30년)" },
+    { key: "oil", label: "유가·금" },
   ],
   flow: [{ key: "flow", label: "투자자별 수급" }],
   rank: [

@@ -24,6 +24,8 @@ export type ApiProvider =
   | "telegram"
   | "krx"
   | "upbit"
+  /* 미국 장기금리 20년물 — 야후에 없는 유일한 만기라 여기서만 받는다 (2026-11-24) */
+  | "fred"
   | "mail";
 
 /**
@@ -174,6 +176,11 @@ export const DAILY_LIMITS: Record<ApiProvider, { label: string; limit: number | 
     label: "업비트 공개 시세",
     limit: null,
     note: "키 없는 공개 시세(초당 10회 한도). 비트코인·이더리움 원화 값을 10초마다 받습니다",
+  },
+  fred: {
+    label: "FRED 미국 금리",
+    limit: null,
+    note: "세인트루이스 연준 공개 CSV(키 없음). 야후에 없는 20년물 때문에 쓰며, 전 영업일 확정치라 6시간마다 — 하루 네 번입니다",
   },
   krx: {
     label: "KRX KIND 공시",

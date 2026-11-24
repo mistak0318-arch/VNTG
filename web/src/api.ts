@@ -2992,6 +2992,25 @@ export interface UsBoardSignal {
   reasons: string[];
 }
 
+/**
+ * **레이더** 섹션이 새로 받는 것 (2026-11-24) — 미국 20년물 하나뿐이다.
+ *
+ * 나머지(코스피·코스닥 수급, 코스피200 선물, 나스닥100 선물, VKOSPI, 유가, 미국 10/30년)는
+ * 이미 `indices`·`flow`·`global`·`usMajor` 가 받고 있어 레이더 화면이 그 훅을 그대로 쓴다.
+ */
+export interface UsLongRatesData {
+  /** 확정치 날짜 — FRED 는 전 영업일이라 화면이 이 날짜를 꼭 적는다 */
+  date: string | null;
+  y10: number | null;
+  y20: number | null;
+  y30: number | null;
+  why: string;
+}
+
+export interface RadarData {
+  usRates: UsLongRatesData;
+}
+
 export interface UsMajorResult {
   /** 줄 경고들을 한 덩어리로 굴린 판정. 판정은 서버에서만 한다 */
   boardSignal: UsBoardSignal;
