@@ -128,6 +128,7 @@ import { createFocusRouter } from "./routes/focus.js";
 import { createRealtimeRouter } from "./routes/realtime.js";
 import { startRealtimeScheduler } from "./realtimeHub.js";
 import { healthFileState, startHealthFile } from "./healthFile.js";
+import { askSnapshotState, startAskSnapshot } from "./askSnapshot.js";
 import { startBrokerAuto } from "./brokerAuto.js";
 import { startAfterCloseScheduler } from "./afterClose.js";
 import { startCondAutoScheduler } from "./condAutoConfig.js";
@@ -289,6 +290,8 @@ app.get("/api/health", async (req, res) => {
      * 경로·오류문이 실리므로 **로그인했거나 localhost** 일 때만 (재검토에서 잡힘).
      */
     ...(authed || local ? { healthOut: healthFileState } : {}),
+    /* 물어보기 스냅샷도 같은 자리에 — 「왜 now.json 이 안 생기지」를 밖에서 볼 수 있어야 한다 */
+    ...(authed || local ? { askOut: askSnapshotState } : {}),
     keysConfigured: {
       kiwoom: Boolean(process.env.KIWOOM_APP_KEY && process.env.KIWOOM_APP_SECRET),
       dart: Boolean(process.env.DART_API_KEY),
@@ -477,6 +480,13 @@ startRealtimeScheduler(client);
  * `HEALTH_OUT_DIR` 이 없으면 아무 일도 안 한다(개발 PC 는 그래서 꺼져 있다).
  */
 startHealthFile();
+
+/*
+ * **물어보기용 스냅샷** (2026-11-24) — 같은 공유 폴더의 `ask\` 에 시황 요약을 떨군다.
+ * 미니PC 의 클로드 코드(폰에서 조종)가 **원장 대신 이 작은 파일을 읽게** 하려는 것이다.
+ * 까닭과 위험은 `askSnapshot.ts` 머리에. 배포 폴더가 없는 개발 PC 에서는 아무 일도 안 한다.
+ */
+startAskSnapshot(client);
 
 /*
  * **장중 거래원 시계열 자동 수집** (2026-09-01).

@@ -97,6 +97,14 @@ async function findDir(): Promise<string | null> {
   return null;
 }
 
+/**
+ * **같은 폴더를 쓰는 다른 글쓴이에게** (2026-11-24). `askSnapshot` 이 `ask/` 를 여기에 판다 —
+ * 폴더 찾는 규칙(환경변수 → `deploy.status` 가 있는 후보)을 두 벌로 두면 한쪽만 고치는 날이 온다.
+ */
+export async function deployOutDir(): Promise<string> {
+  return outDir();
+}
+
 async function outDir(): Promise<string> {
   if (resolved === undefined) {
     resolved = await findDir();
