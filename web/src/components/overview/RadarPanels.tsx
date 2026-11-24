@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type GlobalQuote, type IndexCard, type MarketFlow, type RadarData, type UsMajorResult } from "../../api";
+import { useTabActive } from "../../tabActive";
 
 /** 선물 투자자별 하루치 — `api.futuresFlow` 가 `{days:[…]}` 로 준다(억원) */
 interface FuturesFlowDay {
@@ -8,7 +9,55 @@ interface FuturesFlowDay {
   foreign: number;
   institution: number;
 }
-import { useTabActive } from "../../tabActive";
+
+/*
+ * 선물 수급을 **머리띠와 선물 카드가 같이** 본다. 각자 부르면 같은 값을 두 번 받으므로
+ * 모듈 하나에 마지막 값을 들고, 60초 안에 들어온 요청은 그걸 그대로 쓴다.
+ * (우리 서버 캐시를 두들기는 것이라 비싸진 않지만, 같은 화면이 같은 값을 두 번 받을 이유가 없다)
+ */
+let ffCache: { at: number; days: FuturesFlowDay[] } | null = null;
+let ffInflight: Promise<FuturesFlowDay[]> | null = null;
+
+async function loadFuturesFlow(): Promise<FuturesFlowDay[]> {
+  if (ffCache && Date.now() - ffCache.at < 60_000) return ffCache.days;
+  if (ffInflight) return ffInflight;
+  ffInflight = api
+    .futuresFlow(1)
+    .then((d) => {
+      const days = d.days ?? [];
+      ffCache = { at: Date.now(), days };
+      return days;
+    })
+    .catch(() => (ffCache?.days ?? []))
+    .finally(() => {
+      ffInflight = null;
+    });
+  return ffInflight;
+}
+
+/** 오늘(마지막) 선물 투자자 수급 한 줄. 숨은 탭에서는 안 돈다 */
+function useFuturesFlowToday(): FuturesFlowDay | null {
+  /* `at(-1)` 은 이 프로젝트의 lib 설정에 없다 — 길이로 꺼낸다 */
+  const first = ffCache && ffCache.days.length > 0 ? ffCache.days[ffCache.days.length - 1] : null;
+  const [day, setDay] = useState<FuturesFlowDay | null>(first);
+  const tabActive = useTabActive();
+  useEffect(() => {
+    if (!tabActive) return;
+    let alive = true;
+    const load = () => {
+      void loadFuturesFlow().then((days) => {
+        if (alive) setDay(days.length > 0 ? days[days.length - 1] : null);
+      });
+    };
+    load();
+    const t = setInterval(load, 60_000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [tabActive]);
+  return day;
+}
 
 /**
  * **시장상황 레이더** (2026-11-24 — 벤티지: "선물 콜옵션/풋옵션 매매 현황, 코스피 200 선물 수급
@@ -92,6 +141,121 @@ function FlowRow({ label, f, unit }: { label: string; f: { individual: number; f
   );
 }
 
+/* ── ⓪ 지금 시장 (머리띠) ────────────────────────────────────────────────── */
+
+/**
+ * **「아 지금 시장 색깔이 이거구나」** (2026-11-24 — 벤티지: "여기 눈에 좀 들어오게 하자.
+ * 이걸로 종가배팅할지 아니면 장중 분위기 재는거 볼지 하려고 하는 거거든").
+ *
+ * ## 새 점수가 아니다 — **아래 카드가 이미 말하는 것을 맨 위로 끌어올린 것**이다
+ *
+ * 점수를 또 만들면 검증 안 된 자가 하나 더 생긴다(신호등이 왜 동결 중인지 생각하면 된다).
+ * 그래서 여기 쓰는 문턱은 **시장 관행에 이미 있는 것뿐**이고, 그나마도 아래 카드에 이미
+ * 글로 적혀 있는 것들이다:
+ *
+ *   · 베이시스 음수 = 백워데이션 (선물 카드가 적고 있다)
+ *   · VKOSPI 보통 15~20, 30 위면 공포 (옵션 카드가 적고 있다)
+ *   · 외국인·기관이 **같은 쪽**이면 쌍끌이 (수급 카드의 두 숫자)
+ *
+ * 합산도 가중치도 없다. 네 칸이 **각자 제 말을 한다** — 네 칸이 다 같은 쪽을 가리키는
+ * 날이 드물고, 갈릴 때 어디가 갈렸는지가 보이는 게 요점이다.
+ *
+ * ## 네 칸을 고른 까닭
+ *
+ * 종가배팅과 장중 분위기, 둘 다에 실제로 쓰이는 것만 올렸다 —
+ * **오늘 현물 수급**(누가 담고 있나) · **선물**(외국인 선물과 베이시스는 종가 프로그램의
+ * 앞잡이다) · **변동성**(겁먹은 장에서는 종가배팅 자체를 줄여야 한다) · **밤**(미국 선물이
+ * 지금 어디로 가는지는 내일 갭이다). 금리·유가는 배경이라 머리띠에 안 올렸다.
+ */
+export function RadarVerdict({
+  flow,
+  indices,
+  global,
+}: {
+  flow: MarketFlow | null;
+  indices: IndexCard[] | null;
+  global: GlobalQuote[] | null;
+}) {
+  const fut = useFuturesFlowToday();
+  const k200 = (indices ?? []).find((i) => i.futures) ?? null;
+  const basis = k200?.futures?.basis ?? null;
+  const vk = (global ?? []).find((g) => g.key === "vkospi") ?? null;
+  const nq = (global ?? []).find((g) => g.key === "nqF") ?? null;
+
+  type Tone = "up" | "down" | "warn" | "flat";
+  interface Cell {
+    k: string;
+    /** 큰 글자 — 한눈에 읽히는 게 전부다 */
+    v: string;
+    tone: Tone;
+    /** 근거 숫자 하나. 판정만 있고 근거가 없으면 믿을 수가 없다 */
+    why: string;
+  }
+
+  const cells: Cell[] = [];
+
+  /* ① 오늘 현물 수급 — 코스피 기준(코스닥은 아래 카드에서) */
+  const kf = flow?.kospi ?? null;
+  if (kf) {
+    const f = kf.foreign;
+    const i = kf.institution;
+    const both = f > 0 && i > 0;
+    const neither = f < 0 && i < 0;
+    cells.push({
+      k: flow?.asOf ? `수급 ${md(flow.asOf)}` : "오늘 수급",
+      v: both ? "쌍끌이 매수" : neither ? "쌍끌이 매도" : f > 0 ? "외국인만 매수" : i > 0 ? "기관만 매수" : "엇갈림",
+      tone: both ? "up" : neither ? "down" : "flat",
+      why: `외 ${eok(f)} · 기 ${eok(i)} 억`,
+    });
+  }
+
+  /* ② 선물 — 외국인 방향이 큰 글자, 베이시스가 단서 */
+  if (fut || basis !== null) {
+    const ff = fut?.foreign ?? null;
+    cells.push({
+      k: "선물",
+      v: ff === null ? "수급 없음" : ff > 0 ? "외국인 매수" : ff < 0 ? "외국인 매도" : "보합",
+      tone: ff === null ? "flat" : ff > 0 ? "up" : ff < 0 ? "down" : "flat",
+      why: basis === null ? (ff === null ? "-" : `${eok(ff)} 억`) : `${basis < 0 ? "백워데이션" : "콘탱고"} ${basis.toFixed(2)}${ff === null ? "" : ` · ${eok(ff)} 억`}`,
+    });
+  }
+
+  /* ③ 변동성 — 관행 문턱(15~20 보통 · 30 위 공포)만 쓴다 */
+  if (vk?.price != null) {
+    const p = vk.price;
+    cells.push({
+      k: "변동성",
+      v: p >= 30 ? "공포" : p >= 20 ? "경계" : p >= 15 ? "보통" : "안정",
+      tone: p >= 30 ? "warn" : p >= 20 ? "warn" : "flat",
+      why: `VKOSPI ${p.toFixed(1)}`,
+    });
+  }
+
+  /* ④ 밤 — 미국 지수선물이 지금 어디로 */
+  if (nq?.changeRate != null) {
+    const r = nq.changeRate;
+    cells.push({
+      k: "밤(미국선물)",
+      v: r >= 0.5 ? "강세" : r <= -0.5 ? "약세" : "보합",
+      tone: r >= 0.5 ? "up" : r <= -0.5 ? "down" : "flat",
+      why: `나스닥100 ${pct(r)}`,
+    });
+  }
+
+  if (cells.length === 0) return null;
+  return (
+    <div className="rdv">
+      {cells.map((c) => (
+        <div className={`rdv-cell ${c.tone}`} key={c.k}>
+          <em className="rdv-k">{c.k}</em>
+          <b className="rdv-v">{c.v}</b>
+          <span className="rdv-why">{c.why}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /* ── ① 코스피·코스닥 수급 ───────────────────────────────────────────────── */
 
 /**
@@ -131,33 +295,10 @@ export function RadarKrFlow({ flow }: { flow: MarketFlow | null }) {
  * 현물을 팔게 되므로 프로그램 매도가 붙는다.
  */
 export function RadarFutures({ indices }: { indices: IndexCard[] | null }) {
-  const [flow, setFlow] = useState<FuturesFlowDay[] | null>(null);
-  const tabActive = useTabActive();
-  useEffect(() => {
-    if (!tabActive) return;
-    let alive = true;
-    const load = () => {
-      api
-        .futuresFlow(1)
-        .then((d) => {
-          if (alive) setFlow(d.days ?? []);
-        })
-        .catch(() => {
-          if (alive) setFlow([]);
-        });
-    };
-    load();
-    /* 네이버 집계라 자주 안 바뀐다 — 숨은 탭에서는 아예 안 돈다(useTabActive) */
-    const t = setInterval(load, 60_000);
-    return () => {
-      alive = false;
-      clearInterval(t);
-    };
-  }, [tabActive]);
-
+  /* 머리띠와 **같은 값**을 쓴다 — 두 번 받을 이유가 없다(`useFuturesFlowToday`) */
+  const day = useFuturesFlowToday();
   const k200 = (indices ?? []).find((i) => i.futures) ?? null;
   const f = k200?.futures ?? null;
-  const day = flow && flow.length > 0 ? flow[flow.length - 1] : null;
 
   if (!f && !day) return <Empty why="선물 시세도 수급도 아직" />;
   return (

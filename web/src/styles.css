@@ -22548,3 +22548,87 @@ tr.gv-strong td:first-child { color: var(--text); }
   font-size: 0.78rem;
   padding: 6px 0;
 }
+
+/*
+  ── 레이더 머리띠 「지금 시장」 (2026-11-24) ─────────────────────────────
+
+  벤티지: "눈에 좀 들어오게 하자 … 아 지금 시장 색깔이 이거구나 알 수 있게"
+
+  **카드가 아니라 띠다.** 카드 테두리를 주면 아래 여섯과 같은 무게로 읽혀서 「맨 위」라는
+  뜻이 사라진다. 대신 칸마다 **왼쪽에 굵은 색 기둥**을 세워 색이 먼저 눈에 들어오게 했다 —
+  글자를 읽기 전에 빨강·파랑·주황이 보이는 게 이 줄의 일이다.
+
+  글자 크기는 **판정 > 근거 > 이름** 순이다. 보통 라벨이 제일 위에 크게 오지만, 여기서는
+  「수급」이라는 말이 아니라 **「쌍끌이 매수」**가 읽혀야 한다.
+*/
+.rdv {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.rdv-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 10px 8px 12px;
+  background: var(--panel);
+  border-radius: 8px;
+  /* 색 기둥 — 이 줄에서 제일 먼저 보이는 것 */
+  border-left: 5px solid var(--border);
+}
+.rdv-k {
+  font-style: normal;
+  font-size: 0.68rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.rdv-v {
+  font-size: 1.12rem;
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: -0.4px;
+  white-space: nowrap;
+}
+.rdv-why {
+  font-size: 0.7rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rdv-cell.up {
+  border-left-color: var(--red);
+}
+.rdv-cell.up .rdv-v {
+  color: var(--red);
+}
+.rdv-cell.down {
+  border-left-color: var(--blue);
+}
+.rdv-cell.down .rdv-v {
+  color: var(--blue);
+}
+/*
+  경계·공포는 **빨강이 아니라 주황**이다. 이 화면에서 빨강은 「오른다」는 뜻으로 이미
+  쓰고 있어서, 위험까지 빨강으로 적으면 **같은 색이 두 가지를 말한다.**
+*/
+.rdv-cell.warn {
+  border-left-color: var(--warn);
+}
+.rdv-cell.warn .rdv-v {
+  color: var(--warn);
+}
+.rdv-cell.flat .rdv-v {
+  color: var(--text);
+}
+/* 폰에서는 두 칸씩 — 네 칸을 한 줄에 넣으면 판정 글씨가 줄어들어 뜻이 없다 */
+@media (max-width: 520px) {
+  .rdv {
+    grid-template-columns: 1fr 1fr;
+  }
+  .rdv-v {
+    font-size: 1rem;
+  }
+}

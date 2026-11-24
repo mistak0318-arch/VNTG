@@ -52,7 +52,7 @@ import { NaverBriefingBlock } from "../components/NaverBriefingBlock";
 import { InquiryRankPanel } from "../components/overview/InquiryRankPanel";
 import { ProgramTrendPanel } from "../components/overview/ProgramTrendPanel";
 /* 레이더 (2026-11-24) — 카드 여섯. 재료는 위의 섹션 훅을 그대로 넘겨받는다 */
-import { RadarCallPut, RadarFutures, RadarKrFlow, RadarOil, RadarRates, RadarUsFutures } from "../components/overview/RadarPanels";
+import { RadarCallPut, RadarFutures, RadarKrFlow, RadarOil, RadarRates, RadarUsFutures, RadarVerdict } from "../components/overview/RadarPanels";
 /* MAP 탭 — 메뉴의 「테마/업종 MAP」과 **같은 페이지**를 끼워 넣는다 */
 import { MapPage } from "./MapPage";
 import { WatchStar } from "../useWatchedCodes";
@@ -464,6 +464,17 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
         )}
 
         {/* ---------------- 레이더 ---------------- */}
+        {/*
+          **머리띠가 맨 위다** (2026-11-24 — 벤티지: "눈에 좀 들어오게 하자 … 아 지금 시장
+          색깔이 이거구나 알 수 있게"). 카드 여섯은 각자 사실만 말하는데, 종가배팅을 할지
+          말지는 **네 갈래를 한눈에 겹쳐 봐야** 나온다. 카드 순서 설정에 안 넣은 것은
+          일부러다 — 이건 카드가 아니라 **늘 맨 위에 있는 줄**이다.
+        */}
+        {sub === "radar" && (
+          <div className="ov-span-all">
+            <RadarVerdict flow={flow.data} indices={indices.data} global={global.data} />
+          </div>
+        )}
         {sub === "radar" && (
           <>
             <OverviewCard order={cards.orderOf("krFlow")} title="코스피·코스닥 수급" updatedAt={flow.updatedAt} onRefresh={flow.refresh} loading={flow.loading} error={flow.error}>
