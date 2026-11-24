@@ -49,6 +49,17 @@ function num(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/**
+ * **자릿수를 잘라서 적는다.** 야후가 주는 등락률은 `-1.9639659803043867` 처럼 오는데,
+ * 그대로 쓰면 읽는 쪽(사람이든 AI 든)이 **없는 정밀도를 있는 것으로 읽는다.** 베이시스도
+ * `-0.5799999999999272` 로 떠서 뺄셈 부스러기가 그대로 보였다.
+ */
+function r(v: number | null | undefined, digits = 2): number | null {
+  if (v === null || v === undefined || !Number.isFinite(Number(v))) return null;
+  const p = 10 ** digits;
+  return Math.round(Number(v) * p) / p;
+}
+
 function ageSec(at: number | null | undefined): number | null {
   if (!at) return null;
   return Math.round((Date.now() - at) / 1000);
@@ -89,7 +100,7 @@ async function build(client: KiwoomClient): Promise<Record<string, unknown>> {
   const cards = (idx?.data as IndexCard[] | null) ?? [];
   const pick = (code: string) => cards.find((c) => c.code === code) ?? null;
   const one = (c: IndexCard | null) =>
-    c === null ? null : { 현재가: c.price, 등락률: c.changeRate, 상승: c.rising, 보합: c.flat, 하락: c.falling };
+    c === null ? null : { 현재가: r(c.price), 등락률: r(c.changeRate), 상승: c.rising, 보합: c.flat, 하락: c.falling };
 
   const k200 = cards.find((c) => c.futures) ?? null;
   const fut = k200?.futures ?? null;
@@ -97,13 +108,21 @@ async function build(client: KiwoomClient): Promise<Record<string, unknown>> {
   const mf = (flow?.data as MarketFlow | null) ?? null;
   const gq = (glob?.data as GlobalQuote[] | null) ?? [];
   const g = (key: string) => {
-    const r = gq.find((x) => x.key === key);
-    return r ? { 값: r.price, 등락률: r.changeRate } : null;
+    const q = gq.find((x) => x.key === key);
+    return q ? { 값: r(q.price), 등락률: r(q.changeRate) } : null;
   };
   const um = (usm?.data as UsMajorResult | null) ?? null;
   const u = (key: string) => {
-    const r = (um?.rows ?? []).find((x) => x.key === key);
-    return r ? { 값: r.price, 등락률: r.changeRate } : null;
+    const q = (um?.rows ?? []).find((x) => x.key === key);
+    return q ? { 값: r(q.price, 3), 등락률: r(q.changeRate) } : null;
+  };
+  /*
+   * **금리는 %p 로 적는다.** 수익률 4.908% 가 4.918% 로 오른 것을 「+0.20%」(등락률)로 적으면
+   * 국고채 줄의 「+0.006」(%p)과 **같은 칸에서 다른 자를 쓰는 꼴**이다. 금리는 둘 다 %p 로 통일.
+   */
+  const uRate = (key: string) => {
+    const q = (um?.rows ?? []).find((x) => x.key === key);
+    return q ? { 값: r(q.price, 3), 전일대비: r(q.change, 3) } : null;
   };
 
   /* 선물 투자자 수급 — 네이버. 파일 캐시라 가볍다 */
@@ -132,7 +151,7 @@ async function build(client: KiwoomClient): Promise<Record<string, unknown>> {
       .slice(0, 5)
       .map((t) => ({
         테마: t.name,
-        등락률: t.changeRate,
+        등락률: r(t.changeRate),
         거래대금억: Math.round(t.tradeValue),
         오른종목: `${t.up}/${t.up + t.down}`,
         연속상승일: t.streak,
@@ -143,8 +162,8 @@ async function build(client: KiwoomClient): Promise<Record<string, unknown>> {
 
   const rateRows = (rates?.data as RateRow[] | null) ?? [];
   const rate = (name: string) => {
-    const r = rateRows.find((x) => x.name === name);
-    return r ? { 값: r.rate, 전일대비: r.change } : null;
+    const q = rateRows.find((x) => x.name === name);
+    return q ? { 값: r(q.rate, 3), 전일대비: r(q.change, 3) } : null;
   };
 
   return {
@@ -166,9 +185,9 @@ async function build(client: KiwoomClient): Promise<Record<string, unknown>> {
       코스피200선물: fut
         ? {
             월물: fut.name,
-            현재가: fut.price,
-            등락률: fut.changeRate,
-            베이시스: fut.basis,
+            현재가: r(fut.price),
+            등락률: r(fut.changeRate),
+            베이시스: r(fut.basis),
             미결제: fut.openInterest,
             설명: "베이시스가 음수면 백워데이션 — 차익거래가 현물을 파는 쪽입니다",
           }
@@ -199,11 +218,11 @@ async function build(client: KiwoomClient): Promise<Record<string, unknown>> {
       러셀2000선물: g("rtyF"),
     },
     금리: {
-      미국10년: u("tnx"),
-      미국30년: u("tyx"),
+      미국10년: uRate("tnx"),
+      미국30년: uRate("tyx"),
       국고채3년: rate("국고채 3년"),
       국고채10년: rate("국고채 10년"),
-      설명: "미국 10·30년은 야후 실시간. 20년물은 야후에 없어 화면에서만 FRED 전영업일 값을 씁니다",
+      설명: "모두 %p 단위(수익률 자체와 전일 대비 변화). 미국 10·30년은 야후 실시간, 국고채는 한투. 20년물은 야후에 없어 화면에서만 FRED 전영업일 값을 씁니다",
     },
     원자재: { WTI: u("wti"), 브렌트: u("brent"), 금: u("gold") },
     몰린테마: hot,
