@@ -173,9 +173,41 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
     window.addEventListener("vntg:theme-hidden", onHidden);
     return () => window.removeEventListener("vntg:theme-hidden", onHidden);
   }, []);
-  const naverTiles = (naver ?? [])
-    .filter((t) => t.tradeValue >= 300)
-    .sort((a, b) => b.changeRate - a.changeRate);
+  /*
+   * **문턱을 300억 → 3,000억으로** (2026-11-24 — 벤티지: "네이버 테마말야.. 너무 많은데
+   * 이거 좀 걸러낼 수는 없으려나? 시총이 너무작거나 거래대금 너무 적은 테마는 걸러도
+   * 괜찮지 않아?").
+   *
+   * ## 시총으로는 못 자른다 — 재 보고 알았다
+   *
+   * 테마는 **종목 묶음**이라 합계 시총이 크다. 300억 문턱을 통과한 191개의 시총 분포가
+   * 최소 **9,826억(≈1조)** · 중앙 54.8조였다. 「시총이 작은 테마」라는 게 사실상 없으므로
+   * 시총 문턱은 아무것도 안 거른다. 종목 3개 이하인 테마도 191개 중 **5개**뿐이었다.
+   * 어지러운 까닭은 작은 테마가 섞여서가 아니라 **그냥 개수가 많아서**다.
+   *
+   * ## 그래서 거래대금 하나로 자른다 (2026-11-24 실측, 코스피 +6.3% 폭등장 기준)
+   *
+   *     300억 191개 · 1,000억 146개 · 3,000억 92개 · 5,000억 73개 · 1조 47개
+   *
+   * 벤티지가 **3,000억(92개)** 을 골랐다 — 지금의 절반이라 타일이 두 배 커지고 이름과
+   * 등락률이 다 읽힌다.
+   *
+   * ⚠️ **고정 문턱은 한산한 날 화면을 비운다.** 위 개수는 폭등장의 것이라 평소엔 더 적다.
+   * 그래서 **최소 40개는 그리도록 받침**을 둔다 — 문턱을 통과한 게 40개가 안 되면 거래대금
+   * 상위 40개로 대신한다. 「오늘은 돈이 안 돈다」는 정보는 범례의 개수가 말해 준다.
+   */
+  const NAVER_MIN_VALUE = 3000;
+  const NAVER_FLOOR = 40;
+  const naverTiles = (() => {
+    const live = (naver ?? []).filter((t) => !t.gone);
+    const passed = live.filter((t) => t.tradeValue >= NAVER_MIN_VALUE);
+    const rows =
+      passed.length >= NAVER_FLOOR
+        ? passed
+        : live.slice().sort((a, b) => b.tradeValue - a.tradeValue).slice(0, NAVER_FLOOR);
+    /* 그리는 차례는 등락률 순 그대로 — 고르는 자(거래대금)와 보는 자(등락률)는 다르다 */
+    return rows.slice().sort((a, b) => b.changeRate - a.changeRate);
+  })();
 
   async function loadMine(force = false) {
     /* 응답 순서 지킴 (2026-09-18 전수검증 D20) — 태그 변경·새로고침이 겹칠 때 옛 응답이 새 것을 덮지 않게 */
@@ -425,7 +457,13 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
             색이 진할수록 등락폭이 큽니다 (5% 기준) · 타일을 누르면 구성종목이 열립니다
             {watchSource && ` · ${watch.tiles.length}개 그룹 · ▲/▼ 는 그 그룹에서 오른/내린 종목 수`}
             {mode === "mine" && ` · ${mineTiles.length}개 · ▲/▼ 는 그 테마에서 오른/내린 종목 수`}
-            {mode === "naver" && ` · 거래대금 300억↑ ${naverTiles.length}개 · N일↑ 는 연속 상승`}
+            {/* 문턱과 개수를 **그대로 적는다** — 받침(40개)으로 내려온 날은 문턱이 아니라 상위 몇 개라고 말해야 한다 */}
+            {mode === "naver" &&
+              ` · ${
+                naverTiles.length > 0 && Math.min(...naverTiles.map((t) => t.tradeValue)) >= NAVER_MIN_VALUE
+                  ? `거래대금 ${NAVER_MIN_VALUE.toLocaleString("ko-KR")}억↑ ${naverTiles.length}개`
+                  : `거래대금 상위 ${naverTiles.length}개 (${NAVER_MIN_VALUE.toLocaleString("ko-KR")}억 넘는 테마가 ${NAVER_FLOOR}개 미만인 날)`
+              } · N일↑ 는 연속 상승`}
             {mode === "theme" && ` · ${themeTiles.length}개 테마`}
           </div>
           {mode === "mine" && mineTiles.length === 0 && (
