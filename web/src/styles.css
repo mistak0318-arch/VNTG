@@ -23050,3 +23050,75 @@ tr.gv-strong td:first-child { color: var(--text); }
     display: none;
   }
 }
+
+/*
+  복기 노트 ─ [지수 현황]을 **카드로** (2026-11-26)
+
+  벤티지: "이거 카드형식으로 보여줘야 눈에 확 들어올듯"
+
+  표로 뒀더니 넓은 화면에서 **이름과 값이 양 끝으로 벌어져** 눈이 가로로 한참 달렸다.
+  카드는 이름·값·단서가 **한 뼘 안에** 모인다. 폭이 넓어져도 카드가 커지는 게 아니라
+  **개수가 한 줄에 더 들어갈 뿐**이라 읽는 거리가 늘지 않는다 — 그게 요점이다.
+*/
+.jn-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 6px;
+}
+.jn-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel-2);
+  /* 카드가 아무리 넓어져도 글자는 왼쪽에 붙는다 — 벌어짐이 다시 생기지 않게 */
+  align-items: flex-start;
+}
+.jn-card > em {
+  font-style: normal;
+  font-size: 0.7rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.jn-card > em i {
+  font-style: normal;
+  font-size: 0.64rem;
+}
+.jn-card > b {
+  font-size: 1.02rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+}
+.jn-card > span {
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.jn-card > small {
+  font-size: 0.66rem;
+}
+/* 수급 카드 — 한 장에 코스피·코스닥·선물 */
+.jn-card-flow .jn-fl {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  gap: 8px;
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+.jn-card-flow .jn-fl i {
+  font-style: normal;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+.jn-card-flow .jn-fl b {
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 420px) {
+  .jn-cards {
+    grid-template-columns: 1fr 1fr;
+  }
+}

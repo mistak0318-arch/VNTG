@@ -911,77 +911,84 @@ export function JournalPage({
         */}
         {ctx && (ctx.indices || ctx.investor || ctx.usRates) && (
           <div className="jn-mkt">
-            <div className="jn-mkt-h">[지수 현황] <em className="pt-n">저장할 때 박제된 값</em></div>
+            <div className="jn-mkt-h">
+              [지수 현황] <em className="pt-n">저장할 때 박제된 값</em>
+            </div>
 
+            {/*
+              **카드로 묶는다** (2026-11-26 — 벤티지: "이거 카드형식으로 보여줘야 눈에 확
+              들어올듯"). 넓은 화면에서 이름과 값이 **화면 양 끝으로 벌어져** 눈이 가로로
+              한참을 달려야 했다. 카드는 이름·값·단서가 **한 뼘 안에** 모인다.
+            */}
             {ctx.indices && ctx.indices.length > 0 && (
-              <div className="jn-mkt-rows">
+              <div className="jn-cards">
                 {ctx.indices.map((i) => (
-                  <div className="jn-mkt-row" key={i.name}>
+                  <div className="jn-card" key={i.name}>
                     <em>{i.name}</em>
                     <b className="num">{i.close.toLocaleString("ko-KR")}</b>
                     <span className={`num ${i.rate > 0 ? "positive" : i.rate < 0 ? "negative" : ""}`}>{pct(i.rate)}</span>
-                    <span className="pt-n jn-mkt-br">▲{i.up} ▼{i.down}</span>
+                    <small className="pt-n">▲{i.up} ▼{i.down}</small>
                   </div>
                 ))}
                 {ctx.futuresQuote && (
-                  <div className="jn-mkt-row">
+                  <div className="jn-card">
                     <em>선물</em>
                     <b className="num">{ctx.futuresQuote.price?.toLocaleString("ko-KR") ?? "-"}</b>
                     <span className={`num ${(ctx.futuresQuote.rate ?? 0) > 0 ? "positive" : (ctx.futuresQuote.rate ?? 0) < 0 ? "negative" : ""}`}>
                       {ctx.futuresQuote.rate === null ? "-" : pct(ctx.futuresQuote.rate)}
                     </span>
-                    <span className="pt-n jn-mkt-br">
+                    <small className="pt-n">
                       베이시스 {ctx.futuresQuote.basis === null ? "-" : ctx.futuresQuote.basis.toFixed(2)}
-                      {ctx.futuresQuote.basis !== null && ctx.futuresQuote.basis < 0 ? " (백워데이션)" : ""}
-                    </span>
+                    </small>
                   </div>
                 )}
               </div>
             )}
 
+            {/*
+              수급은 **투자자별 카드**다. 표로 두면 「코스피 외국인」을 찾으려고 가로세로를
+              둘 다 훑어야 하는데, 카드면 **「외국인이 뭘 했나」가 한 장**에 모인다.
+            */}
             {(ctx.investor || ctx.futures) && (
-              <table className="jn-mkt-tbl">
-                <thead>
-                  <tr>
-                    <th />
-                    <th>외국인</th>
-                    <th>기관</th>
-                    <th>개인</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ctx.investor && (
-                    <>
-                      <tr>
-                        <th>코스피 <em className="pt-n">억</em></th>
-                        {[ctx.investor.kospi.foreign, ctx.investor.kospi.institution, ctx.investor.kospi.individual].map((v, k) => (
-                          <td key={k} className={`num ${v > 0 ? "positive" : v < 0 ? "negative" : ""}`}>{v.toLocaleString("ko-KR")}</td>
-                        ))}
-                      </tr>
-                      <tr>
-                        <th>코스닥 <em className="pt-n">억</em></th>
-                        {[ctx.investor.kosdaq.foreign, ctx.investor.kosdaq.institution, ctx.investor.kosdaq.individual].map((v, k) => (
-                          <td key={k} className={`num ${v > 0 ? "positive" : v < 0 ? "negative" : ""}`}>{v.toLocaleString("ko-KR")}</td>
-                        ))}
-                      </tr>
-                    </>
-                  )}
-                  {ctx.futures && (
-                    <tr>
-                      <th>선물 <em className="pt-n">억</em></th>
-                      {[ctx.futures.foreign, ctx.futures.institution, ctx.futures.individual].map((v, k) => (
-                        <td key={k} className={`num ${v > 0 ? "positive" : v < 0 ? "negative" : ""}`}>{v.toLocaleString("ko-KR")}</td>
-                      ))}
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+              <div className="jn-cards">
+                {([
+                  { k: "외국인", v: (x: { foreign: number; institution: number; individual: number }) => x.foreign },
+                  { k: "기관", v: (x: { foreign: number; institution: number; individual: number }) => x.institution },
+                  { k: "개인", v: (x: { foreign: number; institution: number; individual: number }) => x.individual },
+                ] as const).map((col) => (
+                  <div className="jn-card jn-card-flow" key={col.k}>
+                    <em>{col.k} <i className="pt-n">억</i></em>
+                    {ctx.investor && (
+                      <>
+                        <span className="jn-fl">
+                          <i>코스피</i>
+                          <b className={`num ${col.v(ctx.investor.kospi) > 0 ? "positive" : col.v(ctx.investor.kospi) < 0 ? "negative" : ""}`}>
+                            {col.v(ctx.investor.kospi).toLocaleString("ko-KR")}
+                          </b>
+                        </span>
+                        <span className="jn-fl">
+                          <i>코스닥</i>
+                          <b className={`num ${col.v(ctx.investor.kosdaq) > 0 ? "positive" : col.v(ctx.investor.kosdaq) < 0 ? "negative" : ""}`}>
+                            {col.v(ctx.investor.kosdaq).toLocaleString("ko-KR")}
+                          </b>
+                        </span>
+                      </>
+                    )}
+                    {ctx.futures && (
+                      <span className="jn-fl">
+                        <i>선물</i>
+                        <b className={`num ${col.v(ctx.futures) > 0 ? "positive" : col.v(ctx.futures) < 0 ? "negative" : ""}`}>
+                          {col.v(ctx.futures).toLocaleString("ko-KR")}
+                        </b>
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
             )}
 
             <div className="jn-mkt-foot pt-n">
-              {ctx.usRates && (
-                <span>미국 10년 {ctx.usRates.y10 ?? "-"} · 30년 {ctx.usRates.y30 ?? "-"}</span>
-              )}
+              {ctx.usRates && <span>미국 10년 {ctx.usRates.y10 ?? "-"} · 30년 {ctx.usRates.y30 ?? "-"}</span>}
               {ctx.overseas && (
                 <span>
                   나스닥100선물 {ctx.overseas.nasdaqFut?.toLocaleString("ko-KR") ?? "-"}
