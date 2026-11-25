@@ -1,3 +1,4 @@
+import { getCreed, setCreed } from "../journalCreed.js";
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { trackTrades } from "../tradeTrack.js";
@@ -97,6 +98,25 @@ export function createJournalRouter(client: KiwoomClient): Router {
     try {
       const date = String(req.query.date ?? "") || new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
       res.json(await prevDayReview(date));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /*
+   * **#매일읽기** (2026-11-25) — 내 원칙·매수전략·매도전략. 복기 노트 안에서 매일 읽는다.
+   * `:date` 보다 위에 둔다(아래면 `/creed` 가 날짜로 잡힌다).
+   */
+  router.get("/creed", async (_req, res, next) => {
+    try {
+      res.json(await getCreed());
+    } catch (err) {
+      next(err);
+    }
+  });
+  router.put("/creed", async (req, res, next) => {
+    try {
+      res.json(await setCreed(String((req.body as { text?: string })?.text ?? "")));
     } catch (err) {
       next(err);
     }

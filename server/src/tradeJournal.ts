@@ -312,6 +312,15 @@ export interface JournalEntry {
    */
   prevReview?: string;
 
+  /** 오늘 눈여겨본 섹터 — **산 것 말고 본 것** (2026-11-25, 벤티지 2023 목차 「관심섹터 및 이유」) */
+  watchSector?: string;
+  /** 오늘 눈여겨본 종목과 까닭 — 안 샀어도 적는다. 나중에 「봤는데 왜 안 샀나」가 복기가 된다 */
+  watchStocks?: string;
+
+  /** 시스가 적어 준 복기 (2026-11-25) — 사람 글을 덮지 않게 **따로** 둔다 */
+  aiReview?: string;
+  aiReviewAt?: string;
+
   context: DayContext | null;
 }
 

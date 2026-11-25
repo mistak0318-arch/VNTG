@@ -22901,3 +22901,55 @@ tr.gv-strong td:first-child { color: var(--text); }
   font-size: 0.72rem;
   flex: 1 1 100%;
 }
+
+/*
+  복기 노트 ─ **시스 복기**와 **#매일읽기** (2026-11-25).
+
+  시스 글은 사람 글과 **생김새를 다르게** 둔다 — 섞이면 나중에 「이건 내가 쓴 건가」가
+  헷갈린다. 왼쪽 기둥을 세워 남의 말임을 표시한다.
+*/
+.jn-ai {
+  white-space: pre-wrap;
+  font-size: 0.84rem;
+  line-height: 1.6;
+  border-left: 3px solid var(--blue);
+  padding: 7px 10px;
+  margin-top: 6px;
+  background: var(--panel-2);
+  border-radius: 0 6px 6px 0;
+}
+/*
+  #매일읽기 — 기본은 접는다. 매일 펼치는 것은 사람 몫이고, 펼쳐 둔 채로 두면
+  노트 맨 아래가 늘 길어져 「오늘 적기」가 멀어진다.
+*/
+.jn-creed {
+  margin: 10px 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--panel);
+}
+.jn-creed-h {
+  background: none;
+  border: 0;
+  color: var(--text);
+  padding: 0;
+  cursor: pointer;
+  font-size: 0.86rem;
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+.jn-creed-h em {
+  font-style: normal;
+  font-size: 0.72rem;
+}
+.jn-creed-body {
+  white-space: pre-wrap;
+  font-family: inherit;
+  font-size: 0.8rem;
+  line-height: 1.65;
+  margin: 8px 0;
+  max-height: 460px;
+  overflow-y: auto;
+}

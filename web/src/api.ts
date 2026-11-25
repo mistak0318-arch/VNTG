@@ -1679,6 +1679,10 @@ export const api = {
   journalTrack: () => getJson<TradeTrackResult>("/api/journal/track"),
   /** 11번 오늘의 주문·체결 — 로그에서 바로 (2026-09-10) */
   /** 전일 매매복기 — 어제 줄을 오늘 값으로 채점 (2026-11-25) */
+  /** #매일읽기 — 내 원칙·매수전략·매도전략 (2026-11-25) */
+  journalCreed: () => getJson<{ text: string; updatedAt: string }>("/api/journal/creed"),
+  journalCreedSave: (text: string) =>
+    putJson<{ text: string; updatedAt: string }>("/api/journal/creed", { text }),
   journalPrevReview: (date?: string) =>
     getJson<{ date: string | null; rows: PrevTradeReview[] }>(`/api/journal/prev-review${date ? `?date=${date}` : ""}`),
   journalOrders: (date?: string) =>
@@ -5955,6 +5959,12 @@ export interface JournalEntry {
   orders?: JournalOrder[];
   /** 전일 매매복기 고찰 (2026-11-25) — 채점은 기계가, 생각은 사람이 */
   prevReview?: string;
+  /** 오늘 눈여겨본 섹터·종목 — **산 것 말고 본 것** (2026-11-25) */
+  watchSector?: string;
+  watchStocks?: string;
+  /** 시스가 적어 준 복기 — 사람 글을 덮지 않게 따로 둔다 */
+  aiReview?: string;
+  aiReviewAt?: string;
   context: DayContext | null;
 }
 

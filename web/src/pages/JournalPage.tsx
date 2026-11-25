@@ -11,6 +11,7 @@ import {
   type StockSearchResult,
   type EdgeRow,
   type PrevTradeReview,
+  type DayContext,
   type JournalOrder,
   type OrderSummary,
   type Diary,
@@ -390,6 +391,97 @@ function AutoText({ minRows = 2, ...rest }: TextareaHTMLAttributes<HTMLTextAreaE
   return <textarea ref={ref} rows={minRows} onInput={fit} {...rest} />;
 }
 
+
+/**
+ * **일일복기 프롬프트** (2026-11-25) — 벤티지가 업노트에 적어 두고 손으로 옮기던 글.
+ *
+ * 4관점(시황 동기화 / 매매일지·원칙 점검 / 익일 대응 전략 검증 / 연금·ETF 배분)과
+ * 끝의 당부(「칭찬이나 감정적인 말은 빼고, 오직 팩트와 원칙에 기반해서」)를 **그대로** 옮겼다.
+ * 내가 고쳐 쓰면 그건 더 이상 그의 복기가 아니다.
+ *
+ * 그날 숫자는 이미 박제돼 있으므로 **프롬프트에 같이 실어 보낸다** — 시스가 다시 조회할
+ * 이유가 없고, 무엇보다 **그가 보던 값과 같은 값**으로 판단해야 복기가 맞물린다.
+ */
+function buildReviewPrompt(
+  f: Partial<JournalEntry>,
+  ctx: DayContext | null,
+  prev: { date: string | null; rows: PrevTradeReview[] } | null,
+  creed: string,
+): string {
+  const L: string[] = [];
+  const push = (k: string, v?: string | null) => {
+    if (v && String(v).trim()) L.push(`${k}: ${String(v).trim()}`);
+  };
+
+  L.push("[시스, 오늘 복기 노트 연동 피드백 요청]");
+  L.push("오늘 내 복기 노트를 바탕으로 아래 4가지 관점에서 냉정하고 객관적인 CIS 모드 분석을 해줘.");
+  L.push("");
+  L.push("1. 당일 핵심 시황 & 뉴스 동기화: 오늘 증시 수급(외인/기관)과 주요 뉴스/테마가 내 복기 내용과 일치하는지 체크. 내가 놓친 핵심 매매 포인트나 시장의 진짜 돈의 흐름(주도주)이 있었는지 분석");
+  L.push("2. 매매 일지 & 원칙 점검: 보유/무포지션 판단과 편출입 과정에서 '이격도 밀착 타점', '추세 준수', '손절 원칙'이 잘 지켜졌는지 평가. 뇌동매매나 복구 심리가 개입된 위험한 판단(신용, 추격매수 등)이 있었는지 경고");
+  L.push("3. 익일 대응 전략 검증: 내가 설정한 '신규 편입 예상 종목/전략'의 승률과 손익비 평가. 미장 선물, 환율, 원유 등 글로벌 변수와 연계했을 때 내일 아침 실제 유효한 진입 기준(매수 타점/손절선) 제시");
+  L.push("4. 연금/ETF 및 자산 배분 피드백: 연금 계좌 및 포트폴리오 비중 조절이 장기 추세와 잘 맞아떨어지는지 점검");
+  L.push("");
+  L.push("칭찬이나 감정적인 말은 빼고, 오직 팩트와 원칙에 기반해서 내일 매매에 바로 적용할 수 있는 구체적인 실행 지침을 줘.");
+  L.push("");
+  L.push("── 오늘 박제된 시장 ──");
+  if (ctx) {
+    if (ctx.marketSummary) L.push(`시장 신호등: ${ctx.marketLevel} ${ctx.marketScore}점 — ${ctx.marketSummary}`);
+    (ctx.indices ?? []).forEach((i: NonNullable<DayContext["indices"]>[number]) => L.push(`${i.name} ${i.close.toLocaleString("ko-KR")} ${i.rate > 0 ? "+" : ""}${i.rate}% (▲${i.up} ▼${i.down})`));
+    if (ctx.futuresQuote) L.push(`선물 ${ctx.futuresQuote.price ?? "-"} ${ctx.futuresQuote.rate ?? "-"}% · 베이시스 ${ctx.futuresQuote.basis ?? "-"}`);
+    if (ctx.investor) {
+      L.push(`수급(억) 코스피 외 ${ctx.investor.kospi.foreign} 기 ${ctx.investor.kospi.institution} 개 ${ctx.investor.kospi.individual}`);
+      L.push(`수급(억) 코스닥 외 ${ctx.investor.kosdaq.foreign} 기 ${ctx.investor.kosdaq.institution} 개 ${ctx.investor.kosdaq.individual}`);
+    }
+    if (ctx.futures) L.push(`선물 수급(억) 외 ${ctx.futures.foreign} 기 ${ctx.futures.institution} 개 ${ctx.futures.individual}`);
+    if (ctx.usRates) L.push(`미국 10년 ${ctx.usRates.y10 ?? "-"} · 30년 ${ctx.usRates.y30 ?? "-"}`);
+    if (ctx.overseas) L.push(`나스닥100선물 ${ctx.overseas.nasdaqFut ?? "-"} (${ctx.overseas.nasdaqFutRate ?? "-"}%) · VKOSPI ${ctx.overseas.vkospi ?? "-"}`);
+    if (ctx.topThemes?.length) L.push(`강한 테마: ${ctx.topThemes.map((t: { name: string; changeRate: number }) => `${t.name} ${t.changeRate.toFixed(2)}%`).join(", ")}`);
+  } else {
+    L.push("(아직 박제 전 — 저장하면 그날 시장이 함께 들어간다)");
+  }
+
+  L.push("");
+  L.push("── 내 기록 ──");
+  push("오늘", f.stance === "watch" ? "관망(안 샀다)" : f.stance === "trade" ? "매매함" : null);
+  push("본 섹터", f.watchSector);
+  push("본 종목", f.watchStocks);
+  (f.trades ?? []).forEach((t) => {
+    const bits = [`${t.kind === "buy" ? "매수" : "매도"} ${t.name} ${t.price.toLocaleString("ko-KR")}원 ${t.qty}주`];
+    if (t.stop) bits.push(`손절 ${t.stop.toLocaleString("ko-KR")}`);
+    if (t.target) bits.push(`목표 ${t.target.toLocaleString("ko-KR")}`);
+    if (t.reasons?.length) bits.push(`근거 ${t.reasons.join("·")}`);
+    if (t.note) bits.push(`"${t.note}"`);
+    L.push(bits.join(" · "));
+  });
+  push("무엇을 했나", f.what);
+  push("왜 그렇게 판단했나", f.why);
+  push("규칙", f.followedRules === true ? "지켰다" : f.followedRules === false ? `어겼다 — ${f.brokenRule ?? ""}` : null);
+  push("실수", (f.mistakes ?? []).join(", "));
+  push("상태", f.mood);
+  push("배운 것", f.lesson);
+  push("내일 할 것", f.tomorrow);
+
+  if (prev?.date && prev.rows.length > 0) {
+    L.push("");
+    L.push(`── 전일(${prev.date}) 매매가 지금 ──`);
+    prev.rows.forEach((r) =>
+      L.push(
+        `${r.kind === "buy" ? "매수" : "매도"} ${r.name} ${r.price.toLocaleString("ko-KR")}` +
+          (r.now !== null ? ` → ${r.now.toLocaleString("ko-KR")} (${r.change !== null ? `${r.change > 0 ? "+" : ""}${r.change}%` : "?"})` : " → 지금 값 없음") +
+          (r.hitStop ? " · 손절선 닿음" : r.hitTarget ? " · 목표가 닿음" : ""),
+      ),
+    );
+    push("전일 복기 고찰", f.prevReview);
+  }
+
+  if (creed.trim()) {
+    L.push("");
+    L.push("── 내 원칙(이 기준으로 점검해라) ──");
+    L.push(creed.trim());
+  }
+  return L.join("\n");
+}
+
 export function JournalPage({
   onSelectStock,
 }: {
@@ -409,6 +501,31 @@ export function JournalPage({
    * 캐시에서 읽으므로 조회가 안 는다. 사람이 적을 것은 그걸 보고 드는 생각뿐이다.
    */
   const [prevRev, setPrevRev] = useState<{ date: string | null; rows: PrevTradeReview[] } | null>(null);
+
+  /*
+   * **시스에게 복기 받기** (2026-11-25). 벤티지의 업노트에는 `[일일복기 프롬프트]` 가 있었다 —
+   * 4관점(시황 동기화 / 원칙 점검 / 익일 전략 검증 / 연금·ETF 배분)으로 AI 에게 시키는 글.
+   *
+   * 그걸 **손으로 옮겨 붙이고 있었다.** 그날 숫자와 글이 이미 이 화면에 다 모여 있으니
+   * 버튼 하나면 된다. 답은 `aiReview` 로 따로 저장한다 — **사람 글을 덮지 않는다.**
+   */
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiErr, setAiErr] = useState<string | null>(null);
+
+  /** #매일읽기 — 서버에 저장된 내 원칙 */
+  const [creed, setCreed] = useState<{ text: string; updatedAt: string } | null>(null);
+  const [creedOpen, setCreedOpen] = useState(false);
+  const [creedEdit, setCreedEdit] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    api
+      .journalCreed()
+      .then((c) => alive && setCreed(c))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
   useEffect(() => {
     let alive = true;
     api
@@ -1083,6 +1200,40 @@ export function JournalPage({
           </div>
         </div>
 
+        {/*
+          **관심섹터·관심종목** (2026-11-25 — 벤티지 2023 블로그 목차의 「관심섹터 및 이유 /
+          관심종목 및 이유」). 산 것만 적으면 **「봤는데 안 산 것」이 사라진다** — 나중에
+          「그때 왜 안 샀나」를 물을 수 없다. 노트가 이미 쉰 날(`stance`)은 세고 있었는데,
+          「무엇을 눈여겨봤나」는 빠져 있었다.
+
+          자리가 「오늘 무엇을 했나」보다 **앞**인 것은 순서가 그렇기 때문이다 — 보고 나서 한다.
+        */}
+        <label className="jn-field">
+          <span className="jn-label">
+            오늘 본 섹터 <em className="jn-hint">산 것 말고 눈여겨본 것</em>
+          </span>
+          <AutoText
+            className="jn-text"
+            minRows={1}
+            placeholder="예: 반도체 소부장 — 전공정이 먼저 가고 후공정이 따라오는 모양"
+            value={form.watchSector ?? ""}
+            onChange={(e) => setForm({ ...form, watchSector: e.target.value })}
+          />
+        </label>
+
+        <label className="jn-field">
+          <span className="jn-label">
+            오늘 본 종목 <em className="jn-hint">안 샀어도 적는다 — 나중에 「왜 안 샀나」가 복기가 된다</em>
+          </span>
+          <AutoText
+            className="jn-text"
+            minRows={1}
+            placeholder="예: 한화오션 — 수급은 좋은데 이미 3일 급등이라 걸렀다"
+            value={form.watchStocks ?? ""}
+            onChange={(e) => setForm({ ...form, watchStocks: e.target.value })}
+          />
+        </label>
+
         <label className="jn-field">
           <span className="jn-label">오늘 무엇을 했나</span>
           <AutoText
@@ -1249,6 +1400,93 @@ export function JournalPage({
             onChange={(e) => setForm({ ...form, tomorrow: e.target.value })}
           />
         </label>
+
+        {/*
+          **시스에게 복기 받기** — 업노트의 `[일일복기 프롬프트]` 를 버튼으로.
+          보낼 거리가 있어야 뜻이 있으므로, 오늘 적은 게 아무것도 없으면 누르지 못하게 한다.
+        */}
+        <div className="jn-field">
+          <span className="jn-label">
+            시스 복기 <em className="jn-hint">오늘 적은 것 + 박제된 시장을 그대로 넘긴다</em>
+          </span>
+          <div className="filter-row" style={{ margin: 0 }}>
+            <button
+              className="filter-btn"
+              disabled={aiBusy || !(form.what || form.why || (form.trades ?? []).length > 0)}
+              onClick={() => {
+                setAiBusy(true);
+                setAiErr(null);
+                void api
+                  .sysAsk(buildReviewPrompt(form, ctx, prevRev, creed?.text ?? ""), { mode: "ai", noClarify: true })
+                  .then((r) => {
+                    /* `SysAnswer` 는 `{ pack, ai }` — 글은 `ai.text` 다. 없으면 안 덮는다 */
+                    const text = r.ai?.text?.trim();
+                    if (!text) {
+                      setAiErr("시스가 답을 못 적었습니다 (AI 모드가 꺼져 있거나 키가 없을 수 있습니다)");
+                      return;
+                    }
+                    setForm((f) => ({ ...f, aiReview: text, aiReviewAt: new Date().toISOString() }));
+                  })
+                  .catch((e: Error) => setAiErr(e.message))
+                  .finally(() => setAiBusy(false));
+              }}
+            >
+              {aiBusy ? "시스가 읽는 중…" : "시스에게 복기 받기"}
+            </button>
+            {form.aiReviewAt && <span className="pt-n">{new Date(form.aiReviewAt).toLocaleString("ko-KR")}</span>}
+          </div>
+          {aiErr && <div className="error-banner">{aiErr}</div>}
+          {form.aiReview && <div className="jn-ai">{form.aiReview}</div>}
+        </div>
+
+        {/*
+          **#매일읽기** — 벤티지의 업노트 맨 아래에 늘 붙어 있던 그것.
+          가이드 메뉴로 빼 두면 안 읽는다. **복기하는 자리에서** 원칙을 다시 읽어야
+          「오늘 이걸 지켰나」가 이어진다. 기본은 접어 둔다 — 매일 펼치는 건 네 몫이다.
+        */}
+        {creed && (
+          <div className="jn-creed">
+            <button className="jn-creed-h" onClick={() => setCreedOpen((v) => !v)}>
+              {creedOpen ? "▾" : "▸"} <b>#매일읽기</b> <em className="pt-n">내 원칙 · 매수전략 · 매도전략</em>
+            </button>
+            {creedOpen && (
+              <>
+                {creedEdit === null ? (
+                  <>
+                    <pre className="jn-creed-body">{creed.text}</pre>
+                    <button className="filter-btn" onClick={() => setCreedEdit(creed.text)}>
+                      고치기
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <AutoText className="jn-text" minRows={8} value={creedEdit} onChange={(e) => setCreedEdit(e.target.value)} />
+                    <div className="filter-row" style={{ margin: 0 }}>
+                      <button
+                        className="filter-btn active"
+                        onClick={() => {
+                          const t = creedEdit;
+                          void api
+                            .journalCreedSave(t)
+                            .then((c) => {
+                              setCreed(c);
+                              setCreedEdit(null);
+                            })
+                            .catch(() => undefined);
+                        }}
+                      >
+                        저장
+                      </button>
+                      <button className="filter-btn" onClick={() => setCreedEdit(null)}>
+                        취소
+                      </button>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        )}
 
         {/*
           예측 종목 (2026-08-27) — **판단만 걸린 것.**
