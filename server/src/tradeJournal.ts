@@ -10,6 +10,10 @@ import { evaluateSignal } from "./signalLight.js";
 import { investorDailySeries } from "./superSignal.js";
 import { futuresFlow, type FuturesFlowDay } from "./naverFuturesFlow.js";
 import { ordersOfDay, type JournalOrder } from "./journalOrders.js";
+/* 그날 지수·수급·해외·금리 — 대시보드가 이미 받아 둔 섹션 캐시를 그대로 박제한다 (2026-11-25) */
+import { getSection, type IndexCard, type MarketFlow } from "./marketOverview.js";
+import type { GlobalQuote } from "./globalMarket.js";
+import type { UsMajorResult } from "./usMajor.js";
 
 /**
  * 복기 노트 — 하루를 적고, 쌓아서 나를 고친다.
@@ -133,6 +137,30 @@ export interface DayContext {
   /** 그날 내 테마 상위·하위 */
   topThemes: { name: string; changeRate: number }[];
   bottomThemes: { name: string; changeRate: number }[];
+
+  /*
+   * ── 아래는 **그날 시장을 통째로 박제** (2026-11-25) ──────────────────────
+   *
+   * 벤티지가 2023년 블로그와 2026년 업노트에서 **매일 손으로 캡처해 붙이던** 것들이다.
+   * 「[지수 현황] 투자자매매동향 표 · 미국 10년/30년 · 지수 등락」이 그 자리였다.
+   *
+   * 그 숫자는 **이미 우리 서버에 있다** — 대시보드가 받아 둔 섹션 캐시를 저장 시점에
+   * 한 벌 떠 두면 된다. 손으로 적으면 기억으로 적게 되고(위 주석), 캡처로 붙이면
+   * 나중에 **셀 수가 없다.** 숫자로 박아야 「외국인이 산 날의 내 성적」이 나온다.
+   *
+   * ⚠️ 모두 **옵션**이다. 그날 섹션이 비어 있었으면 그냥 없는 것이고, 옛 기록에는
+   * 아예 안 들어 있다 — 없는 것을 0 으로 적으면 나중에 평균이 틀어진다.
+   */
+  /** 코스피·코스닥·코스피200 종가와 등락·폭 */
+  indices?: { name: string; close: number; rate: number; up: number; flat: number; down: number }[];
+  /** 코스피200 선물 — 베이시스가 음수면 백워데이션 */
+  futuresQuote?: { name: string; price: number | null; rate: number | null; basis: number | null; openInterest: number | null } | null;
+  /** 현물 투자자 수급(억원) — 선물(`futures`)과 **다른 값**이다. 둘을 섞지 말 것 */
+  investor?: { kospi: { foreign: number; institution: number; individual: number }; kosdaq: { foreign: number; institution: number; individual: number }; asOf?: string } | null;
+  /** 미국 장기금리(%) — 업노트 [지수 현황] 밑에 늘 적던 줄 */
+  usRates?: { y10: number | null; y30: number | null } | null;
+  /** 밤에 움직이는 것 — 나스닥100 선물과 변동성 */
+  overseas?: { nasdaqFut: number | null; nasdaqFutRate: number | null; vkospi: number | null; vix: number | null } | null;
 }
 
 /**
@@ -273,7 +301,74 @@ export interface JournalEntry {
   /** 내일 할 것 */
   tomorrow: string;
 
+  /**
+   * **전일 매매복기 고찰** (2026-11-25 — 벤티지의 2023 블로그 목차 「전일 매매복기 ▸ 고찰」).
+   *
+   * 어제 산 것이 오늘 어땠는지는 **기계가 채점한다**(`prevDayReview`). 사람이 적을 것은
+   * 그 결과를 보고 드는 생각 한 줄이다 — 「왜 그랬나」는 어제 적었고, 「그래서 맞았나」는
+   * 오늘에야 알 수 있다. 매수 순간의 판단은 다음 날에야 채점되기 때문이다.
+   *
+   * 조사한 어느 영문 템플릿에도 이 칸이 없었다. 벤티지가 직접 하던 것이다.
+   */
+  prevReview?: string;
+
   context: DayContext | null;
+}
+
+/**
+ * **어제 매매가 오늘 어떻게 됐나** (2026-11-25).
+ *
+ * 값은 **전종목 스냅샷 캐시**에서 읽는다 — 조회가 0 이다. 캐시에 없으면(장 밖·서버를 막
+ * 켰을 때) 그 줄은 `now` 가 null 로 남는다. **모르는 것을 0 으로 적지 않는다.**
+ *
+ * 손절선·목표가를 적어 뒀으면 **닿았는지**까지 본다. 그게 「계획대로 흘렀나」의 답이고,
+ * 한국 자료들이 공통으로 말하는 「매수 시점에 매도 기준을 적어 두라」가 여기서 값을 한다.
+ */
+export interface PrevTradeReview {
+  date: string;
+  kind: "buy" | "sell";
+  code: string;
+  name: string;
+  /** 그날 적은 가격 */
+  price: number;
+  note: string;
+  /** 지금(또는 마지막) 값 — 못 읽었으면 null */
+  now: number | null;
+  /** 그날 가격 대비 % — `now` 가 없으면 null */
+  change: number | null;
+  stop?: number;
+  target?: number;
+  /** 손절선에 닿았나 — 적어 뒀을 때만 */
+  hitStop?: boolean;
+  /** 목표가에 닿았나 */
+  hitTarget?: boolean;
+}
+
+export async function prevDayReview(date: string): Promise<{ date: string | null; rows: PrevTradeReview[] }> {
+  const rows = await readAll();
+  /* **직전 기록일**이지 어제가 아니다 — 주말·휴일·안 적은 날이 있다 */
+  const prev = rows.filter((r) => r.date < date && r.trades.length > 0).pop();
+  if (!prev) return { date: null, rows: [] };
+  const snap = peekSnapshot();
+  return {
+    date: prev.date,
+    rows: prev.trades.map((t) => {
+      const now = snap?.byCode.get(t.code)?.price ?? null;
+      const change = now && now > 0 && t.price > 0 ? Math.round(((now - t.price) / t.price) * 1000) / 10 : null;
+      return {
+        date: prev.date,
+        kind: t.kind,
+        code: t.code,
+        name: t.name,
+        price: t.price,
+        note: t.note,
+        now: now && now > 0 ? now : null,
+        change,
+        ...(t.stop ? { stop: t.stop, hitStop: now !== null && now > 0 ? now <= t.stop : undefined } : {}),
+        ...(t.target ? { target: t.target, hitTarget: now !== null && now > 0 ? now >= t.target : undefined } : {}),
+      };
+    }),
+  };
 }
 
 async function readAll(): Promise<JournalEntry[]> {
@@ -411,11 +506,20 @@ function kstDate(d = new Date()): string {
  * 무엇보다 **손으로 적으면 기억으로 적게 된다** — 그러면 복기의 근거가 흔들린다.
  */
 export async function captureContext(client: KiwoomClient, date: string): Promise<DayContext | null> {
-  const [market, themes, futDays] = await Promise.all([
+  const [market, themes, futDays, idxSec, flowSec, globSec, usSec] = await Promise.all([
     evaluateMarket(client).catch(() => null),
     listThemes().catch(() => []),
     /* 선물 수급 — 네이버 캐시(10분)라 조회 부담이 없다. 최근 하루만 쓴다 */
     futuresFlow(3).catch(() => [] as FuturesFlowDay[]),
+    /*
+     * 그날 시장 박제용 넷 (2026-11-25). 전부 **대시보드가 이미 받아 둔 섹션 캐시**라
+     * 신선하면 조회가 0 이고, 만료됐을 때만 한 번 받는다. 복기 저장은 하루 몇 번이다.
+     * 하나가 자빠져도 나머지는 박힌다 — `catch` 로 각자 끊어 둔다.
+     */
+    getSection("indices", client).catch(() => null),
+    getSection("flow", client).catch(() => null),
+    getSection("global", client).catch(() => null),
+    getSection("usMajor", client).catch(() => null),
   ]);
   const snap = peekSnapshot();
   const fut = futDays.length > 0 ? futDays[futDays.length - 1] : null;
@@ -446,7 +550,89 @@ export async function captureContext(client: KiwoomClient, date: string): Promis
       : null,
     topThemes: rated.slice(0, 3),
     bottomThemes: rated.slice(-3).reverse(),
+    ...marketOfDay(idxSec, flowSec, globSec, usSec),
   };
+}
+
+/** 소수 자리를 잘라 박는다 — 야후 등락률이 `-1.9639659803043867` 로 오는 자리가 있다 */
+function rd(v: number | null | undefined, digits = 2): number | null {
+  if (v === null || v === undefined || !Number.isFinite(Number(v))) return null;
+  const p = 10 ** digits;
+  return Math.round(Number(v) * p) / p;
+}
+
+/**
+ * **그날 시장을 숫자로 박는다** (2026-11-25).
+ *
+ * 벤티지의 업노트 [지수 현황] 표가 그대로 여기 들어온다 — 지수 셋, 선물과 베이시스,
+ * 현물 투자자 수급, 미국 장기금리, 밤에 움직이는 것.
+ *
+ * ⚠️ **현물 수급(`investor`)과 선물 수급(`futures`)은 다른 값이다.** 업노트 표에서도
+ * 칸이 갈려 있었다 — 한 칸에 섞으면 「외국인이 샀다」가 어느 쪽인지 알 수 없게 된다.
+ */
+function marketOfDay(
+  idxSec: { data: unknown } | null,
+  flowSec: { data: unknown } | null,
+  globSec: { data: unknown } | null,
+  usSec: { data: unknown } | null,
+): Partial<DayContext> {
+  const out: Partial<DayContext> = {};
+
+  const cards = (idxSec?.data as IndexCard[] | null) ?? [];
+  const want = [
+    { code: "001", name: "코스피" },
+    { code: "101", name: "코스닥" },
+    { code: "201", name: "코스피200" },
+  ];
+  const rows = want
+    .map((w) => {
+      const c = cards.find((x) => x.code === w.code);
+      return c ? { name: w.name, close: rd(c.price) ?? 0, rate: rd(c.changeRate) ?? 0, up: c.rising, flat: c.flat, down: c.falling } : null;
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
+  if (rows.length > 0) out.indices = rows;
+
+  const k200 = cards.find((c) => c.futures);
+  const f = k200?.futures ?? null;
+  if (f) {
+    out.futuresQuote = {
+      name: f.name,
+      price: rd(f.price),
+      rate: rd(f.changeRate),
+      basis: rd(f.basis),
+      openInterest: f.openInterest ?? null,
+    };
+  }
+
+  const mf = (flowSec?.data as MarketFlow | null) ?? null;
+  if (mf) {
+    out.investor = {
+      kospi: { foreign: Math.round(mf.kospi.foreign), institution: Math.round(mf.kospi.institution), individual: Math.round(mf.kospi.individual) },
+      kosdaq: { foreign: Math.round(mf.kosdaq.foreign), institution: Math.round(mf.kosdaq.institution), individual: Math.round(mf.kosdaq.individual) },
+      ...(mf.asOf ? { asOf: mf.asOf } : {}),
+    };
+  }
+
+  const um = (usSec?.data as UsMajorResult | null) ?? null;
+  const uRow = (key: string) => (um?.rows ?? []).find((r) => r.key === key) ?? null;
+  const y10 = uRow("tnx");
+  const y30 = uRow("tyx");
+  if (y10 || y30) out.usRates = { y10: rd(y10?.price, 3), y30: rd(y30?.price, 3) };
+
+  const gq = (globSec?.data as GlobalQuote[] | null) ?? [];
+  const g = (key: string) => gq.find((x) => x.key === key) ?? null;
+  const nq = g("nqF");
+  const vk = g("vkospi");
+  const vx = g("vix");
+  if (nq || vk || vx) {
+    out.overseas = {
+      nasdaqFut: rd(nq?.price),
+      nasdaqFutRate: rd(nq?.changeRate),
+      vkospi: rd(vk?.price),
+      vix: rd(vx?.price),
+    };
+  }
+  return out;
 }
 
 /**

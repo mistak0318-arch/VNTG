@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type TextareaHTMLAttributes } from "react";
 import {
   api,
   fmtNum,
@@ -10,6 +10,7 @@ import {
   type PickStats,
   type StockSearchResult,
   type EdgeRow,
+  type PrevTradeReview,
   type JournalOrder,
   type OrderSummary,
   type Diary,
@@ -352,6 +353,43 @@ function PickReview({
   );
 }
 
+
+/**
+ * **적은 만큼 보이는 칸** (2026-11-25 — 벤티지: "복기노트에 적은 글들이 칸이 좁아서 안보여.
+ * 저장하고 나면 인풋창 말고 전체 글로 보여줄 수는 없나?").
+ *
+ * `rows={2}` 고정이라 **세 줄째부터는 적어 놓고도 못 읽었다.** 복기는 쓰면서 위를 다시
+ * 읽는 글이라, 읽으려고 칸 안에서 스크롤을 해야 하면 그 자리에서 생각이 끊긴다.
+ *
+ * ## 「저장하면 전문 · 수정 누르면 입력창」을 안 쓴 까닭
+ *
+ * 벤티지가 그 방법도 말했는데, 그러면 **상태가 하나 더 생긴다** — 저장 안 하고 나가면
+ * 어떻게 되나, 지금이 보는 중인가 쓰는 중인가, 고치려면 탭을 한 번 더. 폰에서 쓰는
+ * 화면에 모드 전환을 두는 값이 비싸다.
+ *
+ * **칸이 내용만큼 자라면 그 물음이 통째로 사라진다.** 늘 전문이 보이고 늘 고칠 수 있다.
+ *
+ * 최대 높이를 둔 것은 길게 쓴 날 한 칸이 화면을 다 먹지 않게 하려는 것이다 — 그때만
+ * 예전처럼 안쪽 스크롤이 생긴다.
+ */
+const JN_MAX_H = 420;
+
+function AutoText({ minRows = 2, ...rest }: TextareaHTMLAttributes<HTMLTextAreaElement> & { minRows?: number }) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const fit = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    /* 줄였다 늘릴 때를 위해 **먼저 auto 로 풀어야** scrollHeight 가 줄어든 높이를 준다 */
+    el.style.height = "auto";
+    const want = el.scrollHeight + 2;
+    el.style.height = `${Math.min(want, JN_MAX_H)}px`;
+    el.style.overflowY = want > JN_MAX_H ? "auto" : "hidden";
+  }, []);
+  /* 값이 밖에서 바뀔 때(불러오기·초기화)도 맞춰야 한다 — 타이핑만 보면 안 된다 */
+  useEffect(fit, [fit, rest.value]);
+  return <textarea ref={ref} rows={minRows} onInput={fit} {...rest} />;
+}
+
 export function JournalPage({
   onSelectStock,
 }: {
@@ -363,6 +401,25 @@ export function JournalPage({
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [date, setDate] = useState(today());
+
+  /*
+   * **전일 매매복기** (2026-11-25 — 벤티지 2023 목차의 「전일 매매복기」).
+   *
+   * 어제 산 것이 오늘 어떻게 됐는지는 **기계가 채점한다**. 값은 서버의 전종목 스냅샷
+   * 캐시에서 읽으므로 조회가 안 는다. 사람이 적을 것은 그걸 보고 드는 생각뿐이다.
+   */
+  const [prevRev, setPrevRev] = useState<{ date: string | null; rows: PrevTradeReview[] } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    api
+      .journalPrevReview(date)
+      .then((r) => alive && setPrevRev(r))
+      .catch(() => alive && setPrevRev(null));
+    return () => {
+      alive = false;
+    };
+  }, [date]);
+
   /** 달력이 보고 있는 달 — 날짜와 따로 논다(지난달을 넘겨봐도 고른 날은 그대로) */
   const [calCursor, setCalCursor] = useState(() => new Date());
 
@@ -700,7 +757,100 @@ export function JournalPage({
           </div>
         ) : (
           <div className="page-note">
-            저장하면 그날의 <b>시장 신호등·시장 폭·내 테마</b>가 자동으로 함께 박제됩니다.
+            저장하면 그날의 <b>지수·수급·선물·금리·테마</b>가 자동으로 함께 박제됩니다.
+          </div>
+        )}
+
+        {/*
+          **[지수 현황]** (2026-11-25 — 벤티지의 업노트/블로그에서 매일 손으로 캡처해
+          붙이던 표). 이제 저장할 때 숫자로 박히므로 캡처가 필요 없고, 무엇보다
+          **나중에 셀 수 있다** — 「외국인이 산 날의 내 성적」 같은 물음이 그때 가능해진다.
+
+          ⚠️ 현물 수급(억원)과 선물 수급(계약)을 **다른 줄**로 둔다. 업노트 표에서도
+          칸이 갈려 있었다 — 한 줄에 섞으면 「외국인이 샀다」가 어느 쪽인지 사라진다.
+        */}
+        {ctx && (ctx.indices || ctx.investor || ctx.usRates) && (
+          <div className="jn-mkt">
+            <div className="jn-mkt-h">[지수 현황] <em className="pt-n">저장할 때 박제된 값</em></div>
+
+            {ctx.indices && ctx.indices.length > 0 && (
+              <div className="jn-mkt-rows">
+                {ctx.indices.map((i) => (
+                  <div className="jn-mkt-row" key={i.name}>
+                    <em>{i.name}</em>
+                    <b className="num">{i.close.toLocaleString("ko-KR")}</b>
+                    <span className={`num ${i.rate > 0 ? "positive" : i.rate < 0 ? "negative" : ""}`}>{pct(i.rate)}</span>
+                    <span className="pt-n jn-mkt-br">▲{i.up} ▼{i.down}</span>
+                  </div>
+                ))}
+                {ctx.futuresQuote && (
+                  <div className="jn-mkt-row">
+                    <em>선물</em>
+                    <b className="num">{ctx.futuresQuote.price?.toLocaleString("ko-KR") ?? "-"}</b>
+                    <span className={`num ${(ctx.futuresQuote.rate ?? 0) > 0 ? "positive" : (ctx.futuresQuote.rate ?? 0) < 0 ? "negative" : ""}`}>
+                      {ctx.futuresQuote.rate === null ? "-" : pct(ctx.futuresQuote.rate)}
+                    </span>
+                    <span className="pt-n jn-mkt-br">
+                      베이시스 {ctx.futuresQuote.basis === null ? "-" : ctx.futuresQuote.basis.toFixed(2)}
+                      {ctx.futuresQuote.basis !== null && ctx.futuresQuote.basis < 0 ? " (백워데이션)" : ""}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {(ctx.investor || ctx.futures) && (
+              <table className="jn-mkt-tbl">
+                <thead>
+                  <tr>
+                    <th />
+                    <th>외국인</th>
+                    <th>기관</th>
+                    <th>개인</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ctx.investor && (
+                    <>
+                      <tr>
+                        <th>코스피 <em className="pt-n">억</em></th>
+                        {[ctx.investor.kospi.foreign, ctx.investor.kospi.institution, ctx.investor.kospi.individual].map((v, k) => (
+                          <td key={k} className={`num ${v > 0 ? "positive" : v < 0 ? "negative" : ""}`}>{v.toLocaleString("ko-KR")}</td>
+                        ))}
+                      </tr>
+                      <tr>
+                        <th>코스닥 <em className="pt-n">억</em></th>
+                        {[ctx.investor.kosdaq.foreign, ctx.investor.kosdaq.institution, ctx.investor.kosdaq.individual].map((v, k) => (
+                          <td key={k} className={`num ${v > 0 ? "positive" : v < 0 ? "negative" : ""}`}>{v.toLocaleString("ko-KR")}</td>
+                        ))}
+                      </tr>
+                    </>
+                  )}
+                  {ctx.futures && (
+                    <tr>
+                      <th>선물 <em className="pt-n">억</em></th>
+                      {[ctx.futures.foreign, ctx.futures.institution, ctx.futures.individual].map((v, k) => (
+                        <td key={k} className={`num ${v > 0 ? "positive" : v < 0 ? "negative" : ""}`}>{v.toLocaleString("ko-KR")}</td>
+                      ))}
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            )}
+
+            <div className="jn-mkt-foot pt-n">
+              {ctx.usRates && (
+                <span>미국 10년 {ctx.usRates.y10 ?? "-"} · 30년 {ctx.usRates.y30 ?? "-"}</span>
+              )}
+              {ctx.overseas && (
+                <span>
+                  나스닥100선물 {ctx.overseas.nasdaqFut?.toLocaleString("ko-KR") ?? "-"}
+                  {ctx.overseas.nasdaqFutRate !== null && ctx.overseas.nasdaqFutRate !== undefined ? ` (${pct(ctx.overseas.nasdaqFutRate)})` : ""}
+                  {ctx.overseas.vkospi !== null && ctx.overseas.vkospi !== undefined ? ` · VKOSPI ${ctx.overseas.vkospi}` : ""}
+                </span>
+              )}
+              {ctx.investor?.asOf && <span>수급 {ctx.investor.asOf} 기준</span>}
+            </div>
           </div>
         )}
 
@@ -817,8 +967,14 @@ export function JournalPage({
                 <button className="row-del-btn" onClick={() => removeTrade(t.id)} title="삭제">
                   ✕
                 </button>
-                <input
-                  className="pt-input wide"
+                {/*
+                  매매 메모도 같은 칸이다 (2026-11-25). 한 줄짜리 `input` 이라 길게 쓰면
+                  **가로로 밀려** 앞부분이 안 보였다 — 스크린샷에서 "ㄹ 예상했다. 이 정도면
+                  바닥이라고…" 처럼 머리가 잘려 있었다. 한 줄로 시작하되 길어지면 늘어난다.
+                */}
+                <AutoText
+                  className="pt-input wide jn-note"
+                  minRows={1}
                   placeholder={t.kind === "buy" ? "왜 샀나 — 한 줄" : "왜 팔았나 — 한 줄"}
                   value={t.note}
                   onChange={(e) => patchTrade(t.id, { note: e.target.value })}
@@ -929,9 +1085,9 @@ export function JournalPage({
 
         <label className="jn-field">
           <span className="jn-label">오늘 무엇을 했나</span>
-          <textarea
+          <AutoText
             className="jn-text"
-            rows={2}
+            minRows={2}
             placeholder="샀다/팔았다/아무것도 안 했다 — 사실만"
             value={form.what ?? ""}
             onChange={(e) => setForm({ ...form, what: e.target.value })}
@@ -940,9 +1096,9 @@ export function JournalPage({
 
         <label className="jn-field">
           <span className="jn-label">왜 그렇게 판단했나</span>
-          <textarea
+          <AutoText
             className="jn-text"
-            rows={2}
+            minRows={2}
             placeholder="그때 무엇을 보고 그렇게 생각했는지 — 나중에 이 문장이 맞았는지 본다"
             value={form.why ?? ""}
             onChange={(e) => setForm({ ...form, why: e.target.value })}
@@ -1025,20 +1181,69 @@ export function JournalPage({
           <span className="jn-label">
             오늘 배운 것 <em className="jn-hint">이게 다음 달의 나를 바꿉니다</em>
           </span>
-          <textarea
+          <AutoText
             className="jn-text"
-            rows={3}
+            minRows={3}
             placeholder="예: 시장 신호등이 빨간 날엔 정배열이어도 안 밀린 종목이 없었다"
             value={form.lesson ?? ""}
             onChange={(e) => setForm({ ...form, lesson: e.target.value })}
           />
         </label>
 
+        {/*
+          **전일 매매복기** (2026-11-25). 벤티지의 2023 블로그 목차에 있던 자리인데
+          영문 템플릿 어디에도 없던 것이다 — **매수 순간의 판단은 다음 날에야 채점된다.**
+          우리는 「예측」은 채점하면서 정작 실제 매매는 안 하고 있었다.
+
+          채점은 기계가 한다(그날 적은 값 → 지금 값). 손절·목표를 적어 뒀으면 닿았는지까지.
+          사람이 적을 것은 그걸 보고 드는 생각 한 줄뿐이다.
+        */}
+        {prevRev && prevRev.date && prevRev.rows.length > 0 && (
+          <div className="jn-field">
+            <span className="jn-label">
+              전일 매매복기 <em className="jn-hint">{prevRev.date} 에 적은 매매가 지금 어떤가</em>
+            </span>
+            <div className="jn-prev">
+              {prevRev.rows.map((r) => (
+                <div className="jn-prev-row" key={`${r.kind}${r.code}${r.price}`}>
+                  <em className={`jn-prev-k ${r.kind}`}>{r.kind === "buy" ? "매수" : "매도"}</em>
+                  <b className="jn-prev-n">{r.name}</b>
+                  <span className="num jn-prev-p">
+                    {r.price.toLocaleString("ko-KR")}
+                    {r.now !== null ? ` → ${r.now.toLocaleString("ko-KR")}` : ""}
+                  </span>
+                  {r.change === null ? (
+                    <span className="pt-n jn-prev-c">지금 값 없음</span>
+                  ) : (
+                    <span className={`num jn-prev-c ${r.change > 0 ? "positive" : r.change < 0 ? "negative" : ""}`}>
+                      {r.change > 0 ? "+" : ""}
+                      {r.change.toFixed(1)}%
+                      {/* 산 것이 올랐으면 잘한 것, **판 것이 올랐으면 아쉬운 것** — 방향이 반대다 */}
+                      <small className="pt-n">{r.kind === "buy" ? (r.change > 0 ? " 들고 있었으면" : " 물렸다면") : r.change > 0 ? " 판 뒤 더 올랐다" : " 잘 팔았다"}</small>
+                    </span>
+                  )}
+                  {(r.hitStop || r.hitTarget) && (
+                    <span className={`jn-prev-hit ${r.hitStop ? "stop" : "target"}`}>{r.hitStop ? "손절선 닿음" : "목표가 닿음"}</span>
+                  )}
+                  {r.note && <span className="jn-prev-note pt-n">{r.note}</span>}
+                </div>
+              ))}
+            </div>
+            <AutoText
+              className="jn-text"
+              minRows={2}
+              placeholder="어제 판단이 맞았나 — 틀렸으면 무엇을 잘못 봤나"
+              value={form.prevReview ?? ""}
+              onChange={(e) => setForm({ ...form, prevReview: e.target.value })}
+            />
+          </div>
+        )}
+
         <label className="jn-field">
           <span className="jn-label">내일 할 것</span>
-          <textarea
+          <AutoText
             className="jn-text"
-            rows={3}
+            minRows={3}
             placeholder="예: 개장 후 외국인이 전기전자 순매수 이어가는지 확인"
             value={form.tomorrow ?? ""}
             onChange={(e) => setForm({ ...form, tomorrow: e.target.value })}

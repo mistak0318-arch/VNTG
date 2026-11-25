@@ -1678,6 +1678,9 @@ export const api = {
   /** 내 판단 추적 — 종목마다 일봉을 받아 몇 십 초 걸릴 수 있다 */
   journalTrack: () => getJson<TradeTrackResult>("/api/journal/track"),
   /** 11번 오늘의 주문·체결 — 로그에서 바로 (2026-09-10) */
+  /** 전일 매매복기 — 어제 줄을 오늘 값으로 채점 (2026-11-25) */
+  journalPrevReview: (date?: string) =>
+    getJson<{ date: string | null; rows: PrevTradeReview[] }>(`/api/journal/prev-review${date ? `?date=${date}` : ""}`),
   journalOrders: (date?: string) =>
     getJson<{ date: string; rows: JournalOrder[]; summary: OrderSummary; diary: Diary | null }>(`/api/journal/orders${date ? `?date=${date}` : ""}`),
   journalOrdersSync: (date?: string) =>
@@ -5851,6 +5854,17 @@ export interface DayContext {
   bottomThemes: { name: string; changeRate: number }[];
   /** 그날 국내 선물 순매수(계약) — 2026-08-27 박제 */
   futures?: { foreign: number; institution: number; individual: number } | null;
+
+  /*
+   * **그날 시장 통째로** (2026-11-25) — 벤티지가 블로그·업노트에서 매일 손으로 캡처해
+   * 붙이던 [지수 현황] 표가 이 자리다. 모두 옵션이라 옛 기록에는 없다.
+   */
+  indices?: { name: string; close: number; rate: number; up: number; flat: number; down: number }[];
+  futuresQuote?: { name: string; price: number | null; rate: number | null; basis: number | null; openInterest: number | null } | null;
+  /** 현물 수급(억원) — 위 `futures`(선물, 계약)와 **다른 값**이다 */
+  investor?: { kospi: { foreign: number; institution: number; individual: number }; kosdaq: { foreign: number; institution: number; individual: number }; asOf?: string } | null;
+  usRates?: { y10: number | null; y30: number | null } | null;
+  overseas?: { nasdaqFut: number | null; nasdaqFutRate: number | null; vkospi: number | null; vix: number | null } | null;
 }
 
 /** 예측 종목 (2026-08-27) — 내일 오를까 내릴까. 다음 거래일 종가로 채점된다 */
@@ -5939,10 +5953,29 @@ export interface JournalEntry {
   picks?: JournalPick[];
   /** 11번 — 주문 메뉴에서 오간 것(자동) */
   orders?: JournalOrder[];
+  /** 전일 매매복기 고찰 (2026-11-25) — 채점은 기계가, 생각은 사람이 */
+  prevReview?: string;
   context: DayContext | null;
 }
 
 /** 11번 한 줄 — 서버 journalOrders.ts 와 같은 모양 */
+/** 어제 매매가 오늘 어떻게 됐나 (2026-11-25) */
+export interface PrevTradeReview {
+  date: string;
+  kind: "buy" | "sell";
+  code: string;
+  name: string;
+  price: number;
+  note: string;
+  /** 못 읽었으면 null — 0 으로 적지 않는다 */
+  now: number | null;
+  change: number | null;
+  stop?: number;
+  target?: number;
+  hitStop?: boolean;
+  hitTarget?: boolean;
+}
+
 export interface JournalOrder {
   at: string;
   kind: "order" | "modify" | "cancel" | "fill" | "reject";

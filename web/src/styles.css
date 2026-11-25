@@ -22718,3 +22718,186 @@ tr.gv-strong td:first-child { color: var(--text); }
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/*
+  복기 노트 — **적은 만큼 보이는 칸** (2026-11-25).
+  높이는 JS 가 내용에 맞춰 잡는다(`AutoText`). 여기서는 그걸 방해하지 않게만 둔다.
+*/
+.jn-text,
+.jn-note {
+  /* 손잡이로 끌어 늘이는 것을 막는다 — 자동 높이와 싸운다 */
+  resize: none;
+  overflow-y: hidden;
+}
+/* 매매 메모는 한 줄 input 자리에 들어간 textarea라 글꼴·줄높이를 그 칸에 맞춘다 */
+.jn-note {
+  font: inherit;
+  line-height: 1.45;
+  min-height: 0;
+  display: block;
+  width: 100%;
+}
+
+/*
+  복기 노트 ─ **[지수 현황]** (2026-11-25)
+
+  벤티지가 블로그·업노트에서 매일 HTS 를 캡처해 붙이던 표다. 그 캡처의 생김새를
+  따라가되 **숫자로** 둔다 — 캡처는 나중에 셀 수가 없다.
+
+  현물(억원)과 선물을 **같은 표의 다른 줄**로 둔 것은 업노트 표가 그랬기 때문이고,
+  한 줄에 섞으면 「외국인이 샀다」가 어느 쪽인지 사라지기 때문이다.
+*/
+.jn-mkt {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 11px;
+  margin: 8px 0 12px;
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.jn-mkt-h {
+  font-size: 0.82rem;
+  font-weight: 700;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.jn-mkt-h em {
+  font-style: normal;
+  font-size: 0.68rem;
+}
+.jn-mkt-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.jn-mkt-row {
+  display: grid;
+  grid-template-columns: 62px 1fr auto 1fr;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 0.84rem;
+}
+.jn-mkt-row em {
+  font-style: normal;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+.jn-mkt-row b {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.jn-mkt-row span.num {
+  min-width: 58px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.jn-mkt-br {
+  font-size: 0.7rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 투자자매매동향 — 업노트의 그 표 */
+.jn-mkt-tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+.jn-mkt-tbl th,
+.jn-mkt-tbl td {
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.jn-mkt-tbl thead th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.72rem;
+}
+.jn-mkt-tbl tbody th {
+  text-align: left;
+  color: var(--muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.jn-mkt-tbl tbody th em {
+  font-style: normal;
+  font-size: 0.66rem;
+}
+.jn-mkt-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 0.72rem;
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}
+
+/*
+  복기 노트 ─ **전일 매매복기** (2026-11-25).
+  한 줄 = 어제 적은 매매 하나. 왼쪽부터 매수/매도 · 종목 · 가격 흐름 · 결과 · 메모.
+  결과 색은 **매수/매도에 따라 뜻이 뒤집힌다** — 글로 같이 적는 까닭이다.
+*/
+.jn-prev {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.jn-prev-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 7px;
+  padding: 5px 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.82rem;
+}
+.jn-prev-k {
+  font-style: normal;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.jn-prev-k.buy {
+  color: var(--red);
+  border: 1px solid var(--red);
+}
+.jn-prev-k.sell {
+  color: var(--blue);
+  border: 1px solid var(--blue);
+}
+.jn-prev-n {
+  font-weight: 600;
+}
+.jn-prev-p,
+.jn-prev-c {
+  font-variant-numeric: tabular-nums;
+}
+.jn-prev-c small {
+  font-size: 0.68rem;
+  margin-left: 2px;
+}
+.jn-prev-hit {
+  font-size: 0.68rem;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.jn-prev-hit.stop {
+  color: var(--blue);
+  border: 1px solid var(--blue);
+}
+.jn-prev-hit.target {
+  color: var(--red);
+  border: 1px solid var(--red);
+}
+.jn-prev-note {
+  font-size: 0.72rem;
+  flex: 1 1 100%;
+}
