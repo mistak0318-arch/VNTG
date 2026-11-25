@@ -14,6 +14,7 @@ import {
   removeEntry,
   saveEntry,
   prevDayReview,
+  journalPositions,
 } from "../tradeJournal.js";
 
 /** 복기 노트 */
@@ -94,6 +95,16 @@ export function createJournalRouter(client: KiwoomClient): Router {
    * **전일 매매복기** (2026-11-25) — 어제 산 것이 오늘 어떻게 됐나.
    * `:date` 보다 **위**에 둔다. 아래에 두면 `/prev-review` 가 날짜로 잡힌다.
    */
+  /** 내 종목 현황 — 보유/정리 + 어제 대비 변화 (2026-11-25) */
+  router.get("/positions", async (req, res, next) => {
+    try {
+      const date = String(req.query.date ?? "") || new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+      res.json(await journalPositions(date));
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.get("/prev-review", async (req, res, next) => {
     try {
       const date = String(req.query.date ?? "") || new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);

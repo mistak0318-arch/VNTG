@@ -213,6 +213,19 @@ export interface JournalTrade {
   target?: number;
   /** 이 매매에 건 위험 — **계좌 대비 %** */
   risk?: number;
+
+  /**
+   * **적을 때 시세** (2026-11-25 — 벤티지: "매입가랑 수량 안적어도 편입 대비 등락률은
+   * 보이게 해주자. 귀찮아 매번 적기가").
+   *
+   * 종목을 고르는 순간 시세를 박아 둔다. 그러면 **매입가를 안 적어도** 「그때 대비 지금」을
+   * 잴 수 있다. 값은 전종목 스냅샷 캐시에서 읽으므로 **조회가 0** 이다.
+   *
+   * ⚠️ 이것은 **내가 산 가격이 아니다.** 적은 시각의 시세다 — 장중에 적었으면 그 순간 값,
+   * 저녁이면 종가에 가깝다. 그래서 `price`(내가 적은 매입가)와 **따로** 둔다. 한 칸에
+   * 섞으면 나중에 R(건 것 대비)이 틀어진다.
+   */
+  autoPrice?: number;
 }
 
 /**
@@ -338,8 +351,11 @@ export interface PrevTradeReview {
   kind: "buy" | "sell";
   code: string;
   name: string;
-  /** 그날 적은 가격 */
+  /** 그날 적은 가격 (0 이면 안 적은 것) */
   price: number;
+  /** 등락률을 **무엇으로** 쟀나 — 내가 적은 매입가인지, 적을 때 시세인지 */
+  basis: "매입가" | "적을 때 시세" | null;
+  basePrice: number | null;
   note: string;
   /** 지금(또는 마지막) 값 — 못 읽었으면 null */
   now: number | null;
@@ -353,6 +369,132 @@ export interface PrevTradeReview {
   hitTarget?: boolean;
 }
 
+/**
+ * **내 종목 현황** (2026-11-25 — 벤티지: "전일대비 매도했는지 추가매수했는지도 체크해서
+ * 수익률 현황 알수있게 … 그래프로 현황도 나타내주고").
+ *
+ * 복기 노트에 쌓인 매수·매도 줄을 **종목별로 접는다.** 그러면 묻지 않아도 셋이 나온다 —
+ *
+ *   · 아직 안 판 것(보유)      기준가 대비 지금 몇 %
+ *   · 다 판 것(정리)           산 값 대비 판 값 몇 %
+ *   · 어제와 견준 변화          오늘 더 샀나 / 덜어냈나
+ *
+ * ## 수량을 안 적어도 돌아간다
+ *
+ * 벤티지가 수량·매입가를 매번 적지 않는다. 그래서 **수량은 있으면 쓰고 없으면 1 로 친다** —
+ * 금액은 못 내도 **퍼센트는 낸다.** 기준가도 적은 매입가가 없으면 `autoPrice`(적을 때 시세)를
+ * 쓰고, 화면이 **어느 쪽으로 쟀는지 밝힌다.**
+ *
+ * ⚠️ 이것은 **복기 노트에 적힌 것**의 합이지 실제 계좌가 아니다. 계좌는 계좌 메뉴가 보여 준다 —
+ * 둘이 다를 수 있고, 다른 게 정상이다(적다 만 날이 있으므로). 섞어서 한 숫자로 만들면 안 된다.
+ */
+export interface JournalPosition {
+  code: string;
+  name: string;
+  /** 보유 중인가 — 매수 수량이 매도 수량보다 많으면 */
+  holding: boolean;
+  /** 평균 매수 기준가 (수량 가중). 적은 매입가가 없으면 적을 때 시세로 */
+  base: number | null;
+  /** 기준가가 무엇이었나 — 섞였으면 "섞임" */
+  basis: "매입가" | "적을 때 시세" | "섞임" | null;
+  /** 보유 중이면 지금 값, 정리됐으면 마지막 매도가 */
+  last: number | null;
+  /** 기준가 대비 % */
+  change: number | null;
+  /** 남은 수량 — 수량을 안 적었으면 null */
+  qty: number | null;
+  firstDate: string;
+  lastDate: string;
+  /** 직전 기록일과 견준 변화 */
+  moveToday: "신규" | "추가매수" | "일부매도" | "전량매도" | null;
+}
+
+export async function journalPositions(date: string): Promise<{ rows: JournalPosition[]; prevDate: string | null }> {
+  const all = await readAll();
+  const upto = all.filter((r) => r.date <= date);
+  const prevDate = upto.filter((r) => r.date < date && r.trades.length > 0).pop()?.date ?? null;
+  const snap = peekSnapshot();
+
+  interface Acc {
+    name: string;
+    buyQty: number;
+    buyAmt: number;
+    sellQty: number;
+    lastSell: number | null;
+    usedAuto: boolean;
+    usedPrice: boolean;
+    first: string;
+    last: string;
+    qtyWritten: boolean;
+    todayBuy: number;
+    todaySell: number;
+  }
+  const map = new Map<string, Acc>();
+
+  for (const day of upto) {
+    for (const t of day.trades) {
+      if (!t.code) continue;
+      const base = t.price > 0 ? t.price : (t.autoPrice ?? 0);
+      if (!(base > 0)) continue;
+      /* 수량은 있으면 쓰고 없으면 1 — 퍼센트만 내려는 것이므로 단위는 상관없다 */
+      const q = t.qty > 0 ? t.qty : 1;
+      const a =
+        map.get(t.code) ??
+        { name: t.name || t.code, buyQty: 0, buyAmt: 0, sellQty: 0, lastSell: null, usedAuto: false, usedPrice: false, first: day.date, last: day.date, qtyWritten: false, todayBuy: 0, todaySell: 0 };
+      a.name = t.name || a.name;
+      a.last = day.date;
+      if (t.qty > 0) a.qtyWritten = true;
+      if (t.price > 0) a.usedPrice = true;
+      else a.usedAuto = true;
+      if (t.kind === "buy") {
+        a.buyQty += q;
+        a.buyAmt += base * q;
+        if (day.date === date) a.todayBuy += q;
+      } else {
+        a.sellQty += q;
+        a.lastSell = base;
+        if (day.date === date) a.todaySell += q;
+      }
+      map.set(t.code, a);
+    }
+  }
+
+  const rows: JournalPosition[] = [];
+  for (const [code, a] of map) {
+    const left = a.buyQty - a.sellQty;
+    const holding = left > 0;
+    const avg = a.buyQty > 0 ? a.buyAmt / a.buyQty : null;
+    const now = snap?.byCode.get(code)?.price ?? null;
+    const last = holding ? (now && now > 0 ? now : null) : a.lastSell;
+    const change = avg && avg > 0 && last && last > 0 ? Math.round(((last - avg) / avg) * 1000) / 10 : null;
+    rows.push({
+      code,
+      name: a.name,
+      holding,
+      base: avg === null ? null : Math.round(avg),
+      basis: a.usedPrice && a.usedAuto ? "섞임" : a.usedPrice ? "매입가" : a.usedAuto ? "적을 때 시세" : null,
+      last: last === null ? null : Math.round(last),
+      change,
+      qty: a.qtyWritten ? left : null,
+      firstDate: a.first,
+      lastDate: a.last,
+      moveToday:
+        a.todayBuy > 0 && a.first === date
+          ? "신규"
+          : a.todayBuy > 0
+            ? "추가매수"
+            : a.todaySell > 0
+              ? left > 0
+                ? "일부매도"
+                : "전량매도"
+              : null,
+    });
+  }
+  /* 보유 중을 먼저, 그 안에서 성적 순 — 「지금 뭘 들고 있나」가 제일 먼저 묻는 것이다 */
+  rows.sort((x, y) => Number(y.holding) - Number(x.holding) || (y.change ?? -999) - (x.change ?? -999));
+  return { rows, prevDate };
+}
+
 export async function prevDayReview(date: string): Promise<{ date: string | null; rows: PrevTradeReview[] }> {
   const rows = await readAll();
   /* **직전 기록일**이지 어제가 아니다 — 주말·휴일·안 적은 날이 있다 */
@@ -363,13 +505,17 @@ export async function prevDayReview(date: string): Promise<{ date: string | null
     date: prev.date,
     rows: prev.trades.map((t) => {
       const now = snap?.byCode.get(t.code)?.price ?? null;
-      const change = now && now > 0 && t.price > 0 ? Math.round(((now - t.price) / t.price) * 1000) / 10 : null;
+      /* 매입가를 안 적었으면 **적을 때 시세**로 잰다 — 「귀찮아서 안 적는다」가 기본값이다 */
+      const base = t.price > 0 ? t.price : (t.autoPrice ?? 0);
+      const change = now && now > 0 && base > 0 ? Math.round(((now - base) / base) * 1000) / 10 : null;
       return {
         date: prev.date,
         kind: t.kind,
         code: t.code,
         name: t.name,
         price: t.price,
+        basis: base > 0 ? (t.price > 0 ? "매입가" : "적을 때 시세") : null,
+        basePrice: base > 0 ? base : null,
         note: t.note,
         now: now && now > 0 ? now : null,
         change,
@@ -660,7 +806,14 @@ async function withSignals(
     next.map(async (t) => {
       const old = before.get(t.id);
       if (old?.level) {
-        return { ...t, level: old.level, score: old.score, passed: old.passed, flow: old.flow };
+        /*
+         * 신호등은 그대로 두되 **`autoPrice` 가 없으면 지금이라도 채운다** — 어제까지 적은
+         * 줄에는 이 칸이 없다. 한 번 박히면 다시 안 덮는다.
+         */
+        const kept = old.autoPrice ?? t.autoPrice;
+        const snapped = kept ?? peekSnapshot()?.byCode.get(t.code)?.price;
+        const late = snapped && snapped > 0 ? snapped : undefined;
+        return { ...t, level: old.level, score: old.score, passed: old.passed, flow: old.flow, ...(late ? { autoPrice: late } : {}) };
       }
       if (!/^\d{6}$/.test(t.code)) return t;
       /* 신호등과 함께 그날 수급도 박제한다 (2026-08-27) — 「누가 사고 있을 때 샀나」.
@@ -673,13 +826,17 @@ async function withSignals(
       ]);
       const lastFlow = flows[flows.length - 1];
       const flow = lastFlow ? { foreign: lastFlow.foreign, inst: lastFlow.inst } : undefined;
-      if (!sig) return { ...t, flow };
+      /* 적을 때 시세 — 스냅샷 캐시라 공짜다. 이미 있으면 안 덮는다 */
+      const snapNow = peekSnapshot()?.byCode.get(t.code)?.price;
+      const autoPrice = t.autoPrice ?? (snapNow && snapNow > 0 ? snapNow : undefined);
+      if (!sig) return { ...t, flow, ...(autoPrice ? { autoPrice } : {}) };
       return {
         ...t,
         level: sig.level,
         score: sig.score,
         passed: sig.checks.filter((c) => c.pass === true).map((c) => c.label),
         flow,
+        ...(autoPrice ? { autoPrice } : {}),
       };
     }),
   );

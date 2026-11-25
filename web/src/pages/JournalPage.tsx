@@ -11,6 +11,7 @@ import {
   type StockSearchResult,
   type EdgeRow,
   type PrevTradeReview,
+  type JournalPosition,
   type DayContext,
   type JournalOrder,
   type OrderSummary,
@@ -262,6 +263,13 @@ function PickReview({
         )}
       </div>
 
+      {/*
+        **쪼갠 통계는 접는다** (2026-11-25 — 벤티지: "구조가 너무 복잡하고 알아먹기 힘들다").
+        시장 상태별·신호등별·선물 수급별·종목별은 **표본이 쌓여야 말을 한다.** 그 전까지는
+        자리만 먹는다. 지우지 않고 접어 둔다 — 몇 달 뒤에 볼 것이다.
+      */}
+      <details className="jn-fold">
+      <summary>쪼개 보기 — 시장 상태별 · 신호등별 · 선물 수급별 · 종목별</summary>
       <div className="jn-stats">
         <div className="jn-stat-block">
           <div className="cost-sub">시장 상태별 — 어떤 판에서 맞았나</div>
@@ -314,6 +322,7 @@ function PickReview({
           </div>
         )}
       </div>
+      </details>
 
       {/* 히스토리 — 그날 무엇을 보고 무엇을 예측했고 어떻게 됐나 */}
       {picks.recent.length > 0 && (
@@ -500,7 +509,24 @@ export function JournalPage({
    * 어제 산 것이 오늘 어떻게 됐는지는 **기계가 채점한다**. 값은 서버의 전종목 스냅샷
    * 캐시에서 읽으므로 조회가 안 는다. 사람이 적을 것은 그걸 보고 드는 생각뿐이다.
    */
+  /*
+   * **응답 순서 지킴** (2026-11-25 — 실측으로 당했다). 날짜를 빠르게 넘기면 **먼저 보낸
+   * 요청의 늦은 응답**이 새 것을 덮는다. 화면에 11/25 값이 떠 있는데 네트워크는 11/26 을
+   * 받아 온 상태였다. 이 파일의 다른 로더들(`naverSeq`·`mineSeq`)이 같은 이유로 같은
+   * 가드를 쓴다 — 나만 빼먹었다.
+   */
+  const revSeq = useRef(0);
+  const posSeq = useRef(0);
   const [prevRev, setPrevRev] = useState<{ date: string | null; rows: PrevTradeReview[] } | null>(null);
+  /** 내 종목 현황 — 「내 매매가 어땠나」에 바로 답하는 값 (2026-11-25) */
+  const [positions, setPositions] = useState<JournalPosition[]>([]);
+  useEffect(() => {
+    const seq = ++posSeq.current;
+    api
+      .journalPositions(date)
+      .then((r) => seq === posSeq.current && setPositions(r.rows))
+      .catch(() => seq === posSeq.current && setPositions([]));
+  }, [date]);
 
   /*
    * **시스에게 복기 받기** (2026-11-25). 벤티지의 업노트에는 `[일일복기 프롬프트]` 가 있었다 —
@@ -527,14 +553,11 @@ export function JournalPage({
     };
   }, []);
   useEffect(() => {
-    let alive = true;
+    const seq = ++revSeq.current;
     api
       .journalPrevReview(date)
-      .then((r) => alive && setPrevRev(r))
-      .catch(() => alive && setPrevRev(null));
-    return () => {
-      alive = false;
-    };
+      .then((r) => seq === revSeq.current && setPrevRev(r))
+      .catch(() => seq === revSeq.current && setPrevRev(null));
   }, [date]);
 
   /** 달력이 보고 있는 달 — 날짜와 따로 논다(지난달을 넘겨봐도 고른 날은 그대로) */
@@ -1633,7 +1656,43 @@ export function JournalPage({
         </div>
       )}
 
-      <h3 className="section-heading">쌓인 나 — 노트가 일기와 갈리는 곳</h3>
+      <h3 className="section-heading">내 매매</h3>
+
+      {/*
+        **맨 위는 「내 매매가 어땠나」** (2026-11-25 — 벤티지: "구조가 너무 복잡하고 알아먹기
+        힘들다. 최대한 빠르게 훑어서 알 수 있게 하자고. 미사여구 이런거 다 빼고 복기노트로
+        인해 나의 매매가 어땠는지 알 수 있게 하는게 목표잖아").
+        
+        아래 통계는 **쪼갠 것**이라 표본이 모일 때까지 답을 못 준다. 그동안 가장 자주 묻는
+        것은 「내가 뭘 들고 있고 그게 어떤가」다 — 그걸 맨 위 한 덩어리로 둔다.
+        수량·매입가를 안 적어도 돌아간다(기준가가 없으면 적을 때 시세로 잰다).
+      */}
+      {positions.length > 0 && (
+        <div className="jn-pos">
+          {positions.map((p) => {
+            const w = Math.min(100, Math.abs(p.change ?? 0) * 5);
+            return (
+              <div className={`jn-pos-row${p.holding ? " hold" : ""}`} key={p.code}>
+                <b className="jn-pos-n">{p.name}</b>
+                <span className="jn-pos-s">{p.holding ? "보유" : "정리"}</span>
+                {p.moveToday && <span className="jn-pos-m">{p.moveToday}</span>}
+                <span className="jn-pos-bar">
+                  <i className={(p.change ?? 0) >= 0 ? "up" : "down"} style={{ width: `${w}%` }} />
+                </span>
+                <span className={`num jn-pos-c ${(p.change ?? 0) > 0 ? "positive" : (p.change ?? 0) < 0 ? "negative" : ""}`}>
+                  {p.change === null ? "-" : `${p.change > 0 ? "+" : ""}${p.change.toFixed(1)}%`}
+                </span>
+                <span className="pt-n jn-pos-b">
+                  {p.base?.toLocaleString("ko-KR") ?? "-"}
+                  {p.last !== null ? ` → ${p.last.toLocaleString("ko-KR")}` : ""}
+                  {p.basis && p.basis !== "매입가" ? ` · ${p.basis}` : ""}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {s.days === 0 ? (
         <div className="page-note">
           하루치는 반성이지만 <b>석 달치를 세면 내가 어떤 사람인지</b>가 나옵니다. 제일 자주 하는
@@ -1705,23 +1764,27 @@ export function JournalPage({
             )}
           </div>
 
-          <div className="jn-stat-block">
+          {/*
+            **쪼갠 통계는 접는다** (2026-11-25). 신호등 색별·국면별은 표본이 모이기 전엔
+            답을 못 주는데 자리는 늘 먹는다. 지우지 않고 접어 둔다 — 몇 달 뒤에 볼 것이다.
+          */}
+          <details className="jn-stat-block wide jn-fold">
+            <summary>쪼개 보기 — 신호등 색별 · 시장 국면별</summary>
             <div className="cost-sub">살 때 신호등 색별</div>
             {s.signalEdge.length === 0 ? (
               <div className="jn-stat-note">아직 셀 게 없습니다.</div>
             ) : (
               <EdgeTable rows={s.signalEdge} />
             )}
-          </div>
-
-          <div className="jn-stat-block">
-            <div className="cost-sub">시장 국면별</div>
+            <div className="cost-sub" style={{ marginTop: 10 }}>
+              시장 국면별
+            </div>
             {s.marketEdge.length === 0 ? (
               <div className="jn-stat-note">아직 셀 게 없습니다.</div>
             ) : (
               <EdgeTable rows={s.marketEdge} />
             )}
-          </div>
+          </details>
 
           {/*
             관망 — 쉰 날의 국면과 산 날의 국면을 견준다.

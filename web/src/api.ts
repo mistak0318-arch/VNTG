@@ -1678,6 +1678,9 @@ export const api = {
   /** 내 판단 추적 — 종목마다 일봉을 받아 몇 십 초 걸릴 수 있다 */
   journalTrack: () => getJson<TradeTrackResult>("/api/journal/track"),
   /** 11번 오늘의 주문·체결 — 로그에서 바로 (2026-09-10) */
+  /** 내 종목 현황 — 보유/정리 + 어제 대비 변화 (2026-11-25) */
+  journalPositions: (date?: string) =>
+    getJson<{ rows: JournalPosition[]; prevDate: string | null }>(`/api/journal/positions${date ? `?date=${date}` : ""}`),
   /** 전일 매매복기 — 어제 줄을 오늘 값으로 채점 (2026-11-25) */
   /** #매일읽기 — 내 원칙·매수전략·매도전략 (2026-11-25) */
   journalCreed: () => getJson<{ text: string; updatedAt: string }>("/api/journal/creed"),
@@ -5935,6 +5938,8 @@ export interface JournalTrade {
   target?: number;
   /** 이 매매에 건 위험 — 계좌 대비 % */
   risk?: number;
+  /** 적을 때 시세 (자동) — 매입가를 안 적어도 등락률을 재려고 (2026-11-25) */
+  autoPrice?: number;
 }
 
 export interface JournalEntry {
@@ -5976,6 +5981,9 @@ export interface PrevTradeReview {
   code: string;
   name: string;
   price: number;
+  /** 등락률을 무엇으로 쟀나 */
+  basis: "매입가" | "적을 때 시세" | null;
+  basePrice: number | null;
   note: string;
   /** 못 읽었으면 null — 0 으로 적지 않는다 */
   now: number | null;
@@ -5984,6 +5992,21 @@ export interface PrevTradeReview {
   target?: number;
   hitStop?: boolean;
   hitTarget?: boolean;
+}
+
+/** 내 종목 현황 (2026-11-25) — 복기 노트에 적힌 것의 합. 실제 계좌가 아니다 */
+export interface JournalPosition {
+  code: string;
+  name: string;
+  holding: boolean;
+  base: number | null;
+  basis: "매입가" | "적을 때 시세" | "섞임" | null;
+  last: number | null;
+  change: number | null;
+  qty: number | null;
+  firstDate: string;
+  lastDate: string;
+  moveToday: "신규" | "추가매수" | "일부매도" | "전량매도" | null;
 }
 
 export interface JournalOrder {
