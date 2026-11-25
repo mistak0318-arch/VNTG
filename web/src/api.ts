@@ -5982,7 +5982,7 @@ export interface PrevTradeReview {
   name: string;
   price: number;
   /** 등락률을 무엇으로 쟀나 */
-  basis: "매입가" | "적을 때 시세" | null;
+  basis: "매입가" | "적을 때 시세" | "그날 종가" | null;
   basePrice: number | null;
   note: string;
   /** 못 읽었으면 null — 0 으로 적지 않는다 */
@@ -6000,7 +6000,7 @@ export interface JournalPosition {
   name: string;
   holding: boolean;
   base: number | null;
-  basis: "매입가" | "적을 때 시세" | "섞임" | null;
+  basis: "매입가" | "적을 때 시세" | "그날 종가" | "섞임" | null;
   last: number | null;
   change: number | null;
   qty: number | null;

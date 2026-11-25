@@ -10,6 +10,8 @@ import { evaluateSignal } from "./signalLight.js";
 import { investorDailySeries } from "./superSignal.js";
 import { futuresFlow, type FuturesFlowDay } from "./naverFuturesFlow.js";
 import { ordersOfDay, type JournalOrder } from "./journalOrders.js";
+/* 옛 기록을 메우는 데 쓴다 — 그날 종가 (2026-11-26) */
+import { loadBars } from "./dailyCloses.js";
 /* 그날 지수·수급·해외·금리 — 대시보드가 이미 받아 둔 섹션 캐시를 그대로 박제한다 (2026-11-25) */
 import { getSection, type IndexCard, type MarketFlow } from "./marketOverview.js";
 import type { GlobalQuote } from "./globalMarket.js";
@@ -354,7 +356,7 @@ export interface PrevTradeReview {
   /** 그날 적은 가격 (0 이면 안 적은 것) */
   price: number;
   /** 등락률을 **무엇으로** 쟀나 — 내가 적은 매입가인지, 적을 때 시세인지 */
-  basis: "매입가" | "적을 때 시세" | null;
+  basis: "매입가" | "적을 때 시세" | "그날 종가" | null;
   basePrice: number | null;
   note: string;
   /** 지금(또는 마지막) 값 — 못 읽었으면 null */
@@ -396,7 +398,7 @@ export interface JournalPosition {
   /** 평균 매수 기준가 (수량 가중). 적은 매입가가 없으면 적을 때 시세로 */
   base: number | null;
   /** 기준가가 무엇이었나 — 섞였으면 "섞임" */
-  basis: "매입가" | "적을 때 시세" | "섞임" | null;
+  basis: "매입가" | "적을 때 시세" | "그날 종가" | "섞임" | null;
   /** 보유 중이면 지금 값, 정리됐으면 마지막 매도가 */
   last: number | null;
   /** 기준가 대비 % */
@@ -407,6 +409,38 @@ export interface JournalPosition {
   lastDate: string;
   /** 직전 기록일과 견준 변화 */
   moveToday: "신규" | "추가매수" | "일부매도" | "전량매도" | null;
+}
+
+/**
+ * **옛 기록을 메운다 — 그날 종가** (2026-11-26 — 벤티지: "이전꺼 쓴거에도 적용해줘야지
+ * 새로 쓰는것부터 적용되는거냐?").
+ *
+ * `autoPrice`(적을 때 시세)는 **오늘부터** 박힌다. 어제까지 적은 매매에는 그 칸이 없어서
+ * 매입가를 안 적은 줄은 등락률이 안 나왔다 — 과거가 통째로 빈다.
+ *
+ * 그래서 **저장하지 않고 읽을 때 메운다.** 일봉은 서버가 이미 들고 있으므로 조회가 0 이고,
+ * 원장에 쓰지 않으니 옛 기록이 바뀔 위험도 없다.
+ *
+ * ⚠️ 이것은 「적을 때 시세」가 **아니라 그날 종가**다. 장중에 적은 매매라면 다른 값이다 —
+ * 그래서 화면이 어느 쪽으로 쟀는지 밝힌다(`basis`).
+ *
+ * 그 날짜에 봉이 없으면(휴장·상장 전) **그 이전 가장 가까운 날**로 간다. 없으면 null —
+ * 모르는 것을 0 으로 적지 않는다.
+ */
+async function closeOnDate(code: string, date: string): Promise<number | null> {
+  if (!/^[0-9A-Z]{6}$/i.test(code)) return null;
+  const want = date.replace(/-/g, "");
+  try {
+    const bars = await loadBars(code);
+    let hit: number | null = null;
+    for (const b of bars) {
+      if (b.d > want) break;
+      if (b.c > 0) hit = b.c;
+    }
+    return hit;
+  } catch {
+    return null;
+  }
 }
 
 export async function journalPositions(date: string): Promise<{ rows: JournalPosition[]; prevDate: string | null }> {
@@ -422,6 +456,7 @@ export async function journalPositions(date: string): Promise<{ rows: JournalPos
     sellQty: number;
     lastSell: number | null;
     usedAuto: boolean;
+    usedClose: boolean;
     usedPrice: boolean;
     first: string;
     last: string;
@@ -434,17 +469,20 @@ export async function journalPositions(date: string): Promise<{ rows: JournalPos
   for (const day of upto) {
     for (const t of day.trades) {
       if (!t.code) continue;
-      const base = t.price > 0 ? t.price : (t.autoPrice ?? 0);
+      /* 적은 매입가 → 적을 때 시세 → **그날 종가**(옛 기록) 차례로 */
+      const base = t.price > 0 ? t.price : (t.autoPrice ?? (await closeOnDate(t.code, day.date)) ?? 0);
       if (!(base > 0)) continue;
+      const fromClose = !(t.price > 0) && !t.autoPrice;
       /* 수량은 있으면 쓰고 없으면 1 — 퍼센트만 내려는 것이므로 단위는 상관없다 */
       const q = t.qty > 0 ? t.qty : 1;
       const a =
         map.get(t.code) ??
-        { name: t.name || t.code, buyQty: 0, buyAmt: 0, sellQty: 0, lastSell: null, usedAuto: false, usedPrice: false, first: day.date, last: day.date, qtyWritten: false, todayBuy: 0, todaySell: 0 };
+        { name: t.name || t.code, buyQty: 0, buyAmt: 0, sellQty: 0, lastSell: null, usedAuto: false, usedClose: false, usedPrice: false, first: day.date, last: day.date, qtyWritten: false, todayBuy: 0, todaySell: 0 };
       a.name = t.name || a.name;
       a.last = day.date;
       if (t.qty > 0) a.qtyWritten = true;
       if (t.price > 0) a.usedPrice = true;
+      else if (fromClose) a.usedClose = true;
       else a.usedAuto = true;
       if (t.kind === "buy") {
         a.buyQty += q;
@@ -472,7 +510,16 @@ export async function journalPositions(date: string): Promise<{ rows: JournalPos
       name: a.name,
       holding,
       base: avg === null ? null : Math.round(avg),
-      basis: a.usedPrice && a.usedAuto ? "섞임" : a.usedPrice ? "매입가" : a.usedAuto ? "적을 때 시세" : null,
+      basis:
+        [a.usedPrice, a.usedAuto, a.usedClose].filter(Boolean).length > 1
+          ? "섞임"
+          : a.usedPrice
+            ? "매입가"
+            : a.usedAuto
+              ? "적을 때 시세"
+              : a.usedClose
+                ? "그날 종가"
+                : null,
       last: last === null ? null : Math.round(last),
       change,
       qty: a.qtyWritten ? left : null,
@@ -503,10 +550,12 @@ export async function prevDayReview(date: string): Promise<{ date: string | null
   const snap = peekSnapshot();
   return {
     date: prev.date,
-    rows: prev.trades.map((t) => {
+    /* 그날 종가 소급이 비동기라 `Promise.all` 로 받는다 — 일봉은 캐시라 빠르다 */
+    rows: await Promise.all(
+      prev.trades.map(async (t) => {
       const now = snap?.byCode.get(t.code)?.price ?? null;
       /* 매입가를 안 적었으면 **적을 때 시세**로 잰다 — 「귀찮아서 안 적는다」가 기본값이다 */
-      const base = t.price > 0 ? t.price : (t.autoPrice ?? 0);
+      const base = t.price > 0 ? t.price : (t.autoPrice ?? (await closeOnDate(t.code, prev.date)) ?? 0);
       const change = now && now > 0 && base > 0 ? Math.round(((now - base) / base) * 1000) / 10 : null;
       return {
         date: prev.date,
@@ -514,7 +563,7 @@ export async function prevDayReview(date: string): Promise<{ date: string | null
         code: t.code,
         name: t.name,
         price: t.price,
-        basis: base > 0 ? (t.price > 0 ? "매입가" : "적을 때 시세") : null,
+        basis: base > 0 ? (t.price > 0 ? "매입가" : t.autoPrice ? "적을 때 시세" : "그날 종가") : null,
         basePrice: base > 0 ? base : null,
         note: t.note,
         now: now && now > 0 ? now : null,
@@ -522,7 +571,8 @@ export async function prevDayReview(date: string): Promise<{ date: string | null
         ...(t.stop ? { stop: t.stop, hitStop: now !== null && now > 0 ? now <= t.stop : undefined } : {}),
         ...(t.target ? { target: t.target, hitTarget: now !== null && now > 0 ? now >= t.target : undefined } : {}),
       };
-    }),
+      }),
+    ),
   };
 }
 
