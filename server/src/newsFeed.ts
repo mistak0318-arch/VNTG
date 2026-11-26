@@ -1,5 +1,5 @@
 import { recent as recentChannel } from "./channelStore.js";
-import { breakingNews, type BreakingCategory } from "./newsDisclosure.js";
+import { naverNews } from "./naverMainNews.js";
 
 /**
  * **지금 — 뉴스와 채널을 한 줄로 섞는다** (2026-11-26 — 벤티지: "뉴스랑 텔레그램 동향이랑
@@ -20,10 +20,37 @@ import { breakingNews, type BreakingCategory } from "./newsDisclosure.js";
  * 둘을 갈라 세는 것처럼, 여기서도 줄마다 어디서 온 것인지 달고 간다. 섞는 것은 **시각**
  * 하나뿐이고, 판단은 읽는 사람이 한다.
  *
+ * ## 뉴스는 **네이버 증권 주요뉴스**다 (2026-11-27 고침)
+ *
+ * 벤티지: "이거 뉴스는 왜 1건 밖에 안 잡히지? 주요뉴스 위주로 잡아줬으면 좋겠는데"
+ *
+ * 처음엔 `breakingNews()` 를 썼는데, 그것은 **제목이 속보 머리표로 시작하는 기사만**
+ * 남긴다(`/^[[「(]?(속보|단독|긴급)[]」)]/`). 밤사이 그런 제목은 한 건뿐이라 뉴스 칸이
+ * 비었다. 거르는 자리를 잘못 고른 것이다 — 「속보라고 **써 붙인** 기사」와 「지금 중요한
+ * 기사」는 같지 않다.
+ *
+ * 그래서 **사람이 고른 목록**으로 바꾼다. 네이버 증권 주요뉴스는 편집자가 추려 올리는
+ * 자리라, 거르는 일을 이미 해 둔 것이다 — 먼저 거르고 본다는 순서 그대로다.
+ *
+ * ### 왜 「실시간 속보」는 안 쓰나 — 세어 보고 뺐다
+ *
+ * 2026-11-27 08:0x 실측(쪽당 20건):
+ *
+ *     주요 1쪽   1시간 7건 · 3시간 20건 · 6시간 20건 (가장 오래된 것 06:01)
+ *     주요 2쪽   1시간 0건 · 3시간  4건 · 6시간  5건 (어제 19:36 까지)
+ *     속보 1쪽   1시간 20건 — **한 쪽이 33분치다**
+ *
+ * 속보는 증권 기사가 들어오는 족족 쌓이는 소방호스다. 3시간 창을 덮으려면 여섯 쪽을
+ * 긁어야 하고(120건), 그러면 정작 주요뉴스가 그 속에 묻힌다. 두 쪽만 긁으면 더 나쁘다 —
+ * **창의 앞 두 시간은 속보가 없는 것처럼** 보이는데, 조용한 것이 아니라 안 가져온 것이다.
+ *
+ * 주요 1·2쪽은 어제 저녁까지 닿으므로 **6시간 창도 끝까지 덮는다.** 빠지는 구간이 없다.
+ * 속보 전체를 훑고 싶으면 「뉴스·공시」 탭이 그대로 있다.
+ *
  * ## 조회를 안 늘린다
  *
- * 뉴스는 `breakingNews`(속보 묶음, 자체 캐시)를, 채널은 `channelStore.recent`(파일)를
- * 쓴다. 둘 다 이미 다른 화면이 부르던 것이라 새로 긁는 것이 없다.
+ * 주요뉴스는 `naverNews("main", 쪽)`(5분 캐시, 시황·AI 요약이 이미 쓰는 길)을, 채널은
+ * `channelStore.recent`(파일)를 쓴다. 새로 긁는 것이 없다.
  */
 
 export type FeedKind = "news" | "channel";
@@ -75,29 +102,36 @@ function titleOf(text: string): string {
 }
 
 export async function newsFeed(minutes = 180, limit = 120): Promise<NewsFeed> {
-  const [news, ch] = await Promise.all([
-    breakingNews().catch(() => ({ categories: [] as BreakingCategory[], fetchedAt: "" })),
+  /*
+   * 주요뉴스 두 쪽. 두 쪽인 것은 **6시간 창까지 덮기** 위해서다(1쪽만으로는 두어 시간치).
+   * 한 쪽이 실패해도 나머지로 그린다 — 뉴스가 통째로 비는 것보다 낫다.
+   */
+  const [p1, p2, ch] = await Promise.all([
+    naverNews("main", 1).catch(() => ({ items: [], hasMore: false })),
+    naverNews("main", 2).catch(() => ({ items: [], hasMore: false })),
     recentChannel(minutes).catch(() => ({ messages: [], scanned: 0, newest: null })),
   ]);
 
   const cutoff = Date.now() - minutes * 60_000;
   const items: FeedItem[] = [];
 
-  for (const cat of news.categories) {
-    for (const it of cat.items) {
-      const t = Date.parse(it.publishedAt);
-      if (!Number.isFinite(t) || t < cutoff) continue;
-      items.push({
-        kind: "news",
-        at: it.publishedAt,
-        title: head(it.title, 120),
-        from: it.press,
-        link: it.link,
-        body: head(it.summary ?? "", 160),
-        category: cat.label,
-        major: it.major,
-      });
-    }
+  const seenLink = new Set<string>();
+  for (const it of [...p1.items, ...p2.items]) {
+    const t = Date.parse(it.at);
+    if (!Number.isFinite(t) || t < cutoff) continue;
+    /* 두 쪽이 겹칠 때가 있다(그 사이에 새 기사가 올라오면 한 칸씩 밀린다) */
+    if (!it.link || seenLink.has(it.link)) continue;
+    seenLink.add(it.link);
+    items.push({
+      kind: "news",
+      at: it.at,
+      title: head(it.title, 120),
+      from: it.press,
+      link: it.link,
+      body: head(it.summary ?? "", 160),
+      /* 사람이 추려 올린 목록이라 전부 주요다 — 갈래를 따로 달지 않는다 */
+      major: true,
+    });
   }
   const newsCount = items.length;
 
