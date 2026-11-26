@@ -57,8 +57,18 @@ function hhmm(iso: string): string {
 
 const WINDOWS = [60, 180, 360] as const;
 
+type Kind = "all" | "news" | "channel";
+
 function NowFeed() {
   const [minutes, setMinutes] = useState<number>(180);
+  /*
+   * **종류 필터** (2026-11-26 — 벤티지: "필터 좀 넣어줘 채널인지 텔레그램인지 뉴스인지
+   * 그런거 종류별로 볼수있게"). 섞어 보는 것이 이 화면의 일이지만, 「채널만 182건」 같은
+   * 날에는 뉴스 여덟 건이 묻힌다 — 그때 갈라 볼 수 있어야 한다.
+   */
+  const [kind, setKind] = useState<Kind>("all");
+  /** 방·매체로 더 좁히기 — 한 방이 쏟아내는 날이 있다 */
+  const [from, setFrom] = useState<string | null>(null);
   const [data, setData] = useState<NewsFeed | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -89,6 +99,19 @@ function NowFeed() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [minutes, tabActive]);
 
+  const all = data?.items ?? [];
+  const byKind = kind === "all" ? all : all.filter((i) => i.kind === kind);
+  /* 많이 떠든 순 여덟 — 적게 뜬 곳까지 칩으로 깔면 필터가 본문보다 길어진다 */
+  const sources = (() => {
+    const m = new Map<string, number>();
+    for (const i of byKind) m.set(i.from, (m.get(i.from) ?? 0) + 1);
+    return [...m.entries()]
+      .map(([name, n]) => ({ name, n }))
+      .sort((a, b) => b.n - a.n)
+      .slice(0, 8);
+  })();
+  const shown = from ? byKind.filter((i) => i.from === from) : byKind;
+
   return (
     <>
       <RefreshBar onRefresh={load} loading={loading} updatedAt={data ? Date.parse(data.at) : null} />
@@ -98,12 +121,47 @@ function NowFeed() {
             {m < 60 ? `${m}분` : `${m / 60}시간`}
           </button>
         ))}
-        {data && (
-          <span className="pt-n" style={{ marginLeft: "auto" }}>
-            뉴스 {data.newsCount} · 채널 {data.channelCount}
-          </span>
-        )}
       </div>
+
+      {/*
+        종류 — 건수를 **버튼 안에** 적는다. 「조용한 것」과 「못 받은 것」을 가르는 수라
+        따로 떨어뜨려 두면 안 읽힌다(그리고 폰에서 가로로 밀어낸다).
+      */}
+      <div className="filter-row">
+        {([
+          { k: "all" as const, label: "전체", n: (data?.newsCount ?? 0) + (data?.channelCount ?? 0) },
+          { k: "news" as const, label: "뉴스", n: data?.newsCount ?? 0 },
+          { k: "channel" as const, label: "텔레그램", n: data?.channelCount ?? 0 },
+        ]).map((b) => (
+          <button
+            key={b.k}
+            className={`filter-btn ${kind === b.k ? "active" : ""}`}
+            onClick={() => {
+              setKind(b.k);
+              setFrom(null);
+            }}
+          >
+            {b.label} {b.n}
+          </button>
+        ))}
+      </div>
+
+      {/*
+        방·매체 — 종류를 고른 뒤에만 보인다. 전체에서 한꺼번에 띄우면 칩이 수십 개가 되어
+        **필터가 본문보다 길어진다.** 많이 떠든 순 여덟 개까지.
+      */}
+      {kind !== "all" && sources.length > 1 && (
+        <div className="filter-row">
+          <button className={`filter-btn ${from === null ? "active" : ""}`} onClick={() => setFrom(null)}>
+            전부
+          </button>
+          {sources.map((s) => (
+            <button key={s.name} className={`filter-btn ${from === s.name ? "active" : ""}`} onClick={() => setFrom(s.name)}>
+              {s.name} {s.n}
+            </button>
+          ))}
+        </div>
+      )}
 
       {err && <div className="error-banner">{err}</div>}
       {data && data.items.length === 0 && !loading && (
@@ -114,7 +172,7 @@ function NowFeed() {
       )}
 
       <div className="nf">
-        {(data?.items ?? []).map((it: FeedItem, i) => (
+        {shown.map((it: FeedItem, i) => (
           <a
             className={`nf-row ${it.kind}`}
             key={`${it.kind}${it.at}${i}`}

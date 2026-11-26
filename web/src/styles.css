@@ -23213,3 +23213,34 @@ tr.gv-strong td:first-child { color: var(--text); }
     gap: 6px;
   }
 }
+
+/*
+  **폰에서 옆으로 빠지던 것** (2026-11-26 — 벤티지: "폰에서 해상도가 옆으로 빠지는거 같다").
+
+  긴 제목이 **한 뭉치로 안 꺾여서** 카드가 화면보다 넓어졌고, 그 바람에 화면 전체가
+  가로로 밀렸다(화제 카드의 왼쪽이 잘려 보였다). 한글 제목에 영문·숫자·따옴표가 섞이면
+  브라우저가 거기를 한 낱말로 보고 안 끊는다 — 「'매치법' 통과」 같은 줄이 그랬다.
+
+  `anywhere` 로 **어디서든 끊게** 한다. 격자 칸(`1fr`)은 기본이 `min-width: auto` 라
+  안의 내용이 칸을 밀어내므로 `min-width: 0` 을 같이 준다 — 이게 없으면 줄바꿈을 켜도
+  칸 자체가 넓어진다.
+*/
+.nf-title,
+.nf-body,
+.nf-from,
+.tp-head,
+.tp-detail,
+.tp-ev-box,
+.tp-ev-news a,
+.tp-ev-box .tp-ev-q {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.nf-row > * {
+  min-width: 0;
+}
+.tp-ev-news {
+  /* 글머리 기호 자리를 줄여 좁은 화면에서 본문 폭을 확보한다 */
+  padding-left: 14px;
+  min-width: 0;
+}
