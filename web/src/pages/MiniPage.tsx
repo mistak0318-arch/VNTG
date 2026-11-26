@@ -29,6 +29,18 @@ import { EtfPage } from "./EtfPage";
 import { MarketFlowPage } from "./MarketFlowPage";
 import { CondSearchPage } from "./CondSearchPage";
 import { ThemeDbPage } from "./ThemeDbPage";
+/* 2026-11-27 추가 — 벤티지: "미니보드에 들어갈 수 있는 메뉴가 업데이트가 안된듯" */
+import { TopicPage } from "./TopicPage";
+import { MarketBoardPage } from "./MarketBoardPage";
+import { MorningPage } from "./MorningPage";
+import { LeadersPage } from "./LeadersPage";
+import { ThemeTrendPage } from "./ThemeTrendPage";
+import { CustomThemePage } from "./CustomThemePage";
+import { StockDiscoveryPage } from "./StockDiscoveryPage";
+import { KiwoomWatchlistPage } from "./KiwoomWatchlistPage";
+import { JournalPage } from "./JournalPage";
+import { CalendarPage } from "./CalendarPage";
+import { UsStockPage } from "./UsStockPage";
 /* 보드의 시장 무관 블록들 — 종목이 없어도 그려져서 미니창에 딱 맞다 (2026-08-26) */
 import { IndexBoard } from "../components/IndexBoard";
 import { MarketSignalPanel } from "../components/MarketSignalPanel";
@@ -188,6 +200,18 @@ export function MiniPage({
         {screenKey === "marketFlow" && <MarketFlowPage onSelectStock={openPopup} />}
         {screenKey === "condSearch" && <CondSearchPage onSelectStock={openPopup} />}
         {screenKey === "themedb" && <ThemeDbPage onSelectStock={openPopup} />}
+        {/* 2026-11-27 추가 — 9월 뒤에 생기거나 자리를 옮긴 화면들 */}
+        {screenKey === "topic" && <TopicPage onSelectStock={openPopup} />}
+        {screenKey === "marketBoard" && <MarketBoardPage onSelectStock={openPopup} />}
+        {screenKey === "morning" && <MorningPage />}
+        {screenKey === "leaders" && <LeadersPage onSelectStock={openPopup} />}
+        {screenKey === "themeTrend" && <ThemeTrendPage onSelectStock={openPopup} />}
+        {screenKey === "customTheme" && <CustomThemePage onSelectStock={openPopup} />}
+        {screenKey === "discovery" && <StockDiscoveryPage onOpenAnalysis={openPopup} />}
+        {screenKey === "watchKiwoom" && <KiwoomWatchlistPage onSelectStock={openPopup} />}
+        {screenKey === "journal" && <JournalPage onSelectStock={openPopup} />}
+        {screenKey === "calendar" && <CalendarPage />}
+        {screenKey === "usStock" && <UsStockPage />}
         {/* 보드 블록들 */}
         {screenKey === "indexBoard" && <IndexBoard />}
         {screenKey === "marketSignal" && <MarketSignalPanel />}

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { hotkeyLabel, WINDOW_HOTKEYS, type Hotkey } from "../hotkey";
-import { MINI_SCREENS, MINI_SLOT_COUNT, readMiniConfig, saveMiniConfig } from "../miniConfig";
+import { MINI_GROUPS, MINI_SCREENS, MINI_SLOT_COUNT, readMiniConfig, saveMiniConfig } from "../miniConfig";
 
 /**
  * 미니창 설정 (2026-08-26) — 상단 버튼 1~7 배정 + 여는 단축키.
@@ -50,10 +50,15 @@ export function MiniConfigPanel() {
               update({ ...cfg, slots });
             }}
           >
-            {MINI_SCREENS.map((s) => (
-              <option key={s.key} value={s.key} title={s.hint}>
-                {s.icon} {s.label}
-              </option>
+            {/* 묶음으로 나눠 고른다 — 서른 개가 넘는 한 줄 목록은 못 읽는다 */}
+            {MINI_GROUPS.map((g) => (
+              <optgroup key={g} label={g}>
+                {MINI_SCREENS.filter((s) => s.group === g).map((s) => (
+                  <option key={s.key} value={s.key} title={s.hint}>
+                    {s.icon} {s.label}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </div>
