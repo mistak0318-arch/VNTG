@@ -390,6 +390,27 @@ export interface LoginNeedsOtp {
 
 export type PulseWindow = "overnight" | "now" | "today";
 
+/** 지금 — 뉴스와 채널을 시각 하나로 섞은 줄 (2026-11-26) */
+export interface FeedItem {
+  kind: "news" | "channel";
+  at: string;
+  title: string;
+  from: string;
+  link: string;
+  body: string;
+  category?: string;
+  major?: boolean;
+}
+
+export interface NewsFeed {
+  items: FeedItem[];
+  /** 「조용한 것」과 「못 받은 것」을 가르는 수 */
+  newsCount: number;
+  channelCount: number;
+  minutes: number;
+  at: string;
+}
+
 export interface PulseItem {
   term: string;
   kind: string;
@@ -694,6 +715,8 @@ export const api = {
 
   /* 버즈 대시보드 (2026-08-30) — 문턱과 무관하게 전부 본다 */
   /** 네 브리핑 화면이 같은 문장을 쓰게 하는 자리 */
+  /** 지금 — 뉴스+채널 한 줄 (2026-11-26) */
+  newsFeed: (minutes = 180) => getJson<NewsFeed>(`/api/feed/news/feed?minutes=${minutes}`),
   topicPulse: (w: PulseWindow) => getJson<TopicPulse>(`/api/signal/topic-pulse?window=${w}`),
 
   buzzConfig: () => getJson<BuzzConfig>("/api/signal/buzz/config"),

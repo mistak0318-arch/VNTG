@@ -57,6 +57,7 @@ import { MapPage } from "./pages/MapPage";
 import { ThemeDbPage } from "./pages/ThemeDbPage";
 import { MyPage } from "./pages/MyPage";
 import { NewsPage } from "./pages/NewsPage";
+import { TopicPage } from "./pages/TopicPage";
 import { MarketBoardPage } from "./pages/MarketBoardPage";
 import { LeadersPage } from "./pages/LeadersPage";
 import { OverviewPage } from "./pages/OverviewPage";
@@ -105,6 +106,7 @@ type Tab =
   | "themedb"
   | "program"
   | "news"
+  | "topic"
   | "discovery"
   | "watchAi"
   | "scope"
@@ -225,7 +227,16 @@ export const MENU: {
       /* 테마 DB (2026-08-28) — 네이버 분류를 우리 눈금(등락률·상승비율·연속성)으로 다시 그린다 */
       { key: "themedb", label: "테마 DB", icon: "🧭" },
       { key: "program", label: "프로그램 매매", icon: "🤖" },
-      { key: "news", label: "뉴스·공시", icon: "📢" },
+      /*
+       * **「지금의 화제」로 합쳤다** (2026-11-26 — 벤티지: "뉴스랑 텔레그램 동향이랑 합쳐가지고
+       * 재구성 해보자. 두개가 따로 있을 필요가 없네 … 지금 화제가 가장 앞에 가고 이게 이제
+       * 지금의화제 메뉴가 되는거지").
+       *
+       * 한 메뉴 안에서 **화제(요약) → 지금(뉴스+채널 한 줄) → 뉴스 / 텔레그램** 차례다.
+       * 옛 메뉴 둘(`news`·`telegram`)은 **목록에서만 감춘다** — 저장된 탭·즐겨찾기·창 연동이
+       * 그 키를 기억하고 있어서 키째로 없애면 그걸 들고 있던 화면이 빈다(MAP 때와 같은 판단).
+       */
+      { key: "topic", label: "지금의 화제", icon: "📣" },
       /*
        * 리서치 (2026-09-16) — 뉴스 바로 아래. 뉴스가 「무슨 일이 있었나」이고
        * 이건 「전문가들이 그걸 어떻게 고쳐 잡았나」다(목표주가 변화·보고서가 몰린 산업).
@@ -350,7 +361,8 @@ export const MENU: {
       { key: "cis", label: "항해일지", icon: "🧭" },
       { key: "journal", label: "복기 노트", icon: "📓" },
       { key: "memo", label: "메모장", icon: "📝" },
-      { key: "telegram", label: "텔레그램 동향", icon: "📡" },
+      /* 「지금의 화제」 안으로 들어갔다 (2026-11-26). 라우트는 남긴다 — 위 주석 참고 */
+      /* { key: "telegram", label: "텔레그램 동향", icon: "📡" }, */
       { key: "calendar", label: "캘린더", icon: "📅" },
     ],
   },
@@ -412,7 +424,7 @@ export const VALID_TABS: ReadonlySet<string> = new Set<string>(
 );
 
 /** 읽기 모드에서 조판(행간·한 줄 길이·본문 크기)을 바꿀 화면 — 글이 주인공인 다섯 (2026-09-19) */
-const READING_TABS = new Set<Tab>(["news", "telegram", "report", "journal", "guide"]);
+const READING_TABS = new Set<Tab>(["topic", "news", "telegram", "report", "journal", "guide"]);
 
 export default function App() {
   /* 홈 = 브리핑. 앱을 열면 「오늘 시장이 어떤가」부터 — 파고들기는 대시보드로 */
@@ -915,6 +927,7 @@ export default function App() {
       case "themeTrend": return <ThemeTrendPage onSelectStock={onSelectStock} />;
       case "themedb": return <ThemeDbPage onSelectStock={onSelectStock} />;
       case "program": return <ProgramTradePage />;
+      case "topic": return <TopicPage onSelectStock={onSelectStock} />;
       case "news": return <NewsPage onSelectStock={onSelectStock} />;
       case "discovery": return <StockDiscoveryPage onOpenAnalysis={onSelectStock} />;
       case "watchAi": return <MyPage onSelectStock={onSelectStock} />;

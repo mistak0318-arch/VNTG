@@ -1,3 +1,4 @@
+import { newsFeed } from "../newsFeed.js";
 import { Router } from "express";
 import { listThemes } from "../customThemes.js";
 import { getFinance } from "../dartFinance.js";
@@ -154,6 +155,19 @@ export function createNewsRouter(client: KiwoomClient): Router {
   });
 
   /** 속보 — [속보]·[단독]·[긴급] 머리표가 붙은 것만, 증시·기업 갈래 우선 */
+  /*
+   * **지금 — 뉴스와 채널을 한 줄로** (2026-11-26). 「지금의 화제」 메뉴의 첫 탭이 쓴다.
+   * 둘 다 이미 다른 화면이 부르던 재료라 새로 긁는 것이 없다(`newsFeed` 머리 참고).
+   */
+  router.get("/news/feed", async (req, res, next) => {
+    try {
+      const minutes = Math.min(1440, Math.max(10, Number(req.query.minutes) || 180));
+      res.json(await newsFeed(minutes));
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.get("/news/breaking", async (_req, res, next) => {
     try {
       res.json(await breakingNews());

@@ -23122,3 +23122,94 @@ tr.gv-strong td:first-child { color: var(--text); }
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/*
+  지금의 화제 ─ **뉴스와 채널을 한 줄로** (2026-11-26)
+
+  벤티지: "뉴스랑 텔레그램 동향이랑 합쳐가지고 재구성 해보자. 두개가 따로 있을 필요가 없네"
+
+  섞되 **출처를 지우지 않는다.** 채널은 빠르고 투기적, 뉴스는 느리고 공식적이라 성격이
+  반대다 — 왼쪽 기둥 색으로 가른다. 시각이 맨 앞인 것은 이 화면의 물음이 **「누가 먼저
+  말했나」**이기 때문이다.
+*/
+.nf {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.nf-row {
+  display: grid;
+  grid-template-columns: 62px auto 1fr;
+  gap: 9px;
+  align-items: baseline;
+  padding: 7px 9px;
+  border-radius: 6px;
+  border-left: 3px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  text-decoration: none;
+}
+.nf-row:hover {
+  background: var(--panel-2);
+}
+.nf-row.news {
+  border-left-color: var(--muted);
+}
+/* 채널은 빠른 쪽 — 눈에 먼저 띄어야 한다 */
+.nf-row.channel {
+  border-left-color: var(--warn);
+}
+.nf-t {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+.nf-t b {
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+.nf-t em {
+  font-style: normal;
+  font-size: 0.64rem;
+}
+.nf-k {
+  font-size: 0.64rem;
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.nf-row.channel .nf-k {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+.nf-b {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.nf-title {
+  font-size: 0.86rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.nf-from {
+  font-size: 0.68rem;
+}
+/* 본문은 두 줄까지 — 채널 글은 길어서 안 자르면 한 줄이 화면을 먹는다 */
+.nf-body {
+  font-size: 0.74rem;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+@media (max-width: 520px) {
+  .nf-row {
+    grid-template-columns: 48px auto 1fr;
+    gap: 6px;
+  }
+}
