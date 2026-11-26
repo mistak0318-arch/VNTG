@@ -233,6 +233,26 @@ function hitsOf(series: number[], n: number): { n: number; of: number } {
  * 에서 읽는다. 스냅샷이 아직 없으면 등락률이 전부 null 이 되므로 그때는 빈 목록을 준다 —
  * 0% 로 채워진 MAP 은 「전부 보합」이라는 거짓말이다.
  */
+/**
+ * **테마 구성에서 잡주를 뺀다** (2026-11-26 — 벤티지: "테마구성에서 각 그룹별로
+ * 시가총액 1천억 이하 종목은 빼자. 내 태그 쪽이랑 네이버 테마 쪽").
+ *
+ * 테마 등락률은 구성종목의 **평균**이다. 시총 몇백억짜리가 상한가를 가면 테마 전체가
+ * 센 것처럼 보이는데, 정작 그 테마에 돈이 들어온 건 아니다 — 「어느 판이 도는가」를
+ * 보는 자리에서 그건 잡음이다.
+ *
+ * ⚠️ **시총을 모르는 종목은 남긴다.** 스냅샷이 아직 안 돌았거나 신규 상장이면 `null` 이
+ * 오는데, 그걸 「작다」로 읽으면 멀쩡한 종목이 조용히 사라진다. **모르는 것과 작은 것은
+ * 다르다** — 우리가 여러 번 당한 자리다(ETF 코드·조용한 건너뜀).
+ *
+ * 단위는 **억원**이다(`marketSnapshot` 이 그렇게 준다).
+ */
+const MIN_CAP_EOK = 1000;
+
+function bigEnough(s: { marketCap: number | null }): boolean {
+  return s.marketCap === null || s.marketCap >= MIN_CAP_EOK;
+}
+
 export async function themeStrength(
   market: Market,
   opts: {
@@ -263,19 +283,21 @@ export async function themeStrength(
 
   if (market === "kr") {
     for (const t of store.themes) {
-      const stocks: ThemeStockRow[] = t.stocks.map((s) => {
-        const row = snap?.byCode.get(s.code);
-        return {
-          code: s.code,
-          name: s.name,
-          desc: s.desc,
-          changeRate: row?.changeRate ?? null,
-          price: row?.price ?? null,
-          change: row?.change ?? null,
-          tradeValue: row?.tradeValue ?? null,
-          marketCap: row?.marketCap ?? null,
-        };
-      });
+      const stocks: ThemeStockRow[] = t.stocks
+        .map((s) => {
+          const row = snap?.byCode.get(s.code);
+          return {
+            code: s.code,
+            name: s.name,
+            desc: s.desc,
+            changeRate: row?.changeRate ?? null,
+            price: row?.price ?? null,
+            change: row?.change ?? null,
+            tradeValue: row?.tradeValue ?? null,
+            marketCap: row?.marketCap ?? null,
+          };
+        })
+        .filter(bigEnough);
       const row = build(`kr:${t.no}`, t.name, stocks, days, hist);
       if (!row) continue;
       /*

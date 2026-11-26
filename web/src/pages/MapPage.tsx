@@ -522,14 +522,15 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
           <div className="table-note">
             색이 진할수록 등락폭이 큽니다 (5% 기준) · 타일을 누르면 구성종목이 열립니다
             {watchSource && ` · ${watch.tiles.length}개 그룹 · ▲/▼ 는 그 그룹에서 오른/내린 종목 수`}
-            {mode === "mine" && ` · ${mineTiles.length}개 · ▲/▼ 는 그 테마에서 오른/내린 종목 수`}
+            {/* 내 태그도 같은 문턱이다 — 적어 두지 않으면 「내가 넣은 종목이 왜 없지」가 된다 */}
+            {mode === "mine" && ` · ${mineTiles.length}개 · ▲/▼ 는 그 테마에서 오른/내린 종목 수 · 시총 1,000억 이하 종목은 뺐습니다(태그 자체는 그대로)`}
             {/* 문턱과 개수를 **그대로 적는다** — 받침(40개)으로 내려온 날은 문턱이 아니라 상위 몇 개라고 말해야 한다 */}
             {mode === "naver" &&
               ` · ${
                 naverTiles.length > 0 && Math.min(...naverTiles.map((t) => t.tradeValue)) >= NAVER_MIN_VALUE
                   ? `거래대금 ${NAVER_MIN_VALUE.toLocaleString("ko-KR")}억↑ ${naverTiles.length}개`
                   : `거래대금 상위 ${naverTiles.length}개 (${NAVER_MIN_VALUE.toLocaleString("ko-KR")}억 넘는 테마가 ${NAVER_FLOOR}개 미만인 날)`
-              } · N일↑ 는 연속 상승`}
+              } · N일↑ 는 연속 상승 · 시총 1,000억 이하 종목은 뺐습니다`}
             {mode === "theme" && ` · ${themeTiles.length}개 테마`}
           </div>
           {mode === "mine" && mineTiles.length === 0 && (

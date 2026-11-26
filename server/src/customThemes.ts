@@ -227,20 +227,33 @@ function evaluate(
    */
   nameOf?: Map<string, string>,
 ): EvaluatedTheme {
-  const stocks = theme.codes.map((code) => {
-    const s = byCode.get(code);
-    return {
-      code,
-      name: s?.name ?? nameOf?.get(code) ?? code,
-      changeRate: s?.changeRate ?? 0,
-      price: s?.price ?? 0,
-      change: s?.change ?? 0,
-      marketCap: s?.marketCap ?? null,
-      tradeValue: s?.tradeValue ?? null,
-      weight: null as number | null,
-      found: Boolean(s),
-    };
-  });
+  /*
+   * **시총 1,000억 이하는 뺀다** (2026-11-26 — 벤티지: "테마구성에서 각 그룹별로 시가총액
+   * 1천억 이하 종목은 빼자. 내 태그 쪽이랑 네이버 테마 쪽"). 네이버 테마(`themeStrength`)와
+   * **같은 문턱·같은 규칙**이다 — 두 지도가 다른 자로 재면 견줄 수가 없다.
+   *
+   * ⚠️ **시총을 모르는 종목은 남긴다.** 스냅샷에 아직 안 뜬 종목(신규 상장·휴장 직후)은
+   * `null` 인데 그걸 「작다」로 읽으면 멀쩡한 종목이 조용히 사라진다.
+   *
+   * ⚠️ **원본 태그는 안 건드린다.** 여기서 거르는 것은 **평가(지도·등락률)**뿐이고,
+   * 태그 편집 화면에는 내가 넣은 종목이 그대로 다 보인다.
+   */
+  const stocks = theme.codes
+    .map((code) => {
+      const s = byCode.get(code);
+      return {
+        code,
+        name: s?.name ?? nameOf?.get(code) ?? code,
+        changeRate: s?.changeRate ?? 0,
+        price: s?.price ?? 0,
+        change: s?.change ?? 0,
+        marketCap: s?.marketCap ?? null,
+        tradeValue: s?.tradeValue ?? null,
+        weight: null as number | null,
+        found: Boolean(s),
+      };
+    })
+    .filter((s) => s.marketCap === null || s.marketCap >= 1000);
 
   const found = stocks.filter((s) => s.found);
   const weighted = found.filter((s) => (s.marketCap ?? 0) > 0);
