@@ -396,6 +396,8 @@ export interface FeedItem {
   at: string;
   title: string;
   from: string;
+  /** 채널만 — 방 id. 고른 방은 이름이 아니라 이것으로 적는다(이름은 바뀐다) */
+  fromId?: string;
   link: string;
   body: string;
   category?: string;

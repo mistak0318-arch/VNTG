@@ -35,6 +35,12 @@ export interface FeedItem {
   title: string;
   /** 뉴스는 언론사, 채널은 방 이름 */
   from: string;
+  /**
+   * 채널만 — 방의 **id**. 고른 방을 이 기기에 적어 둘 때 이름이 아니라 이것으로 적는다
+   * (2026-11-26 — 벤티지: "여기에 나오는 텔레그램 채널 내가 고를 수 있게").
+   * 방 이름은 운영자가 바꾼다 — 이름으로 적어 두면 그날 고른 방이 **조용히** 풀린다.
+   */
+  fromId?: string;
   link: string;
   /** 뉴스 요약 · 채널 본문(잘라서) */
   body: string;
@@ -103,6 +109,7 @@ export async function newsFeed(minutes = 180, limit = 120): Promise<NewsFeed> {
       at: m.at,
       title: titleOf(m.text),
       from: m.channelName,
+      fromId: m.channelId,
       link: m.link,
       body: head(m.text, 200),
     });

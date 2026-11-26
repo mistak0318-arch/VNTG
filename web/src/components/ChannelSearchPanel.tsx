@@ -279,7 +279,19 @@ export function ChannelSearchPanel({ code, name }: { code?: string; name?: strin
    */
   const [off, setOff] = useState<Set<string>>(new Set());
 
-  /** 보드가 보고 있는 종목에서 온 말 — 이름·짧은 이름·코드 */
+  /**
+   * 보드가 보고 있는 종목에서 온 말 — **이름과 짧은 이름뿐이다.**
+   *
+   * (2026-11-26 — 벤티지: "보드에서 텔레그램 검색에서 지금 보고 있는 종목명으로
+   * 서치하게끔 해줘. 지금 뭐 종목번호랑 같이 하니깐 짬뽕되서 나오네.")
+   *
+   * 예전엔 **종목코드**도 같이 넣었다. 찾는 말은 「또는」으로 묶이므로 코드 한 줄이
+   * 들어가면 그 여섯 자리가 **아무 데나 박힌 글**까지 같이 걸려 온다 — 채널 글에는
+   * 수급표·시세표가 통째로 붙는 일이 흔해서, 그 종목 이야기가 아닌 글이 섞였다.
+   * 정작 채널 사람들은 코드를 거의 안 쓴다(캡처의 「196170」은 0건이었다).
+   *
+   * 얻는 것 없이 섞이기만 해서 뺐다. 코드로 찾고 싶으면 칸에 직접 치면 된다.
+   */
   const stockWords = useMemo(() => {
     const out: string[] = [];
     if (name) {
@@ -287,9 +299,8 @@ export function ChannelSearchPanel({ code, name }: { code?: string; name?: strin
       const s2 = shortName(name);
       if (s2) out.push(s2);
     }
-    if (code) out.push(code);
     return out;
-  }, [name, code]);
+  }, [name]);
 
   /*
    * **직접 쓴 말이 있으면 그것만 찾는다** (2026-11-09 — 벤티지: "삼성전자라고 새로운걸
@@ -323,7 +334,7 @@ export function ChannelSearchPanel({ code, name }: { code?: string; name?: strin
     }
   }, [code]);
 
-  /** 실제로 찾을 말들 — 종목 이름·짧은 이름·코드 + 사람이 넣은 것 */
+  /** 실제로 찾을 말들 — 종목 **이름**·짧은 이름 + 사람이 넣은 것 (코드는 안 넣는다) */
   const words = useMemo(() => {
     const out: string[] = [];
     if (name) {
@@ -331,14 +342,13 @@ export function ChannelSearchPanel({ code, name }: { code?: string; name?: strin
       const s = shortName(name);
       if (s) out.push(s);
     }
-    if (code) out.push(code);
     for (const w of extra.split(",")) {
       const t = w.trim();
       if (t) out.push(t);
     }
     /* 끈 말은 뺀다 — 목록에는 남아 있고(끈 모양으로) 찾을 때만 안 쓴다 */
     return [...new Set(out)].filter((w) => !off.has(w));
-  }, [name, code, extra, off]);
+  }, [name, extra, off]);
 
   /** 끄고 켜기 전의 모든 말 — 태그 줄은 끈 것도 보여 줘야 다시 켤 수 있다 */
   const allWords = useMemo(() => {
@@ -348,13 +358,12 @@ export function ChannelSearchPanel({ code, name }: { code?: string; name?: strin
       const s2 = shortName(name);
       if (s2) out.push(s2);
     }
-    if (code) out.push(code);
     for (const w of extra.split(",")) {
       const t = w.trim();
       if (t) out.push(t);
     }
     return [...new Set(out)];
-  }, [name, code, extra]);
+  }, [name, extra]);
 
   /*
    * ⚠️ **저절로 돌지 않는다.**
