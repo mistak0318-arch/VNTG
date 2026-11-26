@@ -443,11 +443,75 @@ async function closeOnDate(code: string, date: string): Promise<number | null> {
   }
 }
 
-export async function journalPositions(date: string): Promise<{ rows: JournalPosition[]; prevDate: string | null }> {
+/**
+ * **지금 값** — 전종목 스냅샷에 없으면 일봉으로 한 번 더 묻는다 (2026-11-27).
+ *
+ * 벤티지: "전일 매매복기에 편입대비 등락률을 보여줘야 되지 않나 싶은데. 이것만 딸랑
+ * 보여주면 의미 없을 듯"
+ *
+ * ## 왜 비어 있었나 — ETF 는 스냅샷에 아예 없다
+ *
+ * 전종목 스냅샷(`marketSnapshot`)은 **업종별 종목 조회로 짓는다.** 그런데 ETF 는 업종이
+ * 없어서 그 목록에 한 번도 안 나온다. 그래서 `snap.byCode.get("069500")` 은 늘 비었고,
+ * 화면에는 「지금 값 없음」이 찍혔다 — KODEX 200·코스닥150·TIGER 미국S&P500… 벤티지가
+ * 적은 것이 전부 ETF 라 **등락률 기능이 통째로 죽어 있었다.**
+ *
+ * 「ETF 코드는 숫자가 아니다」로 세 번 당한 것과 **같은 종류의 조용한 실종**이다.
+ * 그때는 코드 모양으로 걸렀고 이번엔 목록을 짓는 방법이 걸렀다.
+ *
+ * ## 고친 방법
+ *
+ * 스냅샷에 없으면 **일봉(ka10081) 한 번**으로 메운다. 장중이면 오늘 줄의 현재가가, 장
+ * 밖이면 마지막 종가가 온다 — 어느 쪽이든 「지금 값」으로 맞다.
+ *
+ * 조회를 아끼는 장치 둘: **3분 캐시**(복기 노트는 한 화면에서 여러 번 묻는다)와 **스무
+ * 개 상한**(노트 한 장이 시장 스캔이 되면 안 된다). 초당 5회 제한이 있어 다섯씩 묶는다.
+ */
+const priceCache = new Map<string, { at: number; v: number | null }>();
+const PRICE_TTL = 3 * 60_000;
+const PRICE_MAX = 20;
+
+async function pricesNow(client: KiwoomClient | null, codes: string[]): Promise<Map<string, number>> {
+  const snap = peekSnapshot();
+  const out = new Map<string, number>();
+  const miss: string[] = [];
+  for (const c of new Set(codes.filter(Boolean))) {
+    const p = snap?.byCode.get(c)?.price;
+    if (p && p > 0) out.set(c, p);
+    else miss.push(c);
+  }
+  if (!client || miss.length === 0) return out;
+
+  const now = Date.now();
+  const need: string[] = [];
+  for (const c of miss) {
+    const hit = priceCache.get(c);
+    if (hit && now - hit.at < PRICE_TTL) {
+      if (hit.v && hit.v > 0) out.set(c, hit.v);
+    } else need.push(c);
+  }
+
+  const take = need.slice(0, PRICE_MAX);
+  for (let i = 0; i < take.length; i += 5) {
+    const chunk = take.slice(i, i + 5);
+    const got = await Promise.all(chunk.map((c) => lastClose(client, c).catch(() => null)));
+    chunk.forEach((c, k) => {
+      priceCache.set(c, { at: now, v: got[k] });
+      if (got[k] && got[k]! > 0) out.set(c, got[k]!);
+    });
+    if (i + 5 < take.length) await new Promise((r) => setTimeout(r, 1100));
+  }
+  return out;
+}
+
+export async function journalPositions(
+  date: string,
+  client: KiwoomClient | null = null,
+): Promise<{ rows: JournalPosition[]; prevDate: string | null }> {
   const all = await readAll();
   const upto = all.filter((r) => r.date <= date);
   const prevDate = upto.filter((r) => r.date < date && r.trades.length > 0).pop()?.date ?? null;
-  const snap = peekSnapshot();
+  const prices = await pricesNow(client, upto.flatMap((d) => d.trades.map((t) => t.code)));
 
   interface Acc {
     name: string;
@@ -502,7 +566,7 @@ export async function journalPositions(date: string): Promise<{ rows: JournalPos
     const left = a.buyQty - a.sellQty;
     const holding = left > 0;
     const avg = a.buyQty > 0 ? a.buyAmt / a.buyQty : null;
-    const now = snap?.byCode.get(code)?.price ?? null;
+    const now = prices.get(code) ?? null;
     const last = holding ? (now && now > 0 ? now : null) : a.lastSell;
     const change = avg && avg > 0 && last && last > 0 ? Math.round(((last - avg) / avg) * 1000) / 10 : null;
     rows.push({
@@ -542,18 +606,140 @@ export async function journalPositions(date: string): Promise<{ rows: JournalPos
   return { rows, prevDate };
 }
 
-export async function prevDayReview(date: string): Promise<{ date: string | null; rows: PrevTradeReview[] }> {
+/**
+ * **구간별 매매·수익 현황** (2026-11-27 — 벤티지: "밑에 내 매매 이거 의미가 뭐야? 뭐라도
+ * 보여줘야 할 듯 아니면 5일간 매매 현황&수익현황. 10일 현황. 20일 현황 이렇게 구간별로").
+ *
+ * 아래 통계판은 **쪼갠 것**이라 표본이 모일 때까지 아무 말도 못 한다 — 「아직 없습니다」가
+ * 넉 줄 이어졌다. 그 자리에 **지금 당장 답이 나오는 것**을 둔다.
+ *
+ * ## 세는 법
+ *
+ *   · 구간은 **달력일**이다(최근 5·10·20일). 거래일로 세면 「장이 쉰 주」가 창을 늘려
+ *     「요즘」이 아니게 된다
+ *   · **실현**: 그 구간에 판 건을, 그 종목의 **그때까지 평균 매입가** 대비로 잰다.
+ *     수량을 안 적었으면 한 주씩으로 센다 — 퍼센트만 내므로 단위는 상관없다
+ *   · **산 것**: 그 구간에 산 건이 **지금** 어떤가. 아직 안 판 것의 성적이라 확정이 아니다
+ *   · 기준가는 늘 그렇듯 적은 매입가 → 적을 때 시세 → 그날 종가 차례다
+ */
+export interface JournalWindow {
+  days: number;
+  from: string;
+  wrote: number;
+  traded: number;
+  watched: number;
+  buys: number;
+  sells: number;
+  /** 그 구간에 판 것 — 평균 등락률·이긴 비율 */
+  realized: { n: number; avg: number | null; winRate: number | null };
+  /** 그 구간에 산 것이 지금 — 아직 안 판 것 포함이라 확정이 아니다 */
+  bought: { n: number; avg: number | null };
+}
+
+export async function journalWindows(
+  date: string,
+  client: KiwoomClient | null = null,
+  spans: number[] = [5, 10, 20],
+): Promise<JournalWindow[]> {
+  const all = (await readAll()).filter((r) => r.date <= date);
+  const prices = await pricesNow(client, all.flatMap((d) => d.trades.map((t) => t.code)));
+
+  /** 기준가 — 적은 매입가 → 적을 때 시세 → 그날 종가 */
+  const baseOf = async (t: JournalTrade, day: string): Promise<number> =>
+    t.price > 0 ? t.price : (t.autoPrice ?? (await closeOnDate(t.code, day)) ?? 0);
+
+  const back = (n: number) => {
+    const d = new Date(`${date}T00:00:00+09:00`);
+    d.setDate(d.getDate() - (n - 1));
+    return kstDate(d);
+  };
+
+  const out: JournalWindow[] = [];
+  for (const days of spans) {
+    const from = back(days);
+    const inWin = all.filter((r) => r.date >= from);
+
+    /* 평균 매입가는 **구간 밖의 매수까지** 쌓아야 맞다 — 지난달에 산 것을 이번 주에 팔 수 있다 */
+    const avgBuy = new Map<string, { qty: number; amt: number }>();
+    const realized: number[] = [];
+    const bought: number[] = [];
+    let buys = 0;
+    let sells = 0;
+
+    for (const day of all) {
+      for (const t of day.trades) {
+        if (!t.code) continue;
+        const base = await baseOf(t, day.date);
+        if (!(base > 0)) continue;
+        const q = t.qty > 0 ? t.qty : 1;
+        const a = avgBuy.get(t.code) ?? { qty: 0, amt: 0 };
+        const here = day.date >= from;
+
+        if (t.kind === "buy") {
+          a.qty += q;
+          a.amt += base * q;
+          avgBuy.set(t.code, a);
+          if (here) {
+            buys += 1;
+            const now = prices.get(t.code);
+            if (now && now > 0) bought.push(((now - base) / base) * 100);
+          }
+        } else {
+          const avg = a.qty > 0 ? a.amt / a.qty : 0;
+          if (here) {
+            sells += 1;
+            /* 산 기록이 없는 매도(옛 기록·계좌 밖 매수)는 **안 센다** — 0% 로 세면 거짓이 된다 */
+            if (avg > 0) realized.push(((base - avg) / avg) * 100);
+          }
+          /* 판 만큼 평균에서 덜어 낸다 — 평균 단가는 그대로 두고 수량만 줄인다 */
+          const cut = Math.min(q, a.qty);
+          a.qty -= cut;
+          a.amt -= avg * cut;
+          avgBuy.set(t.code, a);
+        }
+      }
+    }
+
+    const mean = (xs: number[]) =>
+      xs.length === 0 ? null : Math.round((xs.reduce((s, x) => s + x, 0) / xs.length) * 10) / 10;
+
+    out.push({
+      days,
+      from,
+      wrote: inWin.length,
+      traded: inWin.filter((r) => r.trades.length > 0).length,
+      watched: inWin.filter((r) => r.stance === "watch").length,
+      buys,
+      sells,
+      realized: {
+        n: realized.length,
+        avg: mean(realized),
+        winRate:
+          realized.length === 0
+            ? null
+            : Math.round((realized.filter((x) => x > 0).length / realized.length) * 1000) / 10,
+      },
+      bought: { n: bought.length, avg: mean(bought) },
+    });
+  }
+  return out;
+}
+
+export async function prevDayReview(
+  date: string,
+  client: KiwoomClient | null = null,
+): Promise<{ date: string | null; rows: PrevTradeReview[] }> {
   const rows = await readAll();
   /* **직전 기록일**이지 어제가 아니다 — 주말·휴일·안 적은 날이 있다 */
   const prev = rows.filter((r) => r.date < date && r.trades.length > 0).pop();
   if (!prev) return { date: null, rows: [] };
-  const snap = peekSnapshot();
+  const prices = await pricesNow(client, prev.trades.map((t) => t.code));
   return {
     date: prev.date,
     /* 그날 종가 소급이 비동기라 `Promise.all` 로 받는다 — 일봉은 캐시라 빠르다 */
     rows: await Promise.all(
       prev.trades.map(async (t) => {
-      const now = snap?.byCode.get(t.code)?.price ?? null;
+      const now = prices.get(t.code) ?? null;
       /* 매입가를 안 적었으면 **적을 때 시세**로 잰다 — 「귀찮아서 안 적는다」가 기본값이다 */
       const base = t.price > 0 ? t.price : (t.autoPrice ?? (await closeOnDate(t.code, prev.date)) ?? 0);
       const change = now && now > 0 && base > 0 ? Math.round(((now - base) / base) * 1000) / 10 : null;

@@ -1713,6 +1713,12 @@ export const api = {
     putJson<{ text: string; updatedAt: string }>("/api/journal/creed", { text }),
   journalPrevReview: (date?: string) =>
     getJson<{ date: string | null; rows: PrevTradeReview[] }>(`/api/journal/prev-review${date ? `?date=${date}` : ""}`),
+  /** 구간별 매매·수익 현황 (2026-11-27) */
+  journalWindows: (date?: string) =>
+    getJson<{ windows: JournalWindow[] }>(`/api/journal/windows${date ? `?date=${date}` : ""}`),
+  /** 아직 저장 안 한 날의 시장 — 저장할 때 박히는 것과 같은 함수 (2026-11-27) */
+  journalContext: (date?: string) =>
+    getJson<{ date: string; context: DayContext | null }>(`/api/journal/context${date ? `?date=${date}` : ""}`),
   journalOrders: (date?: string) =>
     getJson<{ date: string; rows: JournalOrder[]; summary: OrderSummary; diary: Diary | null }>(`/api/journal/orders${date ? `?date=${date}` : ""}`),
   journalOrdersSync: (date?: string) =>
@@ -6017,6 +6023,21 @@ export interface PrevTradeReview {
   target?: number;
   hitStop?: boolean;
   hitTarget?: boolean;
+}
+
+/** 구간별 매매·수익 현황 (2026-11-27) — 최근 5·10·20일(달력) */
+export interface JournalWindow {
+  days: number;
+  from: string;
+  wrote: number;
+  traded: number;
+  watched: number;
+  buys: number;
+  sells: number;
+  /** 그 구간에 판 것 */
+  realized: { n: number; avg: number | null; winRate: number | null };
+  /** 그 구간에 산 것이 지금 — 아직 안 판 것 포함이라 확정이 아니다 */
+  bought: { n: number; avg: number | null };
 }
 
 /** 내 종목 현황 (2026-11-25) — 복기 노트에 적힌 것의 합. 실제 계좌가 아니다 */

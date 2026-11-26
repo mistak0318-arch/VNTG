@@ -23262,3 +23262,136 @@ tr.gv-strong td:first-child { color: var(--text); }
 @media (min-width: 720px) {
   .nf-rooms .filter-btn { max-width: 260px; }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   복기 노트 2026-11-27 — 설명 접기 · 보유 줄 · 구간 현황 · 장중 등락률
+   ───────────────────────────────────────────────────────────────────────── */
+
+/*
+  설명 접기. 지우지 않고 **감춘다** — 「이 칸이 뭐였지」가 가끔 온다.
+  `.jn-label` 안의 한 줄 설명만 끈다(단추·값은 그대로 둬야 한다).
+*/
+.jn-editor.jn-nohint .jn-label .jn-hint { display: none; }
+
+/*
+  **들고 있는 것** — 「오늘의 매매」 맨 위. 오늘이 어제와 이어지는 자리다.
+  폰에서는 두 줄로 접힌다(이름+움직임 / 평단·지금·등락률).
+*/
+.jn-hold {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.jn-hold-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas: "n m m" "q l c";
+  align-items: center;
+  gap: 2px 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--blue);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+.jn-hold-row.done { border-left-color: var(--border); opacity: 0.75; }
+.jn-hold-n { grid-area: n; font-size: 0.86rem; overflow-wrap: anywhere; }
+.jn-hold-m {
+  grid-area: m;
+  justify-self: end;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.jn-hold-m.buy { color: var(--red); border-color: var(--red); }
+.jn-hold-m.sell { color: var(--blue); border-color: var(--blue); }
+.jn-hold-q { grid-area: q; font-size: 0.72rem; overflow-wrap: anywhere; }
+.jn-hold-l { grid-area: l; font-size: 0.78rem; }
+.jn-hold-c { grid-area: c; font-size: 0.88rem; font-weight: 700; min-width: 56px; text-align: right; }
+@media (min-width: 720px) {
+  .jn-hold-row {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1.2fr) auto auto;
+    grid-template-areas: "n m q l c";
+  }
+  .jn-hold-m { justify-self: start; }
+}
+
+/*
+  **구간별 현황** — 5·10·20일. 실현(확정)과 평가(미확정)를 **다른 줄**로 둔다.
+  한 줄에 섞으면 「벌었다」가 둘 중 어느 쪽인지 사라진다.
+*/
+.jn-win {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.jn-win-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-2);
+  padding: 10px 12px;
+  min-width: 0;
+}
+.jn-win-h {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.jn-win-h em { font-size: 0.68rem; font-style: normal; }
+.jn-win-l,
+.jn-win-r {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 0.78rem;
+  padding: 2px 0;
+  flex-wrap: wrap;
+}
+.jn-win-l i,
+.jn-win-r i { font-style: normal; color: var(--muted); min-width: 48px; }
+.jn-win-l b { font-weight: 700; margin-right: 8px; }
+.jn-win-r { border-top: 1px dashed var(--border); margin-top: 4px; padding-top: 6px; }
+.jn-win-r b { font-size: 0.95rem; font-weight: 700; }
+.jn-win-r small { font-size: 0.68rem; }
+
+/*
+  **장중 등락률** (`IndexIntraday`). 숫자는 「얼마나」만 말하고 「어떻게」를 못 말한다 —
+  아침에 다 벌고 흘린 날과 끝에 붙은 날은 같은 +0.3% 다.
+*/
+.idx-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 8px;
+  margin: 8px 0 12px;
+}
+.idx-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-2);
+  padding: 10px 12px;
+  min-width: 0;
+}
+.idx-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.idx-name { font-weight: 700; font-size: 0.86rem; }
+.idx-price { font-size: 0.95rem; font-weight: 700; font-variant-numeric: tabular-nums; margin-left: auto; }
+.idx-rate { font-size: 0.82rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+/* 높이를 고정한다 — viewBox 가 늘어나는 그림이라 비율로 두면 폭에 따라 납작해진다 */
+.idx-svg { width: 100%; height: 72px; display: block; margin: 6px 0 4px; }
+.idx-legend {
+  display: flex;
+  gap: 10px;
+  font-size: 0.68rem;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+.idx-legend .idx-time { margin-left: auto; }

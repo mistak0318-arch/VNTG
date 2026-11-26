@@ -12,13 +12,12 @@ import {
   type EdgeRow,
   type PrevTradeReview,
   type JournalPosition,
+  type JournalWindow,
   type DayContext,
-  type JournalOrder,
-  type OrderSummary,
-  type Diary,
 } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
 import { TradeTrackPanel } from "../components/TradeTrackPanel";
+import { IndexIntraday } from "../components/IndexIntraday";
 import { useListKeys } from "../useListKeys";
 
 /**
@@ -528,6 +527,67 @@ export function JournalPage({
       .catch(() => seq === posSeq.current && setPositions([]));
   }, [date]);
 
+  /**
+   * **구간별 매매·수익 현황** (2026-11-27 — 벤티지: "밑에 내 매매 이거 의미가 뭐야? …
+   * 5일간 매매 현황&수익현황. 10일 현황. 20일 현황 이렇게 구간별로 볼 수 있게").
+   */
+  const [windows, setWindows] = useState<JournalWindow[]>([]);
+  const winSeq = useRef(0);
+  useEffect(() => {
+    const seq = ++winSeq.current;
+    api
+      .journalWindows(date)
+      .then((r) => seq === winSeq.current && setWindows(r.windows))
+      .catch(() => seq === winSeq.current && setWindows([]));
+  }, [date]);
+
+  /**
+   * **아직 저장 안 한 날의 시장** (2026-11-27 — 벤티지: "저장하고 나면 코스피 코스닥 이런거
+   * 지수현황 보이는데 처음에 기록할때도 보일 수 있게").
+   *
+   * 저장할 때 박히는 것과 **같은 함수**를 서버에서 부른다 — 두 벌로 만들면 적을 때 본
+   * 숫자와 박힌 숫자가 갈리는 날이 온다. 저장본이 있으면 안 부른다(박제가 우선).
+   */
+  const [liveCtx, setLiveCtx] = useState<DayContext | null>(null);
+  const ctxSeq = useRef(0);
+  useEffect(() => {
+    const saved = data?.entries.find((e) => e.date === date)?.context ?? null;
+    if (saved) {
+      setLiveCtx(null);
+      return;
+    }
+    const seq = ++ctxSeq.current;
+    api
+      .journalContext(date)
+      .then((r) => seq === ctxSeq.current && setLiveCtx(r.context))
+      .catch(() => seq === ctxSeq.current && setLiveCtx(null));
+  }, [date, data]);
+
+  /**
+   * **설명은 접어 둔다** (2026-11-27 — 벤티지: "설명들 다 접힘 모드 기본으로 해줘
+   * 화면만 먹어").
+   *
+   * 칸마다 붙은 한 줄 설명은 **처음 한 번만** 쓸모가 있다. 매일 쓰는 사람에게는 읽을
+   * 것과 적을 것 사이에 낀 군더더기다 — 폰에서는 그것 때문에 한 칸이 두 배로 길어진다.
+   * 지우지는 않는다(가끔 「이 칸이 뭐였지」가 온다). 기기별(localStorage)로 기억한다.
+   */
+  const [hints, setHints] = useState(() => {
+    try {
+      return localStorage.getItem("vntg.journal.hints") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleHints = () => {
+    const v = !hints;
+    setHints(v);
+    try {
+      localStorage.setItem("vntg.journal.hints", v ? "1" : "0");
+    } catch {
+      /* 사생활 모드 — 이번만 */
+    }
+  };
+
   /*
    * **시스에게 복기 받기** (2026-11-25). 벤티지의 업노트에는 `[일일복기 프롬프트]` 가 있었다 —
    * 4관점(시황 동기화 / 원칙 점검 / 익일 전략 검증 / 연금·ETF 배분)으로 AI 에게 시키는 글.
@@ -565,28 +625,12 @@ export function JournalPage({
 
   // 편집 중인 값
   const [form, setForm] = useState<Partial<JournalEntry>>({});
-  /* 11번 — 그날 주문·체결. 오늘이면 로그에서 바로, 옛 날짜는 저장본 우선 */
-  const [orders, setOrders] = useState<JournalOrder[]>([]);
-  const [ordersSummary, setOrdersSummary] = useState<OrderSummary | null>(null);
-  const [diary, setDiary] = useState<Diary | null>(null);
-  const [ordersLoading, setOrdersLoading] = useState(false);
-  const loadOrders = async () => {
-    setOrdersLoading(true);
-    try {
-      const r = await api.journalOrders(date);
-      setOrders(r.rows);
-      setOrdersSummary(r.summary);
-      setDiary(r.diary ?? null);
-    } catch {
-      /* 못 읽으면 저장본이라도 */
-    } finally {
-      setOrdersLoading(false);
-    }
-  };
-  useEffect(() => {
-    void loadOrders();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date]);
+  /*
+   * ✂ 11번 「오늘의 주문·체결」은 2026-11-27 에 걷어냈다 — 벤티지가 메인 계좌에서
+   * 거래해서 늘 비어 있었다. 서버 쪽(`/journal/orders`)과 저장본의 `orders` 는 그대로다
+   * (주문 메뉴의 「복기 노트에 담기」가 쓴다). 여기서 날짜마다 부르던 조회도 같이 없앤다 —
+   * 그 길은 키움 당일매매일지(ka10170)까지 불렀다.
+   */
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<StockSearchResult[]>([]);
   /* 예측 종목 검색 — 매매 검색과 칸을 나눈다(같이 쓰면 어느 쪽에 담을지 헷갈린다) */
@@ -818,7 +862,13 @@ export function JournalPage({
 
   const s = data.stats;
   const entry = data.entries.find((e) => e.date === date);
-  const ctx = entry?.context ?? null;
+  /*
+   * 저장본이 **먼저**다. 박제된 값이 있으면 그게 그날의 기록이고, 없을 때만 지금 값을
+   * 빌려 온다 — 적는 동안 보라고(2026-11-27). 둘을 섞지 않으려고 `ctxLive` 로 표시한다.
+   */
+  const savedCtx = entry?.context ?? null;
+  const ctx = savedCtx ?? liveCtx;
+  const ctxLive = !savedCtx && !!liveCtx;
   const calGrid = buildCalGrid(calCursor);
 
   return (
@@ -827,7 +877,11 @@ export function JournalPage({
       {error && <div className="error-banner">{error}</div>}
 
       {/* ── 오늘 적기 ── */}
-      <section className="jn-editor">
+      {/*
+        칸마다 붙은 한 줄 설명은 **처음 한 번만** 쓸모가 있다. 기본은 접음 —
+        지우지 않고 CSS 한 줄로 감춘다(`jn-nohint`). 기억은 기기별이다.
+      */}
+      <section className={`jn-editor${hints ? "" : " jn-nohint"}`}>
         {/*
           날짜 고르기 — **한 달치 달력** (2026-08-27). 예전엔 `<input type="date">` 라
           네이티브 피커를 열어 두 번 눌러야 했고, 어느 날에 기록이 있는지도 안 보였다.
@@ -850,6 +904,14 @@ export function JournalPage({
           </button>
           <button className="filter-btn" onClick={() => void goToday()} title="오늘로">
             오늘
+          </button>
+          {/* 칸 설명 — 기본은 접힘. 「이 칸이 뭐였지」가 올 때만 편다 */}
+          <button
+            className={`filter-btn ${hints ? "active" : ""}`}
+            onClick={toggleHints}
+            title="칸마다 붙은 한 줄 설명을 보이거나 감춥니다 (이 기기에 기억됩니다)"
+          >
+            설명 {hints ? "끄기" : "보기"}
           </button>
           <span className="jn-streak">
             연속 <b>{s.streak}</b>일 · 총 <b>{s.days}</b>일 기록
@@ -902,6 +964,17 @@ export function JournalPage({
         )}
 
         {/*
+          **장중 등락률** (2026-11-27 — 벤티지: "장중 등락률 그래프도 보여줘서 오늘 장
+          분위기 알 수 있게 하자고"). 숫자는 「얼마나」만 말하고 **「어떻게」를 못 말한다** —
+          +0.3% 로 끝난 날이 내리 밀리다 끝에 붙은 날인지, 아침에 다 벌고 흘린 날인지는
+          선이라야 보인다. 복기에서 묻는 것이 바로 그것이다.
+
+          오늘 자리에서만 그린다 — 이 그림은 **가장 최근 거래일**을 그리므로, 지난 날짜에
+          붙이면 그날이 아닌 오늘을 그려 놓고 그날인 척하게 된다.
+        */}
+        {date === today() && <IndexIntraday />}
+
+        {/*
           **[지수 현황]** (2026-11-25 — 벤티지의 업노트/블로그에서 매일 손으로 캡처해
           붙이던 표). 이제 저장할 때 숫자로 박히므로 캡처가 필요 없고, 무엇보다
           **나중에 셀 수 있다** — 「외국인이 산 날의 내 성적」 같은 물음이 그때 가능해진다.
@@ -912,7 +985,8 @@ export function JournalPage({
         {ctx && (ctx.indices || ctx.investor || ctx.usRates) && (
           <div className="jn-mkt">
             <div className="jn-mkt-h">
-              [지수 현황] <em className="pt-n">저장할 때 박제된 값</em>
+              [지수 현황]{" "}
+              <em className="pt-n">{ctxLive ? "지금 값 — 저장하면 이대로 박제됩니다" : "저장할 때 박제된 값"}</em>
             </div>
 
             {/*
@@ -1069,6 +1143,47 @@ export function JournalPage({
               <b>R</b>(건 것 대비 얼마를 벌었나)이 거기서 나옵니다
             </em>
           </span>
+
+          {/*
+            **들고 있는 것부터** (2026-11-27 — 벤티지: "오늘의 매매에서는 기존에 가지고
+            있던것도 보여줘야지 … 최종 평균단가랑 수량 볼 수 있게 해줘야지").
+
+            오늘 적을 칸만 있으면 **오늘이 어제와 이어지지 않는다.** 「추가매수냐 신규냐」도
+            「지금 몇 주를 들고 있나」도 안 보이는 채로 적게 된다. 아래 적는 칸의 내용이
+            바로 이 줄에 반영된다 — 적자마자(저장하면) 평단·수량이 다시 계산된다.
+
+            맨 아래 「내 매매」와 **같은 값**이다(`journalPositions`). 두 벌로 세지 않는다.
+          */}
+          {positions.filter((p) => p.holding || p.moveToday).length > 0 && (
+            <div className="jn-hold">
+              {positions
+                .filter((p) => p.holding || p.moveToday)
+                .map((p) => (
+                  <div className={`jn-hold-row${p.holding ? "" : " done"}`} key={p.code}>
+                    <b className="jn-hold-n">{p.name}</b>
+                    {p.moveToday ? (
+                      <span className={`jn-hold-m ${p.moveToday === "신규" || p.moveToday === "추가매수" ? "buy" : "sell"}`}>
+                        {p.moveToday}
+                      </span>
+                    ) : (
+                      <span className="jn-hold-m keep">보유</span>
+                    )}
+                    <span className="jn-hold-q pt-n">
+                      평단 {p.base?.toLocaleString("ko-KR") ?? "-"}
+                      {p.qty !== null ? ` · ${p.qty.toLocaleString("ko-KR")}주` : ""}
+                      {p.basis && p.basis !== "매입가" ? ` · ${p.basis}` : ""}
+                    </span>
+                    <span className="jn-hold-l num">{p.last?.toLocaleString("ko-KR") ?? "-"}</span>
+                    <span
+                      className={`num jn-hold-c ${(p.change ?? 0) > 0 ? "positive" : (p.change ?? 0) < 0 ? "negative" : ""}`}
+                    >
+                      {p.change === null ? "-" : `${p.change > 0 ? "+" : ""}${p.change.toFixed(1)}%`}
+                    </span>
+                  </div>
+                ))}
+            </div>
+          )}
+
           <div className="jn-trades">
             {(form.trades ?? []).map((t) => (
               <div className={`jn-trade ${t.kind}`} key={t.id}>
@@ -1389,9 +1504,19 @@ export function JournalPage({
                 <div className="jn-prev-row" key={`${r.kind}${r.code}${r.price}`}>
                   <em className={`jn-prev-k ${r.kind}`}>{r.kind === "buy" ? "매수" : "매도"}</em>
                   <b className="jn-prev-n">{r.name}</b>
+                  {/*
+                    **기준가를 보여 준다** (2026-11-27 — 벤티지: "전일 매매복기에 편입대비
+                    등락률을 보여줘야 되지 않나 싶은데. 이것만 딸랑 보여주면 의미 없을 듯").
+
+                    예전엔 `r.price`(사람이 적은 매입가)를 찍었다. 그런데 매입가를 안 적는
+                    것이 기본값이라 **거기가 늘 「0」이었다.** 등락률을 재는 기준은 이미
+                    서버가 고르고 있다(적은 매입가 → 적을 때 시세 → 그날 종가) — 화면도
+                    그 값을 보여 줘야 앞뒤가 맞는다. 무엇으로 쟀는지(`basis`)도 같이 적는다.
+                  */}
                   <span className="num jn-prev-p">
-                    {r.price.toLocaleString("ko-KR")}
+                    {r.basePrice !== null ? r.basePrice.toLocaleString("ko-KR") : "-"}
                     {r.now !== null ? ` → ${r.now.toLocaleString("ko-KR")}` : ""}
+                    {r.basis && r.basis !== "매입가" && <small className="pt-n"> {r.basis}</small>}
                   </span>
                   {r.change === null ? (
                     <span className="pt-n jn-prev-c">지금 값 없음</span>
@@ -1592,20 +1717,18 @@ export function JournalPage({
         </div>
 
         {/*
-          11 — 오늘의 주문·체결 (2026-09-10 — 벤티지 "복기 노트 11번에 오늘의 매매 적어두고 주문
-          메뉴에서 주문 오간 거 추적하고 기록하는 거 하나 만들자"). 사람이 안 적는다 — 주문 로그와
-          키움 체결에서 그날 것을 읽어 온다. 저장하면 저널에도 박힌다(옛 날짜는 저장본).
+          ✂ **오늘의 주문·체결은 걷어냈다** (2026-11-27 — 벤티지: "오늘의 주문 체결은
+          없애줘. 메인 계좌에서 거래하는거라 의미 없을 듯").
+
+          2026-09-10 에 붙인 칸이었다. 전제는 「주문 메뉴로 주문한다」였는데, 실제로는
+          **메인 계좌에서 거래한다** — 그래서 여기엔 늘 「이날 주문 메뉴에서 나간 것이
+          없습니다」만 떴다. 빈 칸은 그냥 빈 칸이 아니라 **화면을 읽는 눈을 한 번 더
+          멈추게 한다.**
+
+          서버 쪽(`/journal/orders`, `ordersOfDay`)과 저장본의 `orders` 는 **그대로 둔다** —
+          주문 메뉴의 「복기 노트에 담기」가 쓰고, 지난 기록에도 이미 박혀 있다.
+          화면에서만 뺀다.
         */}
-        <div className="jn-field">
-          <span className="jn-label">
-            오늘의 주문·체결{" "}
-            <em className="jn-hint">주문 메뉴에서 오간 것 — 자동. 2번(오늘의 매매)은 내가 적는 것, 이건 실제로 나간 것</em>
-            <button className="filter-btn jn-orders-reload" onClick={() => void loadOrders()} disabled={ordersLoading}>
-              {ordersLoading ? "읽는 중…" : "다시 읽기"}
-            </button>
-          </span>
-          <JournalOrdersTable rows={orders} summary={ordersSummary} diary={diary} />
-        </div>
 
         {/* 저장은 **맨 아래** (2026-08-27) — 다 적고 나서 손이 가는 자리가 여기다 */}
         <div className="jn-save-bar">
@@ -1664,6 +1787,75 @@ export function JournalPage({
       )}
 
       <h3 className="section-heading">내 매매</h3>
+
+      {/*
+        **구간별 매매·수익 현황** (2026-11-27 — 벤티지: "밑에 내 매매 이거 의미가 뭐야?
+        뭐라도 보여줘야 할 듯 아니면 5일간 매매 현황&수익현황. 10일 현황. 20일 현황 이렇게
+        구간별로 볼 수 있게 해주던가").
+
+        맞는 지적이었다. 이 아래는 전부 **쪼갠 통계**(근거 태그별·R·신호등 색별)라 표본이
+        모일 때까지 「아직 없습니다」만 넉 줄 이어졌다 — 몇 달을 적어야 처음 말을 한다.
+        그동안 비어 있을 자리가 아니다.
+
+        그래서 **오늘 당장 답이 나오는 것**을 맨 위에 둔다. 요즘 얼마나 사고팔았나,
+        판 것은 어땠나, 산 것은 지금 어떤가. 쪼개지 않았으니 첫 주부터 값이 나온다.
+
+        ⚠️ **실현과 평가를 한 줄에 안 섞는다.** 판 것은 확정이고 든 것은 아직 아니다 —
+        섞으면 「벌었다」가 둘 중 어느 쪽인지 사라진다.
+      */}
+      {windows.length > 0 && (
+        <div className="jn-win">
+          {windows.map((w) => (
+            <div className="jn-win-card" key={w.days}>
+              <div className="jn-win-h">
+                최근 {w.days}일
+                <em className="pt-n">{w.from} ~</em>
+              </div>
+              <div className="jn-win-l">
+                <i>매매</i>
+                <b>{w.traded}일</b>
+                <i>관망</i>
+                <b>{w.watched}일</b>
+              </div>
+              <div className="jn-win-l">
+                <i>매수</i>
+                <b>{w.buys}</b>
+                <i>매도</i>
+                <b>{w.sells}</b>
+              </div>
+              <div className="jn-win-r">
+                <i>실현</i>
+                {w.realized.n === 0 ? (
+                  <b className="pt-n">판 것 없음</b>
+                ) : (
+                  <>
+                    <b className={`num ${(w.realized.avg ?? 0) > 0 ? "positive" : (w.realized.avg ?? 0) < 0 ? "negative" : ""}`}>
+                      {w.realized.avg === null ? "-" : `${w.realized.avg > 0 ? "+" : ""}${w.realized.avg.toFixed(1)}%`}
+                    </b>
+                    <small className="pt-n">
+                      {w.realized.n}건
+                      {w.realized.winRate !== null ? ` · ${w.realized.winRate.toFixed(0)}% 승` : ""}
+                    </small>
+                  </>
+                )}
+              </div>
+              <div className="jn-win-r">
+                <i>산 것 지금</i>
+                {w.bought.n === 0 ? (
+                  <b className="pt-n">산 것 없음</b>
+                ) : (
+                  <>
+                    <b className={`num ${(w.bought.avg ?? 0) > 0 ? "positive" : (w.bought.avg ?? 0) < 0 ? "negative" : ""}`}>
+                      {w.bought.avg === null ? "-" : `${w.bought.avg > 0 ? "+" : ""}${w.bought.avg.toFixed(1)}%`}
+                    </b>
+                    <small className="pt-n">{w.bought.n}건 · 아직 확정 아님</small>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/*
         **맨 위는 「내 매매가 어땠나」** (2026-11-25 — 벤티지: "구조가 너무 복잡하고 알아먹기
@@ -1951,122 +2143,3 @@ export function JournalPage({
 }
 
 
-/** 11번 표 — 시각·종류·매수/매도·종목·수량·가격·금액·내용. 거절·취소는 흐리게 */
-function JournalOrdersTable({ rows, summary, diary }: { rows: JournalOrder[]; summary: OrderSummary | null; diary: Diary | null }) {
-  const KIND: Record<JournalOrder["kind"], string> = { order: "주문", modify: "정정", cancel: "취소", fill: "체결", reject: "거절" };
-  const won = (n: number | null) => (n == null ? "" : n >= 1e8 ? `${(n / 1e8).toFixed(1)}억` : `${Math.round(n / 1e4).toLocaleString("ko-KR")}만`);
-  const hhmm = (iso: string) => new Date(iso).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false });
-  /*
-   * 결산 — 키움 당일매매일지(ka10170). 우리 로그가 비어도(HTS 에서 직접 매매) 키움 결산은 있을 수 있다 (2026-09-10).
-   */
-  const diaryBlock = diary && diary.rows.length > 0 && (
-    <div className="jn-diary">
-      <div className="jn-orders-sum">
-        <b>결산(키움)</b>
-        <span>매수 {won(diary.total.buyAmt)}</span>
-        <span>매도 {won(diary.total.sellAmt)}</span>
-        <span>수수료·세금 {diary.total.fee.toLocaleString("ko-KR")}원</span>
-        <b className={diary.total.pl > 0 ? "positive" : diary.total.pl < 0 ? "negative" : ""}>
-          손익 {diary.total.pl > 0 ? "+" : ""}
-          {diary.total.pl.toLocaleString("ko-KR")}원{diary.total.plRate ? ` (${diary.total.plRate > 0 ? "+" : ""}${diary.total.plRate}%)` : ""}
-        </b>
-      </div>
-      <div className="data-table-wrap">
-        <table className="data-table jn-orders">
-          <thead>
-            <tr>
-              <th>종목</th>
-              <th className="num">매수</th>
-              <th className="num">평균가</th>
-              <th className="num">매도</th>
-              <th className="num">평균가</th>
-              <th className="num">수수료</th>
-              <th className="num">손익</th>
-              <th className="num">수익률</th>
-            </tr>
-          </thead>
-          <tbody>
-            {diary.rows.map((d) => (
-              <tr key={d.code}>
-                <td>
-                  {d.name} <span className="pt-n">{d.code}</span>
-                </td>
-                <td className="num">{d.buyQty ? `${d.buyQty.toLocaleString("ko-KR")}주` : ""}</td>
-                <td className="num">{d.buyAvg ? d.buyAvg.toLocaleString("ko-KR") : ""}</td>
-                <td className="num">{d.sellQty ? `${d.sellQty.toLocaleString("ko-KR")}주` : ""}</td>
-                <td className="num">{d.sellAvg ? d.sellAvg.toLocaleString("ko-KR") : ""}</td>
-                <td className="num pt-n">{d.fee.toLocaleString("ko-KR")}</td>
-                <td className={`num ${d.pl > 0 ? "positive" : d.pl < 0 ? "negative" : ""}`}>
-                  {d.pl > 0 ? "+" : ""}
-                  {d.pl.toLocaleString("ko-KR")}
-                </td>
-                <td className={`num ${d.plRate > 0 ? "positive" : d.plRate < 0 ? "negative" : ""}`}>
-                  {d.sellQty ? `${d.plRate > 0 ? "+" : ""}${d.plRate}%` : ""}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-  if (rows.length === 0) {
-    return (
-      <>
-        {diaryBlock}
-        <div className="empty jn-orders-empty">{diaryBlock ? "주문 메뉴에서 나간 것은 없습니다 — 위 결산은 키움 계좌 기준입니다." : "이날 주문 메뉴에서 나간 것이 없습니다."}</div>
-      </>
-    );
-  }
-  return (
-    <>
-      {diaryBlock}
-      {summary && (
-        <div className="jn-orders-sum">
-          <b className="positive">매수 {summary.buyCount}건 {won(summary.buyAmount)}</b>
-          <b className="negative">매도 {summary.sellCount}건 {won(summary.sellAmount)}</b>
-          <span>체결 {summary.fillCount}</span>
-          {summary.cancelCount > 0 && <span>취소 {summary.cancelCount}</span>}
-          {summary.rejectCount > 0 && <span className="negative">거절 {summary.rejectCount}</span>}
-        </div>
-      )}
-      <div className="data-table-wrap">
-        <table className="data-table jn-orders">
-          <thead>
-            <tr>
-              <th>시각</th>
-              <th>종류</th>
-              <th>종목</th>
-              <th className="num">수량</th>
-              <th className="num">가격</th>
-              <th className="num">금액</th>
-              <th>내용</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={`${r.at}-${i}`} className={r.kind === "reject" || r.kind === "cancel" ? "pt-n" : ""}>
-                <td>{hhmm(r.at)}</td>
-                <td>
-                  <span className={r.side === "buy" ? "positive" : r.side === "sell" ? "negative" : ""}>
-                    {r.side === "buy" ? "매수" : r.side === "sell" ? "매도" : ""}
-                  </span>{" "}
-                  {KIND[r.kind]}
-                  {r.mock && <i className="scr-mkt">모의</i>}
-                  {r.src === "kiwoom" && <i className="scr-mkt" title="우리 로그에 없고 키움 체결 조회에만 있는 것 — HTS 에서 낸 주문">키움</i>}
-                </td>
-                <td>
-                  {r.name} <span className="pt-n">{r.code}</span>
-                </td>
-                <td className="num">{r.qty == null ? "" : `${r.qty.toLocaleString("ko-KR")}주`}</td>
-                <td className="num">{r.price == null ? "" : r.price.toLocaleString("ko-KR")}</td>
-                <td className="num">{won(r.amount)}</td>
-                <td className="pt-n">{r.msg}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </>
-  );
-}

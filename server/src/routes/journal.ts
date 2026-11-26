@@ -15,6 +15,8 @@ import {
   saveEntry,
   prevDayReview,
   journalPositions,
+  journalWindows,
+  captureContext,
 } from "../tradeJournal.js";
 
 /** 복기 노트 */
@@ -99,7 +101,36 @@ export function createJournalRouter(client: KiwoomClient): Router {
   router.get("/positions", async (req, res, next) => {
     try {
       const date = String(req.query.date ?? "") || new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
-      res.json(await journalPositions(date));
+      res.json(await journalPositions(date, client));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 구간별 매매·수익 현황 (2026-11-27). `:date` 보다 **위**에 둔다.
+   */
+  router.get("/windows", async (req, res, next) => {
+    try {
+      const date = String(req.query.date ?? "") || new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+      res.json({ windows: await journalWindows(date, client) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * **아직 저장 안 한 날의 시장** (2026-11-27 — 벤티지: "저장하고 나면 코스피 코스닥 이런거
+   * 지수현황 보이는데 처음에 기록할때도 보일 수 있게").
+   *
+   * 저장할 때 박제하는 것과 **같은 함수**(`captureContext`)를 부른다. 두 벌로 만들면
+   * 적을 때 본 숫자와 박힌 숫자가 달라지는 날이 반드시 온다.
+   * 전부 대시보드 섹션 캐시라 신선하면 조회가 0 이다.
+   */
+  router.get("/context", async (req, res, next) => {
+    try {
+      const date = String(req.query.date ?? "") || new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+      res.json({ date, context: await captureContext(client, date) });
     } catch (err) {
       next(err);
     }
@@ -108,7 +139,7 @@ export function createJournalRouter(client: KiwoomClient): Router {
   router.get("/prev-review", async (req, res, next) => {
     try {
       const date = String(req.query.date ?? "") || new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
-      res.json(await prevDayReview(date));
+      res.json(await prevDayReview(date, client));
     } catch (err) {
       next(err);
     }
