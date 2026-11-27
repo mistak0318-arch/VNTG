@@ -114,9 +114,15 @@ export type MarketKind =
   | "krNight" // 코스피 야간선물
   | "us" // 미국 정규장
   | "usFut" // CME 지수선물
-  | "asia" // 도쿄·홍콩 (묶음 표는 둘 중 하나라도 열렸으면 열림)
+  | "asia" // 도쿄·홍콩·상하이·타이베이·뭄바이 (묶음 표는 하나라도 열렸으면 열림)
   | "jp" // 도쿄
   | "hk" // 홍콩
+  | "cn" // 상하이 (2026-11-27)
+  | "tw" // 타이베이 (2026-11-27)
+  | "in" // 뭄바이 (2026-11-27)
+  | "eu" // 프랑크푸르트·런던 (묶음 표)
+  | "de" // 프랑크푸르트 (DAX·유로 스톡스 50)
+  | "uk" // 런던 (FTSE 100)
   | "fx" // 외환
   | "commodity" // CME 원자재
   | "crypto"; // 24시간
@@ -196,18 +202,83 @@ export function sessionOf(kind: MarketKind, now: Date = new Date()): Session {
 
   if (kind === "asia") {
     /*
-     * 「아시아」 묶음엔 닛케이와 항셍이 같이 있다. 둘은 점심시간까지 조금씩 다른데,
-     * 묶음 머리에 붙는 표는 **한 줄**이라 둘 중 하나라도 열렸으면 열린 것으로 본다.
-     * 정확한 시간표는 툴팁에 적는다 — 표 하나로 두 시장을 말하려면 그 정도가 정직하다.
+     * 「아시아」 묶음엔 이제 **다섯 시장**이 있다 — 도쿄·홍콩·상하이·타이베이·뭄바이
+     * (2026-11-27 에 셋이 늘었다). 묶음 머리에 붙는 표는 **한 줄**이라 하나라도 열렸으면
+     * 열린 것으로 보고, 정확한 시간표는 툴팁에 적는다 — 표 하나로 여러 시장을 말하려면
+     * 그 정도가 정직하다.
+     *
+     * ⚠️ **뭄바이를 빼면 안 된다.** 인도는 한국 시각 **19:00** 까지 돈다 — 도쿄·홍콩만
+     * 보면 17시 뒤에는 「마감」이라 적히는데 Nifty 는 그때 한창 움직인다. 「조용한 것」과
+     * 「닫힌 것」을 가르는 자리다.
      */
-    const jp = sessionOf("jp", now);
-    const hk = sessionOf("hk", now);
-    const open = jp.state === "open" || hk.state === "open";
+    const parts = (["jp", "hk", "cn", "tw", "in"] as const).map((k) => sessionOf(k, now));
+    const open = parts.some((p) => p.state === "open");
+    const [jp, hk, cn, tw, inn] = parts;
     return {
       state: open ? "open" : "closed",
       label: open ? "거래 중" : "마감",
-      hint: `도쿄 ${jp.label} (09:00~15:30, 점심 11:30~12:30) · 홍콩 ${hk.label} (한국 10:30~17:00, 점심 13:00~14:00)`,
+      hint:
+        `도쿄 ${jp.label} (09:00~15:30) · 홍콩 ${hk.label} (10:30~17:00) · 상하이 ${cn.label} (10:30~16:00) · ` +
+        `타이베이 ${tw.label} (10:00~14:30) · 뭄바이 ${inn.label} (12:45~19:00) — 모두 한국 시각`,
     };
+  }
+
+  if (kind === "eu") {
+    /*
+     * 「유럽」 묶음 — 프랑크푸르트(DAX·유로 스톡스 50)와 런던(FTSE). 둘은 현지 시각이
+     * 다르지만 **한국 시각으로는 거의 겹친다**(겨울 17:00~01:30, 서머타임 땐 한 시간 당겨진다).
+     * 시간대 계산은 `Intl` 에 맡기므로 서머타임을 우리가 셀 일은 없다.
+     */
+    const de = sessionOf("de", now);
+    const uk = sessionOf("uk", now);
+    const open = de.state === "open" || uk.state === "open";
+    return {
+      state: open ? "open" : "closed",
+      label: open ? "거래 중" : "마감",
+      hint: `프랑크푸르트 ${de.label} (현지 09:00~17:30) · 런던 ${uk.label} (현지 08:00~16:30) — 한국 시각으로는 대략 17:00~01:30 (서머타임엔 한 시간 당겨집니다)`,
+    };
+  }
+
+  /*
+   * 아래 다섯(상하이·타이베이·뭄바이·프랑크푸르트·런던)은 **현지 시각으로** 센다.
+   * 한국 시각으로 적어 두면 서머타임·일광절약에서 틀어진다 — `zoned` 가 시간대를 안다.
+   */
+  if (kind === "cn") {
+    const { day, mins } = zoned("Asia/Shanghai", now);
+    if (day === 0 || day === 6) return { state: "closed", label: "휴장", hint: "상하이 주말 휴장" };
+    if (mins >= at(9, 30) && mins < at(11, 30)) return { state: "open", label: "전장", hint: "상하이 전장 09:30~11:30 (한국 10:30~12:30)" };
+    if (mins >= at(11, 30) && mins < at(13)) return { state: "closed", label: "점심 휴장", hint: "상하이는 11:30~13:00 에 쉽니다 (한국 12:30~14:00)" };
+    if (mins >= at(13) && mins < at(15)) return { state: "open", label: "후장", hint: "상하이 후장 13:00~15:00 (한국 14:00~16:00)" };
+    return { state: "closed", label: "마감", hint: "상하이장이 닫혀 있습니다 — 종가입니다" };
+  }
+
+  if (kind === "tw") {
+    /* 타이베이는 **점심을 안 쉰다** — 09:00~13:30 을 내리 돈다 */
+    const { day, mins } = zoned("Asia/Taipei", now);
+    if (day === 0 || day === 6) return { state: "closed", label: "휴장", hint: "타이베이 주말 휴장" };
+    if (mins >= at(9) && mins < at(13, 30)) return { state: "open", label: "거래 중", hint: "타이베이 09:00~13:30, 점심 휴장 없음 (한국 10:00~14:30)" };
+    return { state: "closed", label: "마감", hint: "타이베이장이 닫혀 있습니다 — 종가입니다" };
+  }
+
+  if (kind === "in") {
+    const { day, mins } = zoned("Asia/Kolkata", now);
+    if (day === 0 || day === 6) return { state: "closed", label: "휴장", hint: "뭄바이 주말 휴장" };
+    if (mins >= at(9, 15) && mins < at(15, 30)) return { state: "open", label: "거래 중", hint: "뭄바이 09:15~15:30, 점심 휴장 없음 (한국 12:45~19:00)" };
+    return { state: "closed", label: "마감", hint: "뭄바이장이 닫혀 있습니다 — 종가입니다" };
+  }
+
+  if (kind === "de") {
+    const { day, mins } = zoned("Europe/Berlin", now);
+    if (day === 0 || day === 6) return { state: "closed", label: "휴장", hint: "프랑크푸르트 주말 휴장" };
+    if (mins >= at(9) && mins < at(17, 30)) return { state: "open", label: "거래 중", hint: "프랑크푸르트(Xetra) 09:00~17:30 — 지금 움직입니다" };
+    return { state: "closed", label: "마감", hint: "프랑크푸르트장이 닫혀 있습니다 — 종가입니다" };
+  }
+
+  if (kind === "uk") {
+    const { day, mins } = zoned("Europe/London", now);
+    if (day === 0 || day === 6) return { state: "closed", label: "휴장", hint: "런던 주말 휴장" };
+    if (mins >= at(8) && mins < at(16, 30)) return { state: "open", label: "거래 중", hint: "런던 08:00~16:30 — 지금 움직입니다" };
+    return { state: "closed", label: "마감", hint: "런던장이 닫혀 있습니다 — 종가입니다" };
   }
 
   if (kind === "jp") {
@@ -239,6 +310,7 @@ export function kindOfGroup(group: string): MarketKind | null {
   if (/환율/.test(group)) return "fx";
   if (/미국 지수선물|지수선물/.test(group)) return "usFut";
   if (/아시아/.test(group)) return "asia";
+  if (/유럽/.test(group)) return "eu";
   if (/원자재/.test(group)) return "commodity";
   if (/암호화폐/.test(group)) return "crypto";
   return null;
