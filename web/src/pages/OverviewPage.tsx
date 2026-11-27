@@ -45,6 +45,8 @@ import { OVERVIEW_CARDS, type OverviewSub } from "../overviewCards";
 import { PulsePanel } from "../components/overview/PulsePanel";
 /* 네이버 증권(개편판) 에서 온 셋 — 증시자금동향 · 개미 토론 · 네이버페이 랭킹 (2026-09-16) */
 import { DepositTrendPanel } from "../components/overview/DepositTrendPanel";
+/* 공매도·대차잔고 — 「팔 준비가 얼마나 쌓여 있나」 (2026-11-27) */
+import { ShortLoanPanel } from "../components/overview/ShortLoanPanel";
 import { DiscussionRankPanel } from "../components/overview/DiscussionRankPanel";
 import { NpayRankPanel } from "../components/overview/NpayRankPanel";
 import { TopicPulseBlock } from "../components/TopicPulse";
@@ -866,6 +868,20 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
         {show("summary") && (
           <OverviewCard title="증시자금동향" order={cards.orderOf("deposit")}>
             <DepositTrendPanel />
+          </OverviewCard>
+        )}
+
+        {/*
+          ⑦ 공매도·대차잔고 (2026-11-27 — 벤티지: "전체 시장의 대차잔고 수량이나 공매도 수량 …
+          그게 또 외국인의 포지션을 결정하는 거라고 하더라고").
+
+          앞의 둘이 **사는 쪽**(들어온 돈 · 프로그램)이라면 이건 **파는 쪽**이다. 시장 합계를
+          주는 TR 이 없어서 못 붙일 뻔했는데, 마감 뒤 정리가 전종목 공매도·대차를 이미 원장에
+          쌓고 있었다 — 그걸 더한다. **조회 0회.**
+        */}
+        {show("summary") && (
+          <OverviewCard title="공매도·대차잔고" order={cards.orderOf("shortLoan")}>
+            <ShortLoanPanel onSelectStock={onSelectStock} />
           </OverviewCard>
         )}
 

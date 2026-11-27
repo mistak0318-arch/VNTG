@@ -42,19 +42,25 @@ function diff(v: number | null): string {
  * 일이 없어서, 0 부터 그리면 차트의 90%가 빈 칸이 된다. 대신 눈금에 실제 값을 적어
  * 「바닥이 0 이 아니다」를 말한다.
  */
-function DepositChart({
-  days,
-  pick,
+/**
+ * ⚠️ **공매도·대차잔고 카드도 이 함수를 쓴다** (2026-11-27 — `ShortLoanPanel`). 둘 다
+ * 「쌓여 있는 잔고의 60일 추이」라 눈금·점선·달 경계가 같아야 한다. 새로 그리면 두 카드가
+ * 갈린다 — 고칠 일이 있으면 여기 한 곳이다. 단위만 `fmt` 로 받는다(억원 · 원).
+ */
+export function BalanceChart({
+  rows,
   color,
+  fmt,
 }: {
-  days: DepositDay[];
-  pick: (d: DepositDay) => number | null;
-  /** 선 색 — 예탁금과 신용잔고를 눈으로 가른다 */
+  /** 옛날 → 최신. 값이 0 이하인 줄은 부르는 쪽에서 이미 걸렀다고 본다 */
+  rows: { date: string; v: number }[];
+  /** 선 색 — 두 칸을 눈으로 가른다 */
   color: string;
+  /** 눈금·말풍선에 적을 모양 */
+  fmt: (v: number) => string;
 }) {
-  const rows = days.filter((d) => (pick(d) ?? 0) > 0).slice(-60);
   if (rows.length < 2) return null;
-  const vals = rows.map((d) => pick(d) as number);
+  const vals = rows.map((d) => d.v);
   const W = 300;
   const H = 84;
   const PAD = { l: 2, r: 42, t: 8, b: 14 };
@@ -77,7 +83,7 @@ function DepositChart({
         <g key={i}>
           <line className="tc-grid" x1={PAD.l} x2={W - PAD.r} y1={yOf(v)} y2={yOf(v)} />
           <text className="tc-tick" x={W - PAD.r + 3} y={yOf(v) + 3}>
-            {(v / 조).toFixed(1)}조
+            {fmt(v)}
           </text>
         </g>
       ))}
@@ -94,11 +100,27 @@ function DepositChart({
         ) : null,
       )}
       <title>
-        {rows.length}거래일 · {(min / 조).toFixed(1)}조 ~ {(max / 조).toFixed(1)}조 · 20일 평균{" "}
-        {(avg20 / 조).toFixed(1)}조
+        {rows.length}거래일 · {fmt(min)} ~ {fmt(max)} · 20일 평균 {fmt(avg20)}
       </title>
     </svg>
   );
+}
+
+/** 증시자금동향 칸 — 억원짜리 값을 `BalanceChart` 에 넘긴다 */
+function DepositChart({
+  days,
+  pick,
+  color,
+}: {
+  days: DepositDay[];
+  pick: (d: DepositDay) => number | null;
+  color: string;
+}) {
+  const rows = days
+    .filter((d) => (pick(d) ?? 0) > 0)
+    .slice(-60)
+    .map((d) => ({ date: d.date, v: pick(d) as number }));
+  return <BalanceChart rows={rows} color={color} fmt={(v) => `${(v / 조).toFixed(1)}조`} />;
 }
 
 export function DepositTrendPanel() {

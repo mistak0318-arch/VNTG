@@ -30,6 +30,8 @@ import { tradeSizeMix } from "../tradeSizeMix.js";
 import { CHART_RANGES, yahooChart } from "../yahooChart.js";
 import { usEtfHoldings } from "../usEtfHoldings.js";
 import { themeStrength } from "../themeStrength.js";
+/* 시장 전체 공매도·대차잔고 — 원장을 더한 것이라 조회 0회 (2026-11-27) */
+import { shortLoanMarket } from "../shortLoanMarket.js";
 /* 대세 테마 분석 — 기간별 흐름 (2026-10-08) */
 import { themeTrend, themeTrendOverview, TREND_DAYS } from "../themeTrend.js";
 import { marketThermo, themeRotation, usOvernight } from "../marketLens.js";
@@ -1457,6 +1459,18 @@ export function createMarketRouter(client: KiwoomClient): Router {
    * 네이버 증권(개편판) 넷 (2026-09-16, naverMarket.ts) — 증시자금동향 · 시장 캘린더 · 리서치 보드.
    * (해외 인기 종목은 /us-rank?kind=popular)
    */
+  /*
+   * **시장 전체 공매도·대차잔고** (2026-11-27) — 조회 0회. 우리 원장(전종목 `ka10014`·`ka20068`)을
+   * 더한 것이라, 여기서는 하루 한 번 세어 둔 파일을 그대로 준다. 자세한 사정은 `shortLoanMarket` 머리말.
+   */
+  router.get("/short-loan", async (_req, res, next) => {
+    try {
+      res.json(await shortLoanMarket(client));
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.get("/naver/deposit-trend", async (req, res, next) => {
     try {
       res.json(await depositTrend(Math.min(Math.max(Number(req.query.days ?? 60) || 60, 5), 120)));

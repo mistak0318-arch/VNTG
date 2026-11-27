@@ -3,6 +3,8 @@ import { isTradingDay } from "./tradingDay.js";
 import { buildCloses } from "./dailyCloses.js";
 import { collectProgress, startCollectDaily } from "./collectDaily.js";
 import { ledgerStatus } from "./dailyStore.js";
+/* 공매도·대차 확정값을 받은 직후에 시장 전체 합계를 센다 (2026-11-27) */
+import { rebuildShortLoanMarket } from "./shortLoanMarket.js";
 import { regimeCheck } from "./regimeWatch.js";
 import { startEnroll } from "./signalTrack.js";
 import { buildStockMarks, loadStockMarks, marksProgress } from "./stockMarks.js";
@@ -927,7 +929,18 @@ export async function runAfterClose(
       async () => {
         if (collectProgress().running) throw new Error("다른 곳에서 이미 수집 중이라 건너뜀 — 재시도에 맡긴다");
         const p = await startCollectDaily(client, ["short", "loan"]);
-        return `${p.done}/${p.total} · 실패 ${p.fails}`;
+        /*
+         * **시장 전체 합계를 여기서 센다** (2026-11-27). 원장이 막 확정값으로 채워진 자리다 —
+         * 2,659개를 훑는 일이라(1.5초) 화면이 요청할 때마다 할 수는 없다. 단계를 새로 만들지 않고
+         * 여기 붙인 것은 `WRAP_KEYS`·`wrapDone` 도장 조건을 안 건드리려는 것이다. 실패해도
+         * 수집 자체는 끝난 것이라 단계를 깨뜨리지 않고 꼬리말로만 적는다.
+         */
+        const agg = await rebuildShortLoanMarket(client).catch((err: Error) => {
+          console.warn("[afterClose] 공매도·대차 합계 실패 —", err.message);
+          return null;
+        });
+        const tail = agg ? ` · 합계 ${agg.days.length}일` : " · 합계 실패";
+        return `${p.done}/${p.total} · 실패 ${p.fails}${tail}`;
       },
       () => {
         const p = collectProgress();

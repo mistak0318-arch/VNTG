@@ -1939,6 +1939,8 @@ export const api = {
   /* ── 네이버 증권(개편판) 에서 받는 것들 (2026-09-16, server/naverMarket.ts) ── */
   /** 증시자금동향 — 고객예탁금·신용잔고·펀드(억원), 하루 한 번 바뀐다 */
   naverDeposit: (days = 60) => getJson<{ days: DepositDay[]; at: number; stale: boolean }>(`/api/market/naver/deposit-trend?days=${days}`),
+  /** 시장 전체 공매도·대차잔고 — 하루 한 번 센 것을 그대로 준다 (2026-11-27) */
+  shortLoan: () => getJson<ShortLoanMarket>("/api/market/short-loan"),
   /** 시장 캘린더 — 경제지표·만기·배당·공모주 */
   naverCalendar: (from?: string, to?: string) =>
     getJson<{ events: CalEvent[]; more: Record<string, number>; at: number; stale: boolean }>(
@@ -6705,6 +6707,55 @@ export interface ThemeBridge {
   }[];
 }
 export type UsRankKind = "value" | "volume" | "cap" | "up" | "down" | "popular";
+
+/* ── 시장 전체 공매도·대차잔고 (2026-11-27) — 우리 원장을 더한 것이라 조회 0회 ── */
+export interface ShortLoanDay {
+  /** YYYY-MM-DD */
+  date: string;
+  /** 공매도 **거래량**(주) — 그날 판 수량이지 잔고가 아니다 */
+  shortQty: number;
+  /** 공매도 거래대금(**원**) */
+  shortAmt: number;
+  shortCodes: number;
+  /** 대차 **잔고** 수량(주) */
+  loanQty: number;
+  /** 대차잔고 금액(**원**) */
+  loanAmt: number;
+  loanCodes: number;
+  shortAmtKospi: number;
+  shortAmtKosdaq: number;
+  loanAmtKospi: number;
+  loanAmtKosdaq: number;
+}
+export interface ShortLoanMover {
+  code: string;
+  name: string;
+  rmnd: number;
+  prev: number;
+  /** 늘어난 **금액**(원) */
+  diffAmt: number;
+  diffPct: number;
+  /** 지금 잔고 금액(원) */
+  amt: number;
+}
+/** 한 구간(당일·5·10·20일)의 대차잔고 증감 상위 */
+export interface ShortLoanSpan {
+  /** 며칠 전과 견줬나 (1 = 당일, 곧 전 거래일 대비) */
+  days: number;
+  /** 견준 상대 날짜 */
+  from: string;
+  up: ShortLoanMover[];
+  down: ShortLoanMover[];
+}
+export interface ShortLoanMarket {
+  builtAt: string;
+  upTo: string;
+  days: ShortLoanDay[];
+  spans: ShortLoanSpan[];
+  codes: number;
+  noPrice: number;
+  dropped: string[];
+}
 
 /* ── 네이버 증권(개편판) 자료 모양 (2026-09-16) ── */
 export interface DepositDay {

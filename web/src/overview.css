@@ -714,6 +714,81 @@ button.ov-li:focus-visible { outline: 2px solid var(--accent); outline-offset: -
 .dep-t { font-size: 0.66rem; color: var(--ov-txt-3); }
 .dep-funds { margin-top: 5px; font-size: 0.72rem; color: var(--ov-txt-2); }
 
+/* ---------- 공매도·대차잔고 (2026-11-27) ----------
+   칸·차트·꼬리말은 증시자금동향(.dep)을 **그대로 쓴다** — 둘 다 「쌓여 있는 잔고의 60일
+   추이」라 눈이 같은 자리를 찾는다. 여기 있는 것은 그 카드에 없는 **증감 상위 목록**뿐이다. */
+/* 종목별 머리 — 이름과 구간 칩. 좁으면 칩이 아랫줄로 내려간다 */
+.sl-head {
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid var(--ov-line-soft);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+.sl-head .sl-mv-k { font-weight: 700; }
+/* 칩은 `filter-row`·`filter-btn` 그대로 — 카드 안이라 한 치수 작게만 (여백은 머리줄이 이미 띄운다) */
+.sl-spans { margin: 0; gap: 4px; }
+.sl-spans .filter-btn { padding: 2px 8px; font-size: 0.7rem; border-radius: 6px; }
+.sl-spans .filter-btn:disabled { opacity: 0.35; }
+.sl-none { margin-top: 5px; font-size: 0.72rem; color: var(--ov-txt-3); }
+/*
+ * 두 목록(증가·감소)은 **자리가 되면 나란히, 좁으면 저절로 내려간다.**
+ *
+ * `@media` 로 가르지 않는 이유: 이 카드의 폭은 화면 폭이 아니라 **대시보드 몇 단이냐**로
+ * 정해진다(3단이면 1280px 화면에서도 한 칸이 350px 언저리다). 화면 폭으로 끊으면 넓은
+ * 화면의 좁은 칸에서 틀어진다 — `flex-wrap` 에 맡기면 **제 폭을 보고** 접힌다.
+ */
+.sl-movers {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+.sl-mv { flex: 1 1 150px; min-width: 150px; }
+/*
+ * 위 칸 둘(대차잔고·공매도)도 같은 이치로 접는다 — **이 카드에서만**.
+ * `.dep-row` 기본값은 폰에서만 세로라, 3단 배치의 좁은 칸에서는 60거래일짜리 선이 160px 에
+ * 뭉개진다. 증시자금동향 쪽 동작은 건드리지 않는다(쓰던 카드를 흔들 이유가 없다).
+ */
+.sl .dep-row { flex-wrap: wrap; }
+.sl .dep-cell { flex: 1 1 190px; }
+.sl-mv-k { font-size: 0.68rem; color: var(--ov-txt-3); }
+.sl-mv ul { list-style: none; margin: 2px 0 0; padding: 0; }
+.sl-mv li {
+  display: grid;
+  /*
+   * 이름은 남는 만큼, 숫자 둘은 제 폭만 — 이름이 길어도 금액이 밀려나지 않는다.
+   *
+   * ⚠️ 이름 칸에 **최소 폭**을 준다. `minmax(0, 1fr)` 로 두면 카드가 좁을 때(대시보드 3단에서
+   * 한 칸이 350px 언저리다) 금액 둘이 자리를 다 먹고 **이름이 통째로 사라진다** — 눈으로 보다
+   * 잡았다(2026-11-27). 이름이 먼저 없어지면 목록의 뜻이 없다. 좁으면 비율(%)이 먼저 접힌다.
+   */
+  grid-template-columns: minmax(3.6em, 1fr) auto auto;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+.sl-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--ov-txt);
+  font: inherit;
+  cursor: pointer;
+}
+.sl-name:disabled { cursor: default; }
+.sl-name:hover:not(:disabled) { text-decoration: underline; }
+.sl-diff { font-weight: 600; }
+.sl-pct { font-size: 0.66rem; color: var(--ov-txt-3); min-width: 3.2em; text-align: right; }
+
 /* ---------- 개미 토론 ---------- */
 .dsc { margin-top: 10px; border-top: 1px solid var(--ov-line-soft); padding-top: 8px; }
 .dsc-head { display: flex; align-items: baseline; gap: 6px; font-size: 0.78rem; font-weight: 700; margin-bottom: 6px; }
