@@ -844,7 +844,24 @@ export default function App() {
       })
       .catch(() => undefined);
   }, []);
+  /**
+   * **사이드바가 없는 창은 배지도 안 센다** (2026-11-27 — 벤티지: "mini창 모드에서도 내가
+   * 선택한 메뉴의 패킷만 들어오는 건지 체크 좀 해봐. 회사 관제망에서 감시하고 있어서").
+   *
+   * 재 보니 아니었다. 미니창·보드 새창·버즈 원문 창은 **사이드바를 아예 안 그리는데**,
+   * 배지 폴링은 1분마다 네 군데(`tg-feed/rooms` · `signal/super/status` ·
+   * `signal/list-track` · `report/status`)를 계속 물었다 — **보지도 않을 N 때문에
+   * 분당 4건.**
+   *
+   * 까닭은 바로 아래 미니창 갈림길에 적혀 있는 그대로다: 「훅은 전부 위에서 이미
+   * 돌았으므로」. 순서는 안 흔들렸는데 **조회가 같이 따라왔다.** 곁창은 「곁눈질하라고
+   * 띄운 창」이라 알림을 받을 자리가 아니다 — 본창이 그 일을 한다.
+   *
+   * ⚠️ 그리는 쪽이 아니라 **부르는 쪽**을 막는다. 화면에서만 숨기면 조회는 그대로 나간다.
+   */
+  const sideWindow = route.tab === "mini" || route.tab === "buzzSource" || boardWin || !!simWin;
   useEffect(() => {
+    if (sideWindow) return;
     refreshNavN();
     const t = setInterval(() => {
       if (document.visibilityState === "visible") refreshNavN();
@@ -854,7 +871,7 @@ export default function App() {
       clearInterval(t);
       window.removeEventListener("vntg:tg-read", refreshNavN);
     };
-  }, [refreshNavN]);
+  }, [refreshNavN, sideWindow]);
   /* 그 메뉴에 들어가면 확인 — 최신분을 본 것으로 적고 배지를 끈다 */
   useEffect(() => {
     const seenVal = tab === "superSignal" ? superRunRef.current : tab === "report" ? reportRef.current : null;
