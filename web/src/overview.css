@@ -717,6 +717,28 @@ button.ov-li:focus-visible { outline: 2px solid var(--accent); outline-offset: -
 /* ---------- 공매도·대차잔고 (2026-11-27) ----------
    칸·차트·꼬리말은 증시자금동향(.dep)을 **그대로 쓴다** — 둘 다 「쌓여 있는 잔고의 60일
    추이」라 눈이 같은 자리를 찾는다. 여기 있는 것은 그 카드에 없는 **증감 상위 목록**뿐이다. */
+/*
+ * 전체 추이 (2026-11-27) — 네 구간을 한 줄에. 칸 폭을 `1fr` 로 똑같이 줘야 세로로 읽힌다
+ * (당일→20일을 눈이 왼쪽에서 오른쪽으로 훑는 표다).
+ */
+.sl-trend {
+  margin-top: 7px;
+  padding-top: 6px;
+  border-top: 1px solid var(--ov-line-soft);
+}
+.sl-tr-row {
+  display: grid;
+  grid-template-columns: minmax(4.2em, 1.1fr) repeat(4, minmax(0, 1fr));
+  align-items: baseline;
+  gap: 2px 6px;
+  font-size: 0.72rem;
+  line-height: 1.6;
+}
+.sl-tr-row > .num { text-align: right; font-weight: 600; }
+.sl-tr-head { color: var(--ov-txt-3); font-size: 0.66rem; }
+.sl-tr-head > .num { font-weight: 400; }
+.sl-tr-k { color: var(--ov-txt-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* 종목별 머리 — 이름과 구간 칩. 좁으면 칩이 아랫줄로 내려간다 */
 .sl-head {
   margin-top: 8px;

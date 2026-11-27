@@ -6722,6 +6722,14 @@ export interface ShortLoanDay {
   /** 대차잔고 금액(**원**) */
   loanAmt: number;
   loanCodes: number;
+  /**
+   * **가격을 고정한** 금액(원) — 모든 날을 각 종목의 지금 종가로 쳤다.
+   * 「늘고 있나」는 이 칸으로 본다. `loanAmt` 로 추이를 내면 주가 변동이 포지션 변동으로
+   * 둔갑한다(실측 2026-11-27: 10일 추이가 −0.8% ↔ +3.8% 로 **부호가 뒤집혔다**).
+   */
+  loanAmtFx: number;
+  /** 공매도 거래대금도 같은 방식 — 가격 고정(원) */
+  shortAmtFx: number;
   shortAmtKospi: number;
   shortAmtKosdaq: number;
   loanAmtKospi: number;

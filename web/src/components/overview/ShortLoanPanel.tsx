@@ -67,9 +67,11 @@ function MoverRow({ m, onSelectStock }: { m: ShortLoanMover; onSelectStock?: Pic
  * 카드를 열 때마다 다시 누르게 할 이유가 없다. 서버에 둘 것은 아니다(기기마다 보는 눈이 다르다).
  */
 const SPAN_KEY = "vntg.shortLoan.span";
+/** 서버가 세는 구간과 같아야 한다 — `server/src/shortLoanMarket.ts` 의 `SPANS` */
+const SPANS = [1, 5, 10, 20];
 function loadSpan(): number {
   const v = Number(localStorage.getItem(SPAN_KEY));
-  return [1, 5, 10, 20].includes(v) ? v : 5;
+  return SPANS.includes(v) ? v : 5;
 }
 const SPAN_LABEL: Record<number, string> = { 1: "당일", 5: "5일", 10: "10일", 20: "20일" };
 
@@ -109,22 +111,57 @@ export function ShortLoanPanel({ onSelectStock }: { onSelectStock?: PickStock })
 
   const days = data.days;
   const last = days[days.length - 1];
+
   /*
-   * 고른 구간으로 **두 칸의 눈금도 같이 움직인다.** 종목별 목록만 바뀌고 위 숫자는 20일에
-   * 박혀 있으면, 같은 카드 안에서 두 가지 기간을 읽게 된다.
+   * **전체 추이 — 네 구간을 한꺼번에** (2026-11-27 — 벤티지: "이거 전체적으로 증가하고 있는지
+   * 오늘은 줄었는지 전체적으로 1일간 5일간 10일간 20일간 추이 좀 보여줘라").
+   *
+   * 구간 칩은 **종목별 목록만** 움직인다 — 「전체」는 네 구간이 한 줄에 다 있어야
+   * 「늘다가 오늘 꺾였나」가 보인다. 하나씩 눌러 가며 비교하게 하면 그게 안 보인다.
+   *
+   * ⚠️ **가격을 고정한 금액(`*Fx`)으로 잰다.** 그날 종가로 친 `loanAmt` 로 추이를 내면
+   * 주가 변동이 포지션 변동으로 둔갑한다 — 실측 2026-11-27 에 **10일 추이의 부호가
+   * 뒤집혔다**(그날 종가 −0.8% ↔ 가격 고정 +3.8%). 그날 코스피가 +4.34% 올라 대차 금액이
+   * 하루 +5.2% 로 보였는데 빌려 간 수량은 +0.1% 였다. 종목별 증감에서 이미 피한 함정인데
+   * 합계에는 남아 있었다.
    *   · 대차잔고는 **잔고**라 「그때와 견주면 얼마나 쌓였나」
    *   · 공매도는 **하루치**라 「그 구간 평균보다 센가」 (당일은 전 거래일 대비)
    */
-  const ago = days[Math.max(0, days.length - 1 - span)];
-  const loanTrend = ago.loanAmt > 0 ? ((last.loanAmt - ago.loanAmt) / ago.loanAmt) * 100 : null;
-  const base = span === 1 ? [ago.shortAmt] : days.slice(-1 - span, -1).map((d) => d.shortAmt);
-  const shortAvg = base.length > 0 ? base.reduce((a, b) => a + b, 0) / base.length : 0;
-  const shortVs = shortAvg > 0 ? ((last.shortAmt - shortAvg) / shortAvg) * 100 : null;
+  const mean = (xs: number[]) => (xs.length > 0 ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
+  const trendOf = (n: number) => {
+    const ago = days[days.length - 1 - n];
+    if (!ago) return { loan: null as number | null, short: null as number | null };
+    const base = n === 1 ? [ago.shortAmtFx] : days.slice(-1 - n, -1).map((d) => d.shortAmtFx);
+    const avg = mean(base);
+    return {
+      loan: ago.loanAmtFx > 0 ? ((last.loanAmtFx - ago.loanAmtFx) / ago.loanAmtFx) * 100 : null,
+      short: avg > 0 ? ((last.shortAmtFx - avg) / avg) * 100 : null,
+    };
+  };
+  const trends = SPANS.filter((n) => days.length > n).map((n) => ({ n, ...trendOf(n) }));
 
-  const loanRows = days.filter((d) => d.loanAmt > 0).map((d) => ({ date: d.date, v: d.loanAmt }));
-  const shortRows = days.filter((d) => d.shortAmt > 0).map((d) => ({ date: d.date, v: d.shortAmt }));
+  /*
+   * 그래프도 **가격 고정**이다. 그날 종가로 그리면 90일 폭이 123~168조(주가가 만든 출렁임)인데
+   * 가격을 고정하면 112~135조 — 뒤쪽이 「빌려 간 양」의 진짜 모양이다. 마지막 점은 두 방식이
+   * 같은 값이라(그날이 기준날) 위의 큰 숫자와 어긋나지 않는다.
+   */
+  const loanRows = days.filter((d) => d.loanAmtFx > 0).map((d) => ({ date: d.date, v: d.loanAmtFx }));
+  const shortRows = days.filter((d) => d.shortAmtFx > 0).map((d) => ({ date: d.date, v: d.shortAmtFx }));
   const split = last.loanAmtKospi > 0 || last.loanAmtKosdaq > 0;
   const sp = data.spans.find((s) => s.days === span) ?? null;
+
+  /*
+   * 「왜 두 숫자가 다른가」를 **그날 값으로** 말한다. 예전엔 주석을 쓰던 날의 숫자(+5.2% ↔ +0.1%)를
+   * 글에 박아 뒀는데, 그건 다음 날이면 거짓말이다. 차이가 1%p 넘게 날 때만 적는다 —
+   * 지수가 거의 안 움직인 날엔 둘이 같아서 굳이 할 말이 없다.
+   */
+  const prevDay = days[days.length - 2];
+  const gap = (() => {
+    if (!prevDay || prevDay.loanAmt <= 0 || prevDay.loanAmtFx <= 0) return null;
+    const real = ((last.loanAmt - prevDay.loanAmt) / prevDay.loanAmt) * 100;
+    const fx = ((last.loanAmtFx - prevDay.loanAmtFx) / prevDay.loanAmtFx) * 100;
+    return Math.abs(real - fx) >= 1 ? { real, fx } : null;
+  })();
 
   return (
     <div className="ov-card-b dep sl">
@@ -134,9 +171,6 @@ export function ShortLoanPanel({ onSelectStock }: { onSelectStock?: PickStock })
           <b className="num">{jo(last.loanAmt)}</b>
           <span className="num dep-d">{eokju(last.loanQty)}</span>
           <BalanceChart rows={loanRows.slice(-60)} color="var(--red)" fmt={jo} />
-          <span className="dep-t">
-            {span === 1 ? "전일" : SPAN_LABEL[span]} 대비 {loanTrend === null ? "-" : pct(loanTrend)}
-          </span>
         </div>
         <div className="dep-cell">
           <span className="dep-k">공매도 (하루)</span>
@@ -144,11 +178,46 @@ export function ShortLoanPanel({ onSelectStock }: { onSelectStock?: PickStock })
           <span className="num dep-d">{eokju(last.shortQty)}</span>
           {/* 눈금도 머릿수와 같은 `money` 로 — 머리는 「8,218억」인데 눈금만 「0.58조」면 같은 칸에서 단위가 갈린다 */}
           <BalanceChart rows={shortRows.slice(-60)} color="var(--blue)" fmt={money} />
-          <span className="dep-t">
-            {span === 1 ? "전일" : `${SPAN_LABEL[span]} 평균`} 대비 {shortVs === null ? "-" : pct(shortVs)}
-          </span>
         </div>
       </div>
+
+      {/* 전체 추이 — 네 구간을 한 줄에. 위 주석 참고 (왜 가격 고정인지) */}
+      {trends.length > 0 && (
+        <div className="sl-trend">
+          <div className="sl-tr-row sl-tr-head">
+            <span className="sl-tr-k">전체 추이</span>
+            {trends.map((t) => (
+              <span key={t.n} className="num">
+                {SPAN_LABEL[t.n]}
+              </span>
+            ))}
+          </div>
+          {/*
+            재는 방식은 **풍선말로** 보낸다. 라벨 옆에 작게 달아 봤더니 3단 배치(카드 350px)에서
+            「대차잔고 그때…」로 잘렸다 — 잘린 설명은 설명이 아니다. 아래 꼬리말이 이미 말한다.
+          */}
+          <div className="sl-tr-row">
+            <span className="sl-tr-k" title="그 거래일의 잔고와 지금을 견준 값입니다 — 잔고라 「그때보다 얼마나 쌓였나」로 읽습니다">
+              대차잔고
+            </span>
+            {trends.map((t) => (
+              <span key={t.n} className={`num ${t.loan === null ? "" : signClass(t.loan)}`}>
+                {t.loan === null ? "-" : pct(t.loan)}
+              </span>
+            ))}
+          </div>
+          <div className="sl-tr-row">
+            <span className="sl-tr-k" title="그 구간의 하루 평균과 오늘을 견준 값입니다 (당일은 전 거래일 대비) — 공매도는 하루치라 「요즘보다 센가」로 읽습니다">
+              공매도
+            </span>
+            {trends.map((t) => (
+              <span key={t.n} className={`num ${t.short === null ? "" : signClass(t.short)}`}>
+                {t.short === null ? "-" : pct(t.short)}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {split && (
         <div className="dep-funds">
@@ -217,6 +286,18 @@ export function ShortLoanPanel({ onSelectStock }: { onSelectStock?: PickStock })
         외국인·기관이 빌립니다. 늘면 팔 준비가 쌓이는 것이고, <b>주가가 오르는데 줄면 갚느라 사는
         것</b>(숏커버링)입니다. <b>공매도</b>는 그날 실제로 판 하루치라 뜻이 다릅니다. 붉은 점선은{" "}
         <b>20일 평균</b>, 눈금은 그 구간의 최저·최고라 <b>바닥이 0 이 아닙니다.</b>
+      </div>
+      <div className="table-note">
+        추이와 그래프는 <b>모든 날을 지금 종가로 쳐서</b> 주가 변동을 걷어낸 값입니다 — 그래야{" "}
+        <b>빌려 간 양</b>의 흐름만 남습니다. 큰 숫자({jo(last.loanAmt)})는 그날 종가 기준의 실제
+        규모라 조금 다를 수 있습니다.
+        {gap !== null && (
+          <>
+            {" "}
+            걷어내지 않으면 지수가 오른 날 포지션이 는 것처럼 보입니다 — <b>{last.date}</b> 은 대차
+            금액이 하루 <b>{pct(gap.real)}</b> 인데 걷어내면 <b>{pct(gap.fx)}</b> 입니다.
+          </>
+        )}
       </div>
       <div className="table-note">
         종목별 증감은 <b>{sp ? (sp.days === 1 ? "전 거래일" : `${sp.days}거래일 전`) : "-"}</b>

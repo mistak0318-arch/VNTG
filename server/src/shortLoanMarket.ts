@@ -91,6 +91,23 @@ export interface ShortLoanDay {
   loanAmt: number;
   /** 대차잔고가 담긴 종목 수 — 커버리지 눈금 */
   loanCodes: number;
+  /**
+   * **가격을 고정한** 금액(원) — 모든 날을 각 종목의 **지금 종가**로 쳤다.
+   *
+   * 「늘고 있나 줄고 있나」는 이 칸으로 봐야 한다 (2026-11-27 — 벤티지: "전체적으로
+   * 증가하고 있는지 오늘은 줄었는지 … 추이 좀 보여줘라").
+   *
+   * ⚠️ `loanAmt`(그날 종가 기준)로 추이를 내면 **주가 변동이 포지션 변동으로 둔갑한다.**
+   * 실측 2026-11-27: 대차 **금액**이 하루 +5.2% 인데 **수량**은 +0.1% 였다 — 그날 코스피가
+   * +4.34% 올랐기 때문이다. 종목별 증감에서는 이미 「양쪽을 지금 종가 하나로」 쳐서 피했는데
+   * **전체 합계에는 그 함정이 그대로 있었다.**
+   *
+   * 수량(`loanQty`)으로 보면 가격은 빠지지만, 1,000원짜리 1억주와 10만원짜리 1억주가 같은
+   * 무게가 된다. 그래서 **가격은 고정하되 금액으로** 잰다 — 순수한 「빌려 간 양」의 흐름이다.
+   */
+  loanAmtFx: number;
+  /** 공매도 거래대금도 같은 방식으로 — 가격 고정(원) */
+  shortAmtFx: number;
   /** 시장별 쪼갠 값(원). 종목 목록을 못 받았으면 0 */
   shortAmtKospi: number;
   shortAmtKosdaq: number;
@@ -130,7 +147,21 @@ export interface ShortLoanSpan {
   down: ShortLoanMover[];
 }
 
+/**
+ * 적어 둔 파일의 **판 번호**.
+ *
+ * 칸을 새로 만들면 여기를 올린다 — 안 그러면 **옛 파일이 그대로 나간다.** 다시 세는 조건이
+ * 「원장이 자랐나」뿐이라, 칸만 늘리고 배포하면 다음 수집(20:10)까지 새 칸이 비어 있다
+ * (2026-11-27 `loanAmtFx`·`shortAmtFx` 를 넣으며 하마터면 그럴 뻔했다).
+ *
+ *   1 — 처음
+ *   2 — 가격 고정 금액(`loanAmtFx`·`shortAmtFx`) 추가
+ */
+const VERSION = 2;
+
 export interface ShortLoanMarket {
+  /** 적어 둔 파일의 판 번호 — 코드의 `VERSION` 과 다르면 다시 센다 */
+  v?: number;
   /** 언제 셌나 (ISO) */
   builtAt: string;
   /** 가장 최근 거래일 (YYYY-MM-DD) */
@@ -158,6 +189,8 @@ interface Acc {
   loanQty: number;
   loanAmt: number;
   loanCodes: number;
+  loanAmtFx: number;
+  shortAmtFx: number;
   shortAmtKospi: number;
   shortAmtKosdaq: number;
   loanAmtKospi: number;
@@ -172,6 +205,8 @@ function emptyAcc(): Acc {
     loanQty: 0,
     loanAmt: 0,
     loanCodes: 0,
+    loanAmtFx: 0,
+    shortAmtFx: 0,
     shortAmtKospi: 0,
     shortAmtKosdaq: 0,
     loanAmtKospi: 0,
@@ -249,6 +284,8 @@ export async function buildShortLoanMarket(client: KiwoomClient | null): Promise
     const arr = bars[code];
     const px = new Map<string, number>();
     if (Array.isArray(arr)) for (const b of arr.slice(-(READ_ROWS + 10))) px.set(b.d, b.c);
+    /* 가격 고정용 — 이 종목의 **가장 최근** 종가. 모든 날에 같은 값을 곱해 주가를 걷어낸다 */
+    const cFix = Array.isArray(arr) ? (arr.at(-1)?.c ?? 0) : 0;
 
     const mk = market.get(code) ?? "";
 
@@ -257,6 +294,7 @@ export async function buildShortLoanMarket(client: KiwoomClient | null): Promise
       const a = get(r.d);
       a.shortQty += r.qty;
       a.shortCodes++;
+      if (cFix > 0) a.shortAmtFx += r.qty * cFix;
       const c = px.get(r.d);
       if (!c) {
         noPrice++;
@@ -274,6 +312,7 @@ export async function buildShortLoanMarket(client: KiwoomClient | null): Promise
       const a = get(r.d);
       a.loanQty += r.rmnd;
       a.loanCodes++;
+      if (cFix > 0) a.loanAmtFx += r.rmnd * cFix;
       const c = px.get(r.d);
       if (c) {
         const amt = r.rmnd * c;
@@ -345,6 +384,7 @@ export async function buildShortLoanMarket(client: KiwoomClient | null): Promise
   }
 
   return {
+    v: VERSION,
     builtAt: new Date().toISOString(),
     upTo: days.length > 0 ? days[days.length - 1].date : "",
     days,
@@ -369,6 +409,11 @@ async function readFileCache(): Promise<ShortLoanMarket | null> {
   try {
     const raw = JSON.parse(await readFile(FILE, "utf-8")) as ShortLoanMarket;
     if (!Array.isArray(raw.days)) return null;
+    /* 판이 낡았으면 **없는 셈 친다** — 부르는 쪽이 곧바로 다시 센다 */
+    if ((raw.v ?? 1) !== VERSION) {
+      console.log(`[shortLoan] 적어 둔 판 ${raw.v ?? 1} ≠ ${VERSION} — 다시 센다`);
+      return null;
+    }
     return raw;
   } catch {
     return null;
